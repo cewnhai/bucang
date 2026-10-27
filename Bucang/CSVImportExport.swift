@@ -1,0 +1,404 @@
+import Foundation
+import SwiftData
+
+// MARK: - CSV 解析：处理引号、逗号、换行和双引号转义
+
+enum CSVParser {
+    static func parse(_ text: String) -> [[String]] {
+        var rows: [[String]] = []
+        var row: [String] = []
+        var field = ""
+        var inQuotes = false
+        let chars = Array(text)
+        var i = 0
+        while i < chars.count {
+            let ch = chars[i]
+            if inQuotes {
+                if ch == "\"" {
+                    if i + 1 < chars.count && chars[i + 1] == "\"" {
+                        field.append("\"")
+                        i += 2
+                        continue
+                    } else {
+                        inQuotes = false
+                        i += 1
+                        continue
+                    }
+                } else {
+                    field.append(ch)
+                    i += 1
+                    continue
+                }
+            } else {
+                if ch == "\"" {
+                    inQuotes = true
+                    i += 1
+                    continue
+                } else if ch == "," {
+                    row.append(field)
+                    field = ""
+                    i += 1
+                    continue
+                } else if ch == "\n" {
+                    row.append(field)
+                    field = ""
+                    rows.append(row)
+                    row = []
+                    i += 1
+                    continue
+                } else if ch == "\r" {
+                    i += 1
+                    continue
+                } else {
+                    field.append(ch)
+                    i += 1
+                    continue
+                }
+            }
+        }
+        if !field.isEmpty || !row.isEmpty {
+            row.append(field)
+            rows.append(row)
+        }
+        return rows.filter { !$0.allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty } }
+    }
+
+    static func rowsByHeader(_ text: String) -> [[String: String]] {
+        let rows = parse(text)
+        guard let header = rows.first else { return [] }
+        return rows.dropFirst().map { values in
+            var dict: [String: String] = [:]
+            for (index, key) in header.enumerated() {
+                dict[key] = index < values.count ? values[index] : ""
+            }
+            return dict
+        }
+    }
+
+    static func escape(_ value: String) -> String {
+        if value.contains(",") || value.contains("\"") || value.contains("\n") {
+            return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+        return value
+    }
+}
+
+// MARK: - 日期 / 数字小工具
+
+enum CSVValues {
+    static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    static func date(_ s: String) -> Date {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        if let d = dateFormatter.date(from: t) { return d }
+        if let d = dateTimeFormatter.date(from: t) { return d }
+        return Date()
+    }
+
+    static func dateString(_ d: Date) -> String {
+        dateFormatter.string(from: d)
+    }
+
+    static func double(_ s: String) -> Double {
+        Double(s.trimmingCharacters(in: .whitespaces)) ?? 0
+    }
+
+    static func int(_ s: String) -> Int {
+        Int(s.trimmingCharacters(in: .whitespaces)) ?? 0
+    }
+
+    static func bool(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespaces).lowercased()
+        return t == "true" || t == "1" || t == "是"
+    }
+
+    static func uuid(_ s: String) -> UUID? {
+        UUID(uuidString: s.trimmingCharacters(in: .whitespaces))
+    }
+}
+
+// MARK: - 导入报告
+
+struct ImportSummary {
+    var tagsAdded = 0
+    var tagsUpdated = 0
+    var materialsAdded = 0
+    var materialsUpdated = 0
+    var channelsAdded = 0
+    var channelsUpdated = 0
+    var fabricsAdded = 0
+    var fabricsUpdated = 0
+    var usageAdded = 0
+    var usageUpdated = 0
+    var skipped = 0
+    var errors: [String] = []
+
+    var text: String {
+        var lines: [String] = []
+        lines.append("标签：新增 \(tagsAdded)，更新 \(tagsUpdated)")
+        lines.append("材质：新增 \(materialsAdded)，更新 \(materialsUpdated)")
+        lines.append("渠道：新增 \(channelsAdded)，更新 \(channelsUpdated)")
+        lines.append("布料：新增 \(fabricsAdded)，更新 \(fabricsUpdated)")
+        lines.append("使用记录：新增 \(usageAdded)，更新 \(usageUpdated)")
+        lines.append("跳过：\(skipped) 条")
+        if !errors.isEmpty {
+            lines.append("问题（只列前 10 条）：")
+            lines.append(contentsOf: errors.prefix(10))
+        }
+        lines.append("图片文件已按你的要求忽略，不导入。")
+        return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - 导入：按原 UUID 匹配，重复导入更新不重复建
+
+enum CSVImporter {
+    static func importFiles(_ urls: [URL], context: ModelContext) -> ImportSummary {
+        var summary = ImportSummary()
+        var texts: [String: String] = [:]
+        for url in urls {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url),
+                  let text = String(data: data, encoding: .utf8) else {
+                summary.errors.append("读不到文件：\(url.lastPathComponent)")
+                summary.skipped += 1
+                continue
+            }
+            texts[url.lastPathComponent.lowercased()] = text
+        }
+
+        // 现有数据按 id 建索引，避免逐条查询
+        let existingTags = (try? context.fetch(FetchDescriptor<Tag>())) ?? []
+        let existingMaterials = (try? context.fetch(FetchDescriptor<Material>())) ?? []
+        let existingChannels = (try? context.fetch(FetchDescriptor<Channel>())) ?? []
+        let existingFabrics = (try? context.fetch(FetchDescriptor<Fabric>())) ?? []
+        let existingUsage = (try? context.fetch(FetchDescriptor<UsageRecord>())) ?? []
+        var tagByID = Dictionary(uniqueKeysWithValues: existingTags.map { ($0.id, $0) })
+        var materialByID = Dictionary(uniqueKeysWithValues: existingMaterials.map { ($0.id, $0) })
+        var channelByID = Dictionary(uniqueKeysWithValues: existingChannels.map { ($0.id, $0) })
+        var fabricByID = Dictionary(uniqueKeysWithValues: existingFabrics.map { ($0.id, $0) })
+        var usageByID = Dictionary(uniqueKeysWithValues: existingUsage.map { ($0.id, $0) })
+
+        // 字典先导入
+        if let text = texts["tags.csv"] {
+            for row in CSVParser.rowsByHeader(text) {
+                guard let id = CSVValues.uuid(row["id"] ?? "") else { summary.skipped += 1; continue }
+                let name = (row["name"] ?? "").trimmingCharacters(in: .whitespaces)
+                if name.isEmpty { summary.skipped += 1; continue }
+                if let existing = tagByID[id] {
+                    existing.name = name
+                    existing.sortOrder = CSVValues.int(row["order"] ?? "")
+                    summary.tagsUpdated += 1
+                } else {
+                    let tag = Tag(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
+                    context.insert(tag)
+                    tagByID[id] = tag
+                    summary.tagsAdded += 1
+                }
+            }
+        }
+        if let text = texts["materials.csv"] {
+            for row in CSVParser.rowsByHeader(text) {
+                guard let id = CSVValues.uuid(row["id"] ?? "") else { summary.skipped += 1; continue }
+                let name = (row["name"] ?? "").trimmingCharacters(in: .whitespaces)
+                if name.isEmpty { summary.skipped += 1; continue }
+                if let existing = materialByID[id] {
+                    existing.name = name
+                    existing.sortOrder = CSVValues.int(row["order"] ?? "")
+                    summary.materialsUpdated += 1
+                } else {
+                    let m = Material(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
+                    context.insert(m)
+                    materialByID[id] = m
+                    summary.materialsAdded += 1
+                }
+            }
+        }
+        if let text = texts["channels.csv"] {
+            for row in CSVParser.rowsByHeader(text) {
+                guard let id = CSVValues.uuid(row["id"] ?? "") else { summary.skipped += 1; continue }
+                let name = (row["name"] ?? "").trimmingCharacters(in: .whitespaces)
+                if name.isEmpty { summary.skipped += 1; continue }
+                if let existing = channelByID[id] {
+                    existing.name = name
+                    existing.sortOrder = CSVValues.int(row["order"] ?? "")
+                    summary.channelsUpdated += 1
+                } else {
+                    let c = Channel(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
+                    context.insert(c)
+                    channelByID[id] = c
+                    summary.channelsAdded += 1
+                }
+            }
+        }
+
+        // 布料
+        if let text = texts["fabrics.csv"] {
+            for row in CSVParser.rowsByHeader(text) {
+                guard let id = CSVValues.uuid(row["id"] ?? "") else { summary.skipped += 1; continue }
+                let material = (row["materialId"] ?? "").isEmpty ? nil : materialByID[CSVValues.uuid(row["materialId"] ?? "") ?? UUID()]
+                let channel = (row["purchaseChannelId"] ?? "").isEmpty ? nil : channelByID[CSVValues.uuid(row["purchaseChannelId"] ?? "") ?? UUID()]
+                if let mid = row["materialId"], !mid.isEmpty, material == nil {
+                    summary.errors.append("布料 \(id) 的材质引用不到，已跳过")
+                    summary.skipped += 1
+                    continue
+                }
+                if let cid = row["purchaseChannelId"], !cid.isEmpty, channel == nil {
+                    summary.errors.append("布料 \(id) 的渠道引用不到，已跳过")
+                    summary.skipped += 1
+                    continue
+                }
+                let tagIDs = (row["tagIds"] ?? "")
+                    .replacingOccurrences(of: ";", with: ",")
+                    .split(separator: ",")
+                    .compactMap { CSVValues.uuid(String($0)) }
+                let tags = tagIDs.compactMap { tagByID[$0] }
+                if let existing = fabricByID[id] {
+                    existing.name = row["name"] ?? ""
+                    existing.length = CSVValues.double(row["length"] ?? "")
+                    existing.width = CSVValues.double(row["width"] ?? "")
+                    existing.purchasePrice = CSVValues.double(row["purchasePrice"] ?? "")
+                    existing.pricePerMeter = CSVValues.double(row["purchasePricePerMeter"] ?? "")
+                    existing.purchaseDate = CSVValues.date(row["purchaseDate"] ?? "")
+                    existing.usedLength = CSVValues.double(row["usedLength"] ?? "")
+                    existing.isFavorite = CSVValues.bool(row["isFavorite"] ?? "")
+                    existing.status = CSVValues.int(row["status"] ?? "")
+                    existing.note = row["note"] ?? ""
+                    existing.material = material
+                    existing.channel = channel
+                    existing.tags = tags
+                    existing.updatedAt = Date()
+                    summary.fabricsUpdated += 1
+                } else {
+                    let fabric = Fabric(
+                        id: id,
+                        name: row["name"] ?? "",
+                        length: CSVValues.double(row["length"] ?? ""),
+                        width: CSVValues.double(row["width"] ?? ""),
+                        purchasePrice: CSVValues.double(row["purchasePrice"] ?? ""),
+                        pricePerMeter: CSVValues.double(row["purchasePricePerMeter"] ?? ""),
+                        purchaseDate: CSVValues.date(row["purchaseDate"] ?? ""),
+                        usedLength: CSVValues.double(row["usedLength"] ?? ""),
+                        isFavorite: CSVValues.bool(row["isFavorite"] ?? ""),
+                        status: CSVValues.int(row["status"] ?? ""),
+                        note: row["note"] ?? "",
+                        createdAt: CSVValues.date(row["createdAt"] ?? ""),
+                        updatedAt: CSVValues.date(row["modifiedAt"] ?? "")
+                    )
+                    fabric.material = material
+                    fabric.channel = channel
+                    fabric.tags = tags
+                    context.insert(fabric)
+                    fabricByID[id] = fabric
+                    summary.fabricsAdded += 1
+                }
+            }
+        }
+
+        // 使用记录
+        if let text = texts["usage_records.csv"] {
+            for row in CSVParser.rowsByHeader(text) {
+                guard let id = CSVValues.uuid(row["id"] ?? ""),
+                      let fabricID = CSVValues.uuid(row["fabricId"] ?? ""),
+                      let fabric = fabricByID[fabricID] else {
+                    summary.skipped += 1
+                    continue
+                }
+                let length = CSVValues.double(row["length"] ?? "")
+                let usage = CSVValues.double(row["usage"] ?? "")
+                let amount = length != 0 ? length : usage
+                if let existing = usageByID[id] {
+                    existing.date = CSVValues.date(row["date"] ?? "")
+                    existing.length = amount
+                    existing.fabric = fabric
+                    summary.usageUpdated += 1
+                } else {
+                    let record = UsageRecord(id: id, date: CSVValues.date(row["date"] ?? ""), length: amount, fabric: fabric)
+                    context.insert(record)
+                    usageByID[id] = record
+                    summary.usageAdded += 1
+                }
+            }
+        }
+
+        do {
+            try context.save()
+        } catch {
+            summary.errors.append("保存失败：\(error.localizedDescription)")
+        }
+        return summary
+    }
+}
+
+// MARK: - 导出：按原 CSV 列格式
+
+enum CSVExporter {
+    static func exportFiles(context: ModelContext) -> [URL] {
+        let tags = (try? context.fetch(FetchDescriptor<Tag>(sortBy: [SortDescriptor(\.sortOrder)]))) ?? []
+        let materials = (try? context.fetch(FetchDescriptor<Material>(sortBy: [SortDescriptor(\.sortOrder)]))) ?? []
+        let channels = (try? context.fetch(FetchDescriptor<Channel>(sortBy: [SortDescriptor(\.sortOrder)]))) ?? []
+        let fabrics = (try? context.fetch(FetchDescriptor<Fabric>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+        let usage = (try? context.fetch(FetchDescriptor<UsageRecord>(sortBy: [SortDescriptor(\.date)]))) ?? []
+
+        var files: [(String, String)] = []
+
+        var tagsCSV = "id,name,order\n"
+        for t in tags { tagsCSV += [t.id.uuidString, t.name, String(t.sortOrder)].map(CSVParser.escape).joined(separator: ",") + "\n" }
+        files.append(("tags.csv", tagsCSV))
+
+        var materialsCSV = "id,name,order\n"
+        for m in materials { materialsCSV += [m.id.uuidString, m.name, String(m.sortOrder)].map(CSVParser.escape).joined(separator: ",") + "\n" }
+        files.append(("materials.csv", materialsCSV))
+
+        var channelsCSV = "id,name,order\n"
+        for c in channels { channelsCSV += [c.id.uuidString, c.name, String(c.sortOrder)].map(CSVParser.escape).joined(separator: ",") + "\n" }
+        files.append(("channels.csv", channelsCSV))
+
+        var fabricsCSV = "id,name,length,width,purchasePrice,purchasePricePerMeter,purchaseDate,usedLength,isFavorite,createdAt,modifiedAt,status,note,materialId,purchaseChannelId,tagIds\n"
+        for f in fabrics {
+            let values = [
+                f.id.uuidString, f.name, String(f.length), String(f.width),
+                String(f.purchasePrice), String(f.pricePerMeter),
+                CSVValues.dateString(f.purchaseDate), String(f.usedLength),
+                f.isFavorite ? "true" : "false",
+                CSVValues.dateString(f.createdAt), CSVValues.dateString(f.updatedAt),
+                String(f.status), f.note,
+                f.material?.id.uuidString ?? "", f.channel?.id.uuidString ?? "",
+                f.tags.map { $0.id.uuidString }.joined(separator: ";")
+            ]
+            fabricsCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
+        }
+        files.append(("fabrics.csv", fabricsCSV))
+
+        var usageCSV = "id,fabricId,fworkId,length,date,usage\n"
+        for u in usage {
+            let values = [u.id.uuidString, u.fabric?.id.uuidString ?? "", "", String(u.length), CSVValues.dateString(u.date), String(u.length)]
+            usageCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
+        }
+        files.append(("usage_records.csv", usageCSV))
+        files.append(("fabric_images.csv", "id,fabricId,fworkId,fPatternId,itemId,isMain,createdAt,fileName\n"))
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("BucangExport-\(Int(Date().timeIntervalSince1970))", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var urls: [URL] = []
+        for (name, content) in files {
+            let url = dir.appendingPathComponent(name)
+            try? content.write(to: url, atomically: true, encoding: .utf8)
+            urls.append(url)
+        }
+        return urls
+    }
+}
