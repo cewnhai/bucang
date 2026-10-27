@@ -1,0 +1,52 @@
+name: Build Bucang IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build for iOS device (no signing, TrollStore will install it)
+        run: |
+          xcodebuild \
+            -project Bucang.xcodeproj \
+            -scheme Bucang \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Ad-hoc sign the app (so it is a complete .app bundle)
+        run: |
+          APP="build/Build/Products/Release-iphoneos/Bucang.app"
+          ls -lh "$APP"
+          codesign --force --deep --sign - "$APP" || true
+          codesign -dv "$APP" || true
+
+      - name: Package IPA for TrollStore
+        run: |
+          APP="build/Build/Products/Release-iphoneos/Bucang.app"
+          rm -rf Payload Bucang.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -r Bucang.ipa Payload
+          ls -lh Bucang.ipa
+          unzip -l Bucang.ipa | head -20
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bucang-ipa
+          path: Bucang.ipa
+          if-no-files-found: error
+          retention-days: 90
