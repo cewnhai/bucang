@@ -13,6 +13,12 @@
 		1BDB901C8DEDBB939CAD6B9A /* FabricViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC664966DBA5E6D73065C7E /* FabricViews.swift */; };
 		A4D6B6540E9F1F4252BB1477 /* SimpleRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6326634716176CF227131013 /* SimpleRecordViews.swift */; };
 		0D228C0A95BD12EE25122C92 /* SettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1463850DC2EF884FE50D6BAD /* SettingsViews.swift */; };
+		75047C771595BFDEA3CAA7EE /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 216427EB6859DB51C5EC6C48 /* Design.swift */; };
+		E5A45BAAFF4CD7CFC8325BC0 /* WebDAVBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */; };
+		5C7ECD0DF7FA13FEBF0D26C8 /* FabricImages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A86BE3573FCDAF82E3A6BA /* FabricImages.swift */; };
+		BD6ECAF590AB4ED3BDD9FD65 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BF3EC1971D7F68A9185777E /* HomeView.swift */; };
+		AA662385A46BD8F321671339 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 310895809D52998A95C086E6 /* StatsView.swift */; };
+		DAF753E8ACFB1472DEABD599 /* CreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FD60D85A823CF9DF974B1D /* CreationView.swift */; };
 		D0687455C07D878E9DB04308 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 671E5B54412D9F8033A8454C /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -23,6 +29,12 @@
 		1EC664966DBA5E6D73065C7E /* FabricViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FabricViews.swift; sourceTree = "<group>"; };
 		6326634716176CF227131013 /* SimpleRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleRecordViews.swift; sourceTree = "<group>"; };
 		1463850DC2EF884FE50D6BAD /* SettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViews.swift; sourceTree = "<group>"; };
+		216427EB6859DB51C5EC6C48 /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
+		8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVBackup.swift; sourceTree = "<group>"; };
+		55A86BE3573FCDAF82E3A6BA /* FabricImages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FabricImages.swift; sourceTree = "<group>"; };
+		3BF3EC1971D7F68A9185777E /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		310895809D52998A95C086E6 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
+		09FD60D85A823CF9DF974B1D /* CreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationView.swift; sourceTree = "<group>"; };
 		671E5B54412D9F8033A8454C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F5BF48AA40CAD7891EB709FC /* Bucang.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bucang.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -55,6 +67,12 @@
 				1EC664966DBA5E6D73065C7E /* FabricViews.swift */,
 				6326634716176CF227131013 /* SimpleRecordViews.swift */,
 				1463850DC2EF884FE50D6BAD /* SettingsViews.swift */,
+				216427EB6859DB51C5EC6C48 /* Design.swift */,
+				8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */,
+				55A86BE3573FCDAF82E3A6BA /* FabricImages.swift */,
+				3BF3EC1971D7F68A9185777E /* HomeView.swift */,
+				310895809D52998A95C086E6 /* StatsView.swift */,
+				09FD60D85A823CF9DF974B1D /* CreationView.swift */,
 				671E5B54412D9F8033A8454C /* Assets.xcassets */,
 			);
 			name = Bucang;
@@ -142,6 +160,12 @@
 				1BDB901C8DEDBB939CAD6B9A /* FabricViews.swift in Sources */,
 				A4D6B6540E9F1F4252BB1477 /* SimpleRecordViews.swift in Sources */,
 				0D228C0A95BD12EE25122C92 /* SettingsViews.swift in Sources */,
+				DAF753E8ACFB1472DEABD599 /* CreationView.swift in Sources */,
+				AA662385A46BD8F321671339 /* StatsView.swift in Sources */,
+				BD6ECAF590AB4ED3BDD9FD65 /* HomeView.swift in Sources */,
+				5C7ECD0DF7FA13FEBF0D26C8 /* FabricImages.swift in Sources */,
+				E5A45BAAFF4CD7CFC8325BC0 /* WebDAVBackup.swift in Sources */,
+				75047C771595BFDEA3CAA7EE /* Design.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -159,6 +183,9 @@
 				MARKETING_VERSION = 1.0;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
+				INFOPLIST_KEY_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "布仓需要访问相册，以便为布料添加图片";
+				INFOPLIST_KEY_NSCameraUsageDescription = "布仓需要使用相机，以便为布料拍摄图片";
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_TESTABILITY = YES;
 				MTL_ENABLE_DEBUG_INFO = YES;
@@ -176,6 +203,9 @@
 				MARKETING_VERSION = 1.0;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
+				INFOPLIST_KEY_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "布仓需要访问相册，以便为布料添加图片";
+				INFOPLIST_KEY_NSCameraUsageDescription = "布仓需要使用相机，以便为布料拍摄图片";
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_TESTABILITY = NO;
 				MTL_ENABLE_DEBUG_INFO = NO;
@@ -194,6 +224,9 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "布仓需要访问相册，以便为布料添加图片";
+				INFOPLIST_KEY_NSCameraUsageDescription = "布仓需要使用相机，以便为布料拍摄图片";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.bucang;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -213,6 +246,9 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "布仓需要访问相册，以便为布料添加图片";
+				INFOPLIST_KEY_NSCameraUsageDescription = "布仓需要使用相机，以便为布料拍摄图片";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.bucang;
 				PRODUCT_NAME = "$(TARGET_NAME)";

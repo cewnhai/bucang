@@ -386,7 +386,22 @@ enum CSVExporter {
             usageCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
         }
         files.append(("usage_records.csv", usageCSV))
-        files.append(("fabric_images.csv", "id,fabricId,fworkId,fPatternId,itemId,isMain,createdAt,fileName\n"))
+
+        // 图片：只导出文件名（不导图片字节，和原来一样）。
+        // id 是导出时生成的，模型里只存文件名，不存图片记录 id；
+        // 第一张图记为 isMain，createdAt 用布料创建时间。
+        var imagesCSV = "id,fabricId,fworkId,fPatternId,itemId,isMain,createdAt,fileName\n"
+        for f in fabrics {
+            for (index, fileName) in f.imageFileNames.enumerated() {
+                let values = [
+                    UUID().uuidString, f.id.uuidString, "", "", "",
+                    index == 0 ? "true" : "false",
+                    CSVValues.dateString(f.createdAt), fileName
+                ]
+                imagesCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
+            }
+        }
+        files.append(("fabric_images.csv", imagesCSV))
 
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("BucangExport-\(Int(Date().timeIntervalSince1970))", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

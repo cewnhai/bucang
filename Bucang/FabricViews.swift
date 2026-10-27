@@ -13,11 +13,26 @@ enum FabricSort: String, CaseIterable, Identifiable {
     }
 }
 
+// 派生分区：全部 / 收藏 / 未使用（已用为 0）/ 余料不足。
+// 余料不足的定义：剩余 < 1 米，或者剩余 < 总长的 20%（满足任一即算）。
+enum FabricSection: String, CaseIterable, Identifiable {
+    case all, favorite, unused, lowRemaining
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return "全部"
+        case .favorite: return "收藏"
+        case .unused: return "未使用"
+        case .lowRemaining: return "余料不足"
+        }
+    }
+}
+
 struct FabricListView: View {
     @EnvironmentObject private var store: Store
 
     @State private var searchText = ""
-    @State private var showFavoritesOnly = false
+    @State private var sectionFilter: FabricSection = .all
     @State private var materialFilter: UUID?
     @State private var channelFilter: UUID?
     @State private var sort: FabricSort = .purchaseDate
@@ -29,7 +44,16 @@ struct FabricListView: View {
 
     private var filtered: [Fabric] {
         var list = fabrics
-        if showFavoritesOnly { list = list.filter { $0.isFavorite } }
+        switch sectionFilter {
+        case .all: break
+        case .favorite: list = list.filter { $0.isFavorite }
+        case .unused: list = list.filter { $0.usedLength == 0 }
+        case .lowRemaining:
+            list = list.filter {
+                $0.remainingLength < 1.0
+                || ($0.length > 0 && $0.remainingLength / $0.length < 0.2)
+            }
+        }
         if let materialFilter { list = list.filter { $0.materialId == materialFilter } }
         if let channelFilter { list = list.filter { $0.channelId == channelFilter } }
         let keyword = searchText.trimmingCharacters(in: .whitespaces)
@@ -56,52 +80,109 @@ struct FabricListView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("\(fabrics.count) 块布料")
-                            Text("总长 \(totalLength, specifier: "%.2f") 米 · 剩余 \(totalRemaining, specifier: "%.2f") 米")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                // 汇总卡片行
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("\(fabrics.count) 块布料")
+                            .font(.headline)
+                        Text("总长 \(totalLength, specifier: "%.2f") 米 · 剩余 \(totalRemaining, specifier: "%.2f") 米")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Text("总价 ¥\(totalPrice, specifier: "%.2f")")
+                        .font(.subheadline)
+                }
+                .padding()
+                .background(Design.card)
+                .cornerRadius(Design.corner)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+
+                // 分区 chips
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(FabricSection.allCases) { section in
+                            ChipButton(title: section.title, selected: sectionFilter == section) {
+                                sectionFilter = section
+                            }
                         }
-                        Spacer()
-                        Text("总价 ¥\(totalPrice, specifier: "%.2f")")
-                            .font(.subheadline)
                     }
+                    .padding(.vertical, 4)
                 }
-                Section {
-                    Toggle("只看收藏", isOn: $showFavoritesOnly)
-                    Picker("排序", selection: $sort) {
-                        ForEach(FabricSort.allCases) { Text($0.label).tag($0) }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+
+                // 材质 chips
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ChipButton(title: "全部材质", selected: materialFilter == nil) {
+                            materialFilter = nil
+                        }
+                        ForEach(materials) { material in
+                            ChipButton(title: material.name, selected: materialFilter == material.id) {
+                                materialFilter = material.id
+                            }
+                        }
                     }
-                    Picker("材质", selection: $materialFilter) {
-                        Text("全部").tag(UUID?.none)
-                        ForEach(materials) { Text($0.name).tag(Optional($0.id)) }
-                    }
-                    Picker("渠道", selection: $channelFilter) {
-                        Text("全部").tag(UUID?.none)
-                        ForEach(channels) { Text($0.name).tag(Optional($0.id)) }
-                    }
+                    .padding(.vertical, 4)
                 }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+
+                // 渠道 chips
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ChipButton(title: "全部渠道", selected: channelFilter == nil) {
+                            channelFilter = nil
+                        }
+                        ForEach(channels) { channel in
+                            ChipButton(title: channel.name, selected: channelFilter == channel.id) {
+                                channelFilter = channel.id
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+
                 ForEach(filtered) { fabric in
                     NavigationLink(destination: FabricDetailView(fabric: fabric)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(fabric.displayName)
-                                    .font(.headline)
-                                if fabric.isFavorite {
-                                    Image(systemName: "star.fill")
-                                        .foregroundColor(.yellow)
-                                        .font(.caption)
+                        HStack(alignment: .top, spacing: 12) {
+                            FabricCoverView(fabric: fabric, size: 56)
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Text(fabric.displayName)
+                                        .font(.headline)
+                                        .lineLimit(1)
+                                    if fabric.isFavorite {
+                                        Image(systemName: "star.fill")
+                                            .foregroundColor(.yellow)
+                                            .font(.caption)
+                                    }
                                 }
+                                Text("\(store.material(for: fabric.materialId)?.name ?? "未分类") · \(store.channel(for: fabric.channelId)?.name ?? "未分类")")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("总长 \(fabric.length, specifier: "%.2f") 米 · 剩余 \(fabric.remainingLength, specifier: "%.2f") 米 · ¥\(fabric.purchasePrice, specifier: "%.2f")")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                ProgressBarView(fraction: fabric.length > 0 ? fabric.remainingLength / fabric.length : 0, height: 6)
                             }
-                            Text("\(store.material(for: fabric.materialId)?.name ?? "未分类") · \(store.channel(for: fabric.channelId)?.name ?? "未分类")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("总长 \(fabric.length, specifier: "%.2f") 米 · 剩余 \(fabric.remainingLength, specifier: "%.2f") 米 · ¥\(fabric.purchasePrice, specifier: "%.2f")")
-                                .font(.caption)
                         }
+                        .padding(12)
+                        .background(Design.card)
+                        .cornerRadius(Design.corner)
+                        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                 }
                 .onDelete { indexSet in
                     let toDelete = indexSet.map { filtered[$0] }
@@ -110,11 +191,25 @@ struct FabricListView: View {
                     }
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Design.background)
             .searchable(text: $searchText, prompt: "按名称、备注、材质、渠道搜索")
             .navigationTitle("布料")
             .toolbar {
-                Button(action: { showingAdd = true }) {
-                    Image(systemName: "plus")
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Picker("排序", selection: $sort) {
+                            ForEach(FabricSort.allCases) { Text($0.label).tag($0) }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: { showingAdd = true }) {
+                        Image(systemName: "plus")
+                    }
                 }
             }
             .sheet(isPresented: $showingAdd) {
@@ -172,6 +267,27 @@ struct FabricDetailView: View {
                 if !fabric.note.isEmpty {
                     LabeledContent("备注", value: fabric.note)
                 }
+            }
+            Section("图片") {
+                FabricImageEditor(
+                    imageNames: Binding(
+                        get: { fabric.imageFileNames },
+                        set: { fabric.imageFileNames = $0 }
+                    ),
+                    deleteFilesImmediately: true,
+                    onNamesChanged: { store.save() }
+                )
+            }
+            Section("剩余进度") {
+                HStack {
+                    Text("剩余 \(String(format: "%.2f", fabric.remainingLength)) / 总长 \(String(format: "%.2f", fabric.length)) 米")
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(fabric.length > 0 ? Int(fabric.remainingLength / fabric.length * 100) : 0)%")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                ProgressBarView(fraction: fabric.length > 0 ? fabric.remainingLength / fabric.length : 0, height: 10)
             }
             Section("使用记录") {
                 if usageRecords.isEmpty {
@@ -277,10 +393,14 @@ struct FabricEditView: View {
     @State private var materialID: UUID?
     @State private var channelID: UUID?
     @State private var selectedTagIDs: Set<UUID>
+    @State private var imageNames: [String]
     @State private var errorMessage: String?
+    // 编辑开始时的原图片列表：保存时删掉被去掉的旧图，取消时删掉新加的图。
+    private let originalImageNames: [String]
 
     init(fabric: Fabric?) {
         self.fabric = fabric
+        self.originalImageNames = fabric?.imageFileNames ?? []
         _name = State(initialValue: fabric?.name ?? "")
         _lengthText = State(initialValue: fabric == nil ? "" : String(fabric!.length))
         _widthText = State(initialValue: fabric == nil ? "" : String(fabric!.width))
@@ -292,6 +412,7 @@ struct FabricEditView: View {
         _materialID = State(initialValue: fabric?.materialId)
         _channelID = State(initialValue: fabric?.channelId)
         _selectedTagIDs = State(initialValue: Set(fabric?.tagIds ?? []))
+        _imageNames = State(initialValue: fabric?.imageFileNames ?? [])
     }
 
     private var materials: [Material] { store.materials.sorted { $0.sortOrder < $1.sortOrder } }
@@ -332,16 +453,30 @@ struct FabricEditView: View {
                 errorMessage = "总长不能小于已用长度（已用 \(String(format: "%.2f", existing.usedLength)) 米）"
                 return
             }
+            // 保存时才真正删掉编辑中被去掉的旧图（编辑器在编辑页是延迟删模式）。
+            for oldName in originalImageNames where !imageNames.contains(oldName) {
+                FabricImageStore.delete(named: oldName)
+            }
+            existing.imageFileNames = imageNames
             store.save()
         } else {
             let newFabric = Fabric(
                 name: name, length: length, width: width,
                 purchasePrice: price, pricePerMeter: perMeter,
                 purchaseDate: purchaseDate, note: note,
-                materialId: materialID, channelId: channelID, tagIds: selectedTagIDsArray
+                materialId: materialID, channelId: channelID, tagIds: selectedTagIDsArray,
+                imageFileNames: imageNames
             )
             newFabric.isFavorite = isFavorite
             store.addFabric(newFabric)
+        }
+        dismiss()
+    }
+
+    private func cancelEditing() {
+        // 取消时删掉本次新加的图片文件（原图在编辑页没有被删，不用恢复）。
+        for name in imageNames where !originalImageNames.contains(name) {
+            FabricImageStore.delete(named: name)
         }
         dismiss()
     }
@@ -392,6 +527,13 @@ struct FabricEditView: View {
                     }
                 }
             }
+            Section("图片") {
+                FabricImageEditor(
+                    imageNames: $imageNames,
+                    deleteFilesImmediately: false,
+                    onNamesChanged: {}
+                )
+            }
             Section("备注") {
                 TextField("备注", text: $note, axis: .vertical)
             }
@@ -402,7 +544,7 @@ struct FabricEditView: View {
         .navigationTitle(fabric == nil ? "新增布料" : "编辑布料")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+                Button("取消", action: cancelEditing)
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存", action: save)

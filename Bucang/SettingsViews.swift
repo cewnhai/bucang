@@ -13,7 +13,12 @@ enum DictKind: String, CaseIterable, Identifiable {
     }
 }
 
-struct SettingsView: View {
+// MARK: - 我的：用户卡片 + WebDAV 备份 + 数据管理 + 字典管理 + 关于
+// 清空行为和提示文案保持原样：提示说会删字典，但实际 clearRecords()
+// 只清布料（含使用记录）、作品、纸样、物品，字典保留（见 Models.swift 注释）。
+// 这里不悄悄改清空范围，只保留原有行为和原有提示。
+
+struct ProfileView: View {
     @EnvironmentObject private var store: Store
 
     @State private var showingImporter = false
@@ -25,40 +30,99 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("总览") {
-                    LabeledContent("布料", value: "\(store.fabrics.count) 条")
-                    LabeledContent("总长", value: "\(String(format: "%.2f", store.fabrics.reduce(0.0) { $0 + $1.length })) 米")
-                    LabeledContent("剩余", value: "\(String(format: "%.2f", store.fabrics.reduce(0.0) { $0 + $1.remainingLength })) 米")
-                    LabeledContent("总价", value: "¥\(String(format: "%.2f", store.fabrics.reduce(0.0) { $0 + $1.purchasePrice }))")
-                    LabeledContent("作品 / 纸样 / 物品", value: "\(store.works.count) / \(store.patterns.count) / \(store.items.count)")
-                }
-                Section("字典管理") {
-                    ForEach(DictKind.allCases) { kind in
-                        NavigationLink(kind.title, destination: DictionaryView(kind: kind))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // 用户卡片
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle()
+                                .fill(Design.accentSoft)
+                                .frame(width: 60, height: 60)
+                            Image(systemName: "scissors")
+                                .font(.title2)
+                                .foregroundColor(Design.accent)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("我的布仓")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                            Text("本地数据 · \(store.fabrics.count) 块布料 · \(store.works.count) 个作品")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(16)
+                    .background(Design.card)
+                    .cornerRadius(Design.corner)
+                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
+
+                    // WebDAV 备份卡片
+                    CardView {
+                        WebDAVBackupView()
+                    }
+
+                    // 数据管理卡片
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "数据管理", subtitle: "CSV 是原数据格式，导入按原 UUID 更新不重复建")
+                            Button("导入原数据（选多个 CSV）") { showingImporter = true }
+                                .buttonStyle(.borderedProminent)
+                                .tint(Design.accent)
+                            Button("导出全部数据为 CSV") {
+                                exportURLs = CSVExporter.exportFiles(store: store)
+                                showingExporter = true
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(Design.accent)
+                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。图片文件按你的要求不导入。")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Divider()
+                            Button("清空全部本地数据", role: .destructive) { showingClearConfirm = true }
+                        }
+                    }
+
+                    // 字典管理卡片
+                    CardView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionHeaderView(title: "字典管理", subtitle: "标签 / 材质 / 渠道，点进去可以新增、删除、拖动排序")
+                            ForEach(DictKind.allCases) { kind in
+                                NavigationLink(destination: DictionaryView(kind: kind)) {
+                                    HStack {
+                                        Text(kind.title)
+                                        Spacer()
+                                        Text("\(kind == .tag ? store.tags.count : kind == .material ? store.materials.count : store.channels.count) 个")
+                                            .foregroundColor(.secondary)
+                                        Image(systemName: "chevron.right")
+                                            .foregroundColor(.secondary)
+                                            .font(.caption)
+                                    }
+                                    .foregroundColor(.primary)
+                                    .padding(.vertical, 6)
+                                }
+                            }
+                        }
+                    }
+
+                    // 关于卡片
+                    CardView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionHeaderView(title: "关于")
+                            Text("布仓：本机存储，不做 iCloud 同步，不做订阅。")
+                            Text("目标 iOS 16，可用 TrollStore 安装自己编译的包。")
+                            Text("本机数据在 Documents/bucang-store.json，图片在 Documents/bucang-images/，WebDAV 备份文件默认 bucang-backup.json，包含全部数据和图片。")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-                Section("数据导入导出") {
-                    Button("导入原数据（选多个 CSV）") { showingImporter = true }
-                    Button("导出全部数据为 CSV") {
-                        exportURLs = CSVExporter.exportFiles(store: store)
-                        showingExporter = true
-                    }
-                    Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。图片文件按你的要求不导入。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Section("危险操作") {
-                    Button("清空全部本地数据", role: .destructive) { showingClearConfirm = true }
-                }
-                Section("关于") {
-                    Text("布仓第一版：本机存储，不联网，不做 iCloud 同步，不做订阅。")
-                    Text("目标 iOS 16，可用 TrollStore 安装自己编译的包。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
             }
-            .navigationTitle("设置")
+            .background(Design.background)
+            .navigationTitle("我的")
+            .navigationBarTitleDisplayMode(.inline)
             .fileImporter(
                 isPresented: $showingImporter,
                 allowedContentTypes: [UTType.commaSeparatedText],

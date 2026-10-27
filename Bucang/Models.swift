@@ -61,6 +61,9 @@ final class Fabric: Identifiable, Codable {
     var materialId: UUID?
     var channelId: UUID?
     var tagIds: [UUID]
+    // 布料图片文件名（只存文件名，不存图片字节；图片文件在 Documents/bucang-images/）。
+    // 旧 bucang-store.json 里没有这个字段时，自定义解码会默认给 []，不会解码失败。
+    var imageFileNames: [String]
 
     var remainingLength: Double {
         max(0, length - usedLength)
@@ -86,7 +89,8 @@ final class Fabric: Identifiable, Codable {
         updatedAt: Date = Date(),
         materialId: UUID? = nil,
         channelId: UUID? = nil,
-        tagIds: [UUID] = []
+        tagIds: [UUID] = [],
+        imageFileNames: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -104,6 +108,58 @@ final class Fabric: Identifiable, Codable {
         self.materialId = materialId
         self.channelId = channelId
         self.tagIds = tagIds
+        self.imageFileNames = imageFileNames
+    }
+
+    // 自定义 Codable：所有字段都用 decodeIfPresent + 默认值，
+    // 这样旧版 bucang-store.json（没有 imageFileNames，甚至缺个别字段）
+    // 也能正常解码，不会因为缺键而整份数据丢掉。
+    private enum CodingKeys: String, CodingKey {
+        case id, name, length, width, purchasePrice, pricePerMeter, purchaseDate
+        case usedLength, isFavorite, status, note, createdAt, updatedAt
+        case materialId, channelId, tagIds, imageFileNames
+    }
+
+    required init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        length = try c.decodeIfPresent(Double.self, forKey: .length) ?? 0
+        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? 0
+        purchasePrice = try c.decodeIfPresent(Double.self, forKey: .purchasePrice) ?? 0
+        pricePerMeter = try c.decodeIfPresent(Double.self, forKey: .pricePerMeter) ?? 0
+        purchaseDate = try c.decodeIfPresent(Date.self, forKey: .purchaseDate) ?? Date()
+        usedLength = try c.decodeIfPresent(Double.self, forKey: .usedLength) ?? 0
+        isFavorite = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        status = try c.decodeIfPresent(Int.self, forKey: .status) ?? 0
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+        materialId = try c.decodeIfPresent(UUID.self, forKey: .materialId)
+        channelId = try c.decodeIfPresent(UUID.self, forKey: .channelId)
+        tagIds = try c.decodeIfPresent([UUID].self, forKey: .tagIds) ?? []
+        imageFileNames = try c.decodeIfPresent([String].self, forKey: .imageFileNames) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(length, forKey: .length)
+        try c.encode(width, forKey: .width)
+        try c.encode(purchasePrice, forKey: .purchasePrice)
+        try c.encode(pricePerMeter, forKey: .pricePerMeter)
+        try c.encode(purchaseDate, forKey: .purchaseDate)
+        try c.encode(usedLength, forKey: .usedLength)
+        try c.encode(isFavorite, forKey: .isFavorite)
+        try c.encode(status, forKey: .status)
+        try c.encode(note, forKey: .note)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(materialId, forKey: .materialId)
+        try c.encodeIfPresent(channelId, forKey: .channelId)
+        try c.encode(tagIds, forKey: .tagIds)
+        try c.encode(imageFileNames, forKey: .imageFileNames)
     }
 }
 
@@ -356,6 +412,14 @@ final class Store: ObservableObject {
     }
 
     func deleteFabric(_ fabric: Fabric) {
+        // 删布料时同步删掉它的图片文件，避免 Documents 里留孤儿图片。
+        // 只用 FileManager，不依赖 UIKit，Models.swift 保持 Foundation only。
+        if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("bucang-images") {
+            for name in fabric.imageFileNames {
+                try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+            }
+        }
         fabrics.removeAll { $0.id == fabric.id }
         usageRecords.removeAll { $0.fabricId == fabric.id }
         save()
