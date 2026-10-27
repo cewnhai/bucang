@@ -1,5 +1,4 @@
 import Foundation
-import SwiftData
 
 // MARK: - CSV 解析：处理引号、逗号、换行和双引号转义
 
@@ -164,8 +163,9 @@ struct ImportSummary {
 
 // MARK: - 导入：按原 UUID 匹配，重复导入更新不重复建
 
+@MainActor
 enum CSVImporter {
-    static func importFiles(_ urls: [URL], context: ModelContext) -> ImportSummary {
+    static func importFiles(_ urls: [URL], store: Store) -> ImportSummary {
         var summary = ImportSummary()
         var texts: [String: String] = [:]
         for url in urls {
@@ -180,17 +180,17 @@ enum CSVImporter {
             texts[url.lastPathComponent.lowercased()] = text
         }
 
-        // 现有数据按 id 建索引，避免逐条查询
-        let existingTags = (try? context.fetch(FetchDescriptor<Tag>())) ?? []
-        let existingMaterials = (try? context.fetch(FetchDescriptor<Material>())) ?? []
-        let existingChannels = (try? context.fetch(FetchDescriptor<Channel>())) ?? []
-        let existingFabrics = (try? context.fetch(FetchDescriptor<Fabric>())) ?? []
-        let existingUsage = (try? context.fetch(FetchDescriptor<UsageRecord>())) ?? []
-        var tagByID = Dictionary(uniqueKeysWithValues: existingTags.map { ($0.id, $0) })
-        var materialByID = Dictionary(uniqueKeysWithValues: existingMaterials.map { ($0.id, $0) })
-        var channelByID = Dictionary(uniqueKeysWithValues: existingChannels.map { ($0.id, $0) })
-        var fabricByID = Dictionary(uniqueKeysWithValues: existingFabrics.map { ($0.id, $0) })
-        var usageByID = Dictionary(uniqueKeysWithValues: existingUsage.map { ($0.id, $0) })
+        // 现有数据按 id 建索引
+        var tagByID: [UUID: Tag] = [:]
+        for t in store.tags { tagByID[t.id] = t }
+        var materialByID: [UUID: Material] = [:]
+        for m in store.materials { materialByID[m.id] = m }
+        var channelByID: [UUID: Channel] = [:]
+        for c in store.channels { channelByID[c.id] = c }
+        var fabricByID: [UUID: Fabric] = [:]
+        for f in store.fabrics { fabricByID[f.id] = f }
+        var usageByID: [UUID: UsageRecord] = [:]
+        for u in store.usageRecords { usageByID[u.id] = u }
 
         // 字典先导入
         if let text = texts["tags.csv"] {
@@ -204,7 +204,7 @@ enum CSVImporter {
                     summary.tagsUpdated += 1
                 } else {
                     let tag = Tag(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
-                    context.insert(tag)
+                    store.tags.append(tag)
                     tagByID[id] = tag
                     summary.tagsAdded += 1
                 }
@@ -221,7 +221,7 @@ enum CSVImporter {
                     summary.materialsUpdated += 1
                 } else {
                     let m = Material(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
-                    context.insert(m)
+                    store.materials.append(m)
                     materialByID[id] = m
                     summary.materialsAdded += 1
                 }
@@ -238,7 +238,7 @@ enum CSVImporter {
                     summary.channelsUpdated += 1
                 } else {
                     let c = Channel(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
-                    context.insert(c)
+                    store.channels.append(c)
                     channelByID[id] = c
                     summary.channelsAdded += 1
                 }
@@ -249,14 +249,14 @@ enum CSVImporter {
         if let text = texts["fabrics.csv"] {
             for row in CSVParser.rowsByHeader(text) {
                 guard let id = CSVValues.uuid(row["id"] ?? "") else { summary.skipped += 1; continue }
-                let material = (row["materialId"] ?? "").isEmpty ? nil : materialByID[CSVValues.uuid(row["materialId"] ?? "") ?? UUID()]
-                let channel = (row["purchaseChannelId"] ?? "").isEmpty ? nil : channelByID[CSVValues.uuid(row["purchaseChannelId"] ?? "") ?? UUID()]
-                if let mid = row["materialId"], !mid.isEmpty, material == nil {
+                let materialId: UUID? = (row["materialId"] ?? "").isEmpty ? nil : CSVValues.uuid(row["materialId"] ?? "")
+                let channelId: UUID? = (row["purchaseChannelId"] ?? "").isEmpty ? nil : CSVValues.uuid(row["purchaseChannelId"] ?? "")
+                if let mid = row["materialId"], !mid.isEmpty, materialId == nil || materialByID[materialId!] == nil {
                     summary.errors.append("布料 \(id) 的材质引用不到，已跳过")
                     summary.skipped += 1
                     continue
                 }
-                if let cid = row["purchaseChannelId"], !cid.isEmpty, channel == nil {
+                if let cid = row["purchaseChannelId"], !cid.isEmpty, channelId == nil || channelByID[channelId!] == nil {
                     summary.errors.append("布料 \(id) 的渠道引用不到，已跳过")
                     summary.skipped += 1
                     continue
@@ -265,7 +265,7 @@ enum CSVImporter {
                     .replacingOccurrences(of: ";", with: ",")
                     .split(separator: ",")
                     .compactMap { CSVValues.uuid(String($0)) }
-                let tags = tagIDs.compactMap { tagByID[$0] }
+                    .filter { tagByID[$0] != nil }
                 if let existing = fabricByID[id] {
                     existing.name = row["name"] ?? ""
                     existing.length = CSVValues.double(row["length"] ?? "")
@@ -277,9 +277,9 @@ enum CSVImporter {
                     existing.isFavorite = CSVValues.bool(row["isFavorite"] ?? "")
                     existing.status = CSVValues.int(row["status"] ?? "")
                     existing.note = row["note"] ?? ""
-                    existing.material = material
-                    existing.channel = channel
-                    existing.tags = tags
+                    existing.materialId = materialId
+                    existing.channelId = channelId
+                    existing.tagIds = tagIDs
                     existing.updatedAt = Date()
                     summary.fabricsUpdated += 1
                 } else {
@@ -296,24 +296,24 @@ enum CSVImporter {
                         status: CSVValues.int(row["status"] ?? ""),
                         note: row["note"] ?? "",
                         createdAt: CSVValues.date(row["createdAt"] ?? ""),
-                        updatedAt: CSVValues.date(row["modifiedAt"] ?? "")
+                        updatedAt: CSVValues.date(row["modifiedAt"] ?? ""),
+                        materialId: materialId,
+                        channelId: channelId,
+                        tagIds: tagIDs
                     )
-                    fabric.material = material
-                    fabric.channel = channel
-                    fabric.tags = tags
-                    context.insert(fabric)
+                    store.fabrics.append(fabric)
                     fabricByID[id] = fabric
                     summary.fabricsAdded += 1
                 }
             }
         }
 
-        // 使用记录
+        // 使用记录（fabric_images.csv 按要求忽略，不读）
         if let text = texts["usage_records.csv"] {
             for row in CSVParser.rowsByHeader(text) {
                 guard let id = CSVValues.uuid(row["id"] ?? ""),
                       let fabricID = CSVValues.uuid(row["fabricId"] ?? ""),
-                      let fabric = fabricByID[fabricID] else {
+                      fabricByID[fabricID] != nil else {
                     summary.skipped += 1
                     continue
                 }
@@ -323,35 +323,32 @@ enum CSVImporter {
                 if let existing = usageByID[id] {
                     existing.date = CSVValues.date(row["date"] ?? "")
                     existing.length = amount
-                    existing.fabric = fabric
+                    existing.fabricId = fabricID
                     summary.usageUpdated += 1
                 } else {
-                    let record = UsageRecord(id: id, date: CSVValues.date(row["date"] ?? ""), length: amount, fabric: fabric)
-                    context.insert(record)
+                    let record = UsageRecord(id: id, date: CSVValues.date(row["date"] ?? ""), length: amount, fabricId: fabricID)
+                    store.usageRecords.append(record)
                     usageByID[id] = record
                     summary.usageAdded += 1
                 }
             }
         }
 
-        do {
-            try context.save()
-        } catch {
-            summary.errors.append("保存失败：\(error.localizedDescription)")
-        }
+        store.save()
         return summary
     }
 }
 
 // MARK: - 导出：按原 CSV 列格式
 
+@MainActor
 enum CSVExporter {
-    static func exportFiles(context: ModelContext) -> [URL] {
-        let tags = (try? context.fetch(FetchDescriptor<Tag>(sortBy: [SortDescriptor(\.sortOrder)]))) ?? []
-        let materials = (try? context.fetch(FetchDescriptor<Material>(sortBy: [SortDescriptor(\.sortOrder)]))) ?? []
-        let channels = (try? context.fetch(FetchDescriptor<Channel>(sortBy: [SortDescriptor(\.sortOrder)]))) ?? []
-        let fabrics = (try? context.fetch(FetchDescriptor<Fabric>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
-        let usage = (try? context.fetch(FetchDescriptor<UsageRecord>(sortBy: [SortDescriptor(\.date)]))) ?? []
+    static func exportFiles(store: Store) -> [URL] {
+        let tags = store.tags.sorted { $0.sortOrder < $1.sortOrder }
+        let materials = store.materials.sorted { $0.sortOrder < $1.sortOrder }
+        let channels = store.channels.sorted { $0.sortOrder < $1.sortOrder }
+        let fabrics = store.fabrics.sorted { $0.createdAt < $1.createdAt }
+        let usage = store.usageRecords.sorted { $0.date < $1.date }
 
         var files: [(String, String)] = []
 
@@ -376,8 +373,8 @@ enum CSVExporter {
                 f.isFavorite ? "true" : "false",
                 CSVValues.dateString(f.createdAt), CSVValues.dateString(f.updatedAt),
                 String(f.status), f.note,
-                f.material?.id.uuidString ?? "", f.channel?.id.uuidString ?? "",
-                f.tags.map { $0.id.uuidString }.joined(separator: ";")
+                f.materialId?.uuidString ?? "", f.channelId?.uuidString ?? "",
+                f.tagIds.map { $0.uuidString }.joined(separator: ";")
             ]
             fabricsCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
         }
@@ -385,7 +382,7 @@ enum CSVExporter {
 
         var usageCSV = "id,fabricId,fworkId,length,date,usage\n"
         for u in usage {
-            let values = [u.id.uuidString, u.fabric?.id.uuidString ?? "", "", String(u.length), CSVValues.dateString(u.date), String(u.length)]
+            let values = [u.id.uuidString, u.fabricId.uuidString, "", String(u.length), CSVValues.dateString(u.date), String(u.length)]
             usageCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
         }
         files.append(("usage_records.csv", usageCSV))

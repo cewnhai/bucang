@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftData
 
 enum FabricSort: String, CaseIterable, Identifiable {
     case purchaseDate, price, length, created
@@ -15,10 +14,7 @@ enum FabricSort: String, CaseIterable, Identifiable {
 }
 
 struct FabricListView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Fabric.createdAt, order: .reverse) private var fabrics: [Fabric]
-    @Query(sort: \Material.sortOrder) private var materials: [Material]
-    @Query(sort: \Channel.sortOrder) private var channels: [Channel]
+    @EnvironmentObject private var store: Store
 
     @State private var searchText = ""
     @State private var showFavoritesOnly = false
@@ -27,18 +23,22 @@ struct FabricListView: View {
     @State private var sort: FabricSort = .purchaseDate
     @State private var showingAdd = false
 
+    private var fabrics: [Fabric] { store.fabrics }
+    private var materials: [Material] { store.materials.sorted { $0.sortOrder < $1.sortOrder } }
+    private var channels: [Channel] { store.channels.sorted { $0.sortOrder < $1.sortOrder } }
+
     private var filtered: [Fabric] {
         var list = fabrics
         if showFavoritesOnly { list = list.filter { $0.isFavorite } }
-        if let materialFilter { list = list.filter { $0.material?.id == materialFilter } }
-        if let channelFilter { list = list.filter { $0.channel?.id == channelFilter } }
+        if let materialFilter { list = list.filter { $0.materialId == materialFilter } }
+        if let channelFilter { list = list.filter { $0.channelId == channelFilter } }
         let keyword = searchText.trimmingCharacters(in: .whitespaces)
         if !keyword.isEmpty {
             list = list.filter {
                 $0.name.localizedCaseInsensitiveContains(keyword)
                 || $0.note.localizedCaseInsensitiveContains(keyword)
-                || ($0.material?.name.localizedCaseInsensitiveContains(keyword) ?? false)
-                || ($0.channel?.name.localizedCaseInsensitiveContains(keyword) ?? false)
+                || (store.material(for: $0.materialId)?.name.localizedCaseInsensitiveContains(keyword) ?? false)
+                || (store.channel(for: $0.channelId)?.name.localizedCaseInsensitiveContains(keyword) ?? false)
             }
         }
         switch sort {
@@ -62,7 +62,7 @@ struct FabricListView: View {
                             Text("\(fabrics.count) 块布料")
                             Text("总长 \(totalLength, specifier: "%.2f") 米 · 剩余 \(totalRemaining, specifier: "%.2f") 米")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundColor(.secondary)
                         }
                         Spacer()
                         Text("总价 ¥\(totalPrice, specifier: "%.2f")")
@@ -91,23 +91,23 @@ struct FabricListView: View {
                                     .font(.headline)
                                 if fabric.isFavorite {
                                     Image(systemName: "star.fill")
-                                        .foregroundStyle(.yellow)
+                                        .foregroundColor(.yellow)
                                         .font(.caption)
                                 }
                             }
-                            Text("\(fabric.material?.name ?? "未分类") · \(fabric.channel?.name ?? "未分类")")
+                            Text("\(store.material(for: fabric.materialId)?.name ?? "未分类") · \(store.channel(for: fabric.channelId)?.name ?? "未分类")")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundColor(.secondary)
                             Text("总长 \(fabric.length, specifier: "%.2f") 米 · 剩余 \(fabric.remainingLength, specifier: "%.2f") 米 · ¥\(fabric.purchasePrice, specifier: "%.2f")")
                                 .font(.caption)
                         }
                     }
                 }
                 .onDelete { indexSet in
-                    for index in indexSet {
-                        context.delete(filtered[index])
+                    let toDelete = indexSet.map { filtered[$0] }
+                    for fabric in toDelete {
+                        store.deleteFabric(fabric)
                     }
-                    try? context.save()
                 }
             }
             .searchable(text: $searchText, prompt: "按名称、备注、材质、渠道搜索")
@@ -122,7 +122,16 @@ struct FabricListView: View {
             }
             .overlay {
                 if filtered.isEmpty {
-                    ContentUnavailableView("暂无布料记录", systemImage: "scissors", description: Text("点右上角加号新增，或去设置里导入原数据"))
+                    VStack(spacing: 8) {
+                        Image(systemName: "scissors")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("暂无布料记录")
+                            .font(.headline)
+                        Text("点右上角加号新增，或去设置里导入原数据")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }
@@ -130,7 +139,7 @@ struct FabricListView: View {
 }
 
 struct FabricDetailView: View {
-    @Environment(\.modelContext) private var context
+    @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
 
@@ -141,12 +150,15 @@ struct FabricDetailView: View {
     @State private var usageNote = ""
     @State private var usageError: String?
 
+    private var usageRecords: [UsageRecord] { store.usageRecords(for: fabric.id) }
+    private var fabricTags: [Tag] { store.tags(for: fabric) }
+
     var body: some View {
         List {
             Section("基本信息") {
                 LabeledContent("名称", value: fabric.displayName)
-                LabeledContent("材质", value: fabric.material?.name ?? "未分类")
-                LabeledContent("渠道", value: fabric.channel?.name ?? "未分类")
+                LabeledContent("材质", value: store.material(for: fabric.materialId)?.name ?? "未分类")
+                LabeledContent("渠道", value: store.channel(for: fabric.channelId)?.name ?? "未分类")
                 LabeledContent("幅宽", value: "\(String(format: "%.2f", fabric.width)) 米")
                 LabeledContent("总长", value: "\(String(format: "%.2f", fabric.length)) 米")
                 LabeledContent("已用", value: "\(String(format: "%.2f", fabric.usedLength)) 米")
@@ -154,19 +166,19 @@ struct FabricDetailView: View {
                 LabeledContent("总价", value: "¥\(String(format: "%.2f", fabric.purchasePrice))")
                 LabeledContent("单价", value: "¥\(String(format: "%.2f", fabric.pricePerMeter)) / 米")
                 LabeledContent("购买日期", value: CSVValues.dateString(fabric.purchaseDate))
-                if !fabric.tags.isEmpty {
-                    LabeledContent("标签", value: fabric.tags.map { $0.name }.joined(separator: "、"))
+                if !fabricTags.isEmpty {
+                    LabeledContent("标签", value: fabricTags.map { $0.name }.joined(separator: "、"))
                 }
                 if !fabric.note.isEmpty {
                     LabeledContent("备注", value: fabric.note)
                 }
             }
             Section("使用记录") {
-                if fabric.usageRecords.isEmpty {
+                if usageRecords.isEmpty {
                     Text("暂无使用记录")
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                 } else {
-                    ForEach(fabric.usageRecords.sorted { $0.date > $1.date }) { record in
+                    ForEach(usageRecords) { record in
                         HStack {
                             Text(CSVValues.dateString(record.date))
                             Spacer()
@@ -176,8 +188,8 @@ struct FabricDetailView: View {
                             Button("删除", role: .destructive) {
                                 fabric.usedLength = max(0, fabric.usedLength - record.length)
                                 fabric.updatedAt = Date()
-                                context.delete(record)
-                                try? context.save()
+                                store.deleteUsageRecord(record)
+                                store.save()
                             }
                         }
                     }
@@ -188,7 +200,7 @@ struct FabricDetailView: View {
                 Button(fabric.isFavorite ? "取消收藏" : "收藏") {
                     fabric.isFavorite.toggle()
                     fabric.updatedAt = Date()
-                    try? context.save()
+                    store.save()
                 }
                 Button("编辑", action: { showingEdit = true })
                 Button("删除这块布料", role: .destructive) { showingDelete = true }
@@ -200,8 +212,7 @@ struct FabricDetailView: View {
         }
         .alert("删除确认", isPresented: $showingDelete) {
             Button("删除", role: .destructive) {
-                context.delete(fabric)
-                try? context.save()
+                store.deleteFabric(fabric)
                 dismiss()
             }
             Button("取消", role: .cancel) {}
@@ -215,7 +226,7 @@ struct FabricDetailView: View {
                         .keyboardType(.decimalPad)
                     TextField("备注（选填）", text: $usageNote)
                     if let usageError {
-                        Text(usageError).foregroundStyle(.red)
+                        Text(usageError).foregroundColor(.red)
                     }
                 }
                 .navigationTitle("添加使用记录")
@@ -233,11 +244,10 @@ struct FabricDetailView: View {
                                 usageError = "使用长度不能大于剩余长度（剩余 \(String(format: "%.2f", fabric.remainingLength)) 米）"
                                 return
                             }
-                            let record = UsageRecord(date: Date(), length: amount, note: usageNote, fabric: fabric)
-                            context.insert(record)
+                            let record = UsageRecord(date: Date(), length: amount, note: usageNote, fabricId: fabric.id)
                             fabric.usedLength += amount
                             fabric.updatedAt = Date()
-                            try? context.save()
+                            store.addUsageRecord(record)
                             usageLengthText = ""
                             usageNote = ""
                             usageError = nil
@@ -251,11 +261,8 @@ struct FabricDetailView: View {
 }
 
 struct FabricEditView: View {
-    @Environment(\.modelContext) private var context
+    @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Material.sortOrder) private var materials: [Material]
-    @Query(sort: \Channel.sortOrder) private var channels: [Channel]
-    @Query(sort: \Tag.sortOrder) private var tags: [Tag]
 
     var fabric: Fabric?
 
@@ -282,10 +289,14 @@ struct FabricEditView: View {
         _purchaseDate = State(initialValue: fabric?.purchaseDate ?? Date())
         _note = State(initialValue: fabric?.note ?? "")
         _isFavorite = State(initialValue: fabric?.isFavorite ?? false)
-        _materialID = State(initialValue: fabric?.material?.id)
-        _channelID = State(initialValue: fabric?.channel?.id)
-        _selectedTagIDs = State(initialValue: Set(fabric?.tags.map { $0.id } ?? []))
+        _materialID = State(initialValue: fabric?.materialId)
+        _channelID = State(initialValue: fabric?.channelId)
+        _selectedTagIDs = State(initialValue: Set(fabric?.tagIds ?? []))
     }
+
+    private var materials: [Material] { store.materials.sorted { $0.sortOrder < $1.sortOrder } }
+    private var channels: [Channel] { store.channels.sorted { $0.sortOrder < $1.sortOrder } }
+    private var tags: [Tag] { store.tags.sorted { $0.sortOrder < $1.sortOrder } }
 
     private func save() {
         let length = Double(lengthText) ?? 0
@@ -299,7 +310,7 @@ struct FabricEditView: View {
             errorMessage = "长度、幅宽、价格不能为负数"
             return
         }
-        let selectedTags = tags.filter { selectedTagIDs.contains($0.id) }
+        let selectedTagIDsArray = tags.filter { selectedTagIDs.contains($0.id) }.map { $0.id }
         if let existing = fabric, length < existing.usedLength {
             errorMessage = "总长不能小于已用长度（已用 \(String(format: "%.2f", existing.usedLength)) 米）"
             return
@@ -313,27 +324,25 @@ struct FabricEditView: View {
             existing.purchaseDate = purchaseDate
             existing.note = note
             existing.isFavorite = isFavorite
-            existing.material = materials.first { $0.id == materialID }
-            existing.channel = channels.first { $0.id == channelID }
-            existing.tags = selectedTags
+            existing.materialId = materialID
+            existing.channelId = channelID
+            existing.tagIds = selectedTagIDsArray
             existing.updatedAt = Date()
             if existing.usedLength > length {
                 errorMessage = "总长不能小于已用长度（已用 \(String(format: "%.2f", existing.usedLength)) 米）"
                 return
             }
+            store.save()
         } else {
             let newFabric = Fabric(
                 name: name, length: length, width: width,
                 purchasePrice: price, pricePerMeter: perMeter,
-                purchaseDate: purchaseDate, note: note
+                purchaseDate: purchaseDate, note: note,
+                materialId: materialID, channelId: channelID, tagIds: selectedTagIDsArray
             )
             newFabric.isFavorite = isFavorite
-            newFabric.material = materials.first { $0.id == materialID }
-            newFabric.channel = channels.first { $0.id == channelID }
-            newFabric.tags = selectedTags
-            context.insert(newFabric)
+            store.addFabric(newFabric)
         }
-        try? context.save()
         dismiss()
     }
 
@@ -361,7 +370,7 @@ struct FabricEditView: View {
             Section("标签") {
                 if tags.isEmpty {
                     Text("还没有标签，去设置里先加标签")
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                 } else {
                     ForEach(tags) { tag in
                         Button(action: {
@@ -379,7 +388,7 @@ struct FabricEditView: View {
                                 }
                             }
                         }
-                        .foregroundStyle(.primary)
+                        .foregroundColor(.primary)
                     }
                 }
             }
@@ -387,7 +396,7 @@ struct FabricEditView: View {
                 TextField("备注", text: $note, axis: .vertical)
             }
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red)
+                Text(errorMessage).foregroundColor(.red)
             }
         }
         .navigationTitle(fabric == nil ? "新增布料" : "编辑布料")

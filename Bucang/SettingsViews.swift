@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftData
 import UniformTypeIdentifiers
 
 enum DictKind: String, CaseIterable, Identifiable {
@@ -15,11 +14,7 @@ enum DictKind: String, CaseIterable, Identifiable {
 }
 
 struct SettingsView: View {
-    @Environment(\.modelContext) private var context
-    @Query private var fabrics: [Fabric]
-    @Query private var works: [Work]
-    @Query private var patterns: [Pattern]
-    @Query private var items: [Item]
+    @EnvironmentObject private var store: Store
 
     @State private var showingImporter = false
     @State private var importSummary: String?
@@ -32,11 +27,11 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section("总览") {
-                    LabeledContent("布料", value: "\(fabrics.count) 条")
-                    LabeledContent("总长", value: "\(String(format: "%.2f", fabrics.reduce(0.0) { $0 + $1.length })) 米")
-                    LabeledContent("剩余", value: "\(String(format: "%.2f", fabrics.reduce(0.0) { $0 + $1.remainingLength })) 米")
-                    LabeledContent("总价", value: "¥\(String(format: "%.2f", fabrics.reduce(0.0) { $0 + $1.purchasePrice }))")
-                    LabeledContent("作品 / 纸样 / 物品", value: "\(works.count) / \(patterns.count) / \(items.count)")
+                    LabeledContent("布料", value: "\(store.fabrics.count) 条")
+                    LabeledContent("总长", value: "\(String(format: "%.2f", store.fabrics.reduce(0.0) { $0 + $1.length })) 米")
+                    LabeledContent("剩余", value: "\(String(format: "%.2f", store.fabrics.reduce(0.0) { $0 + $1.remainingLength })) 米")
+                    LabeledContent("总价", value: "¥\(String(format: "%.2f", store.fabrics.reduce(0.0) { $0 + $1.purchasePrice }))")
+                    LabeledContent("作品 / 纸样 / 物品", value: "\(store.works.count) / \(store.patterns.count) / \(store.items.count)")
                 }
                 Section("字典管理") {
                     ForEach(DictKind.allCases) { kind in
@@ -46,21 +41,21 @@ struct SettingsView: View {
                 Section("数据导入导出") {
                     Button("导入原数据（选多个 CSV）") { showingImporter = true }
                     Button("导出全部数据为 CSV") {
-                        exportURLs = CSVExporter.exportFiles(context: context)
+                        exportURLs = CSVExporter.exportFiles(store: store)
                         showingExporter = true
                     }
                     Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。图片文件按你的要求不导入。")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                 }
                 Section("危险操作") {
                     Button("清空全部本地数据", role: .destructive) { showingClearConfirm = true }
                 }
                 Section("关于") {
                     Text("布仓第一版：本机存储，不联网，不做 iCloud 同步，不做订阅。")
-                    Text("目标 iOS 17，可用 TrollStore 安装自己编译的包。")
+                    Text("目标 iOS 16，可用 TrollStore 安装自己编译的包。")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                 }
             }
             .navigationTitle("设置")
@@ -71,7 +66,7 @@ struct SettingsView: View {
             ) { result in
                 switch result {
                 case .success(let urls):
-                    let summary = CSVImporter.importFiles(urls, context: context)
+                    let summary = CSVImporter.importFiles(urls, store: store)
                     importSummary = summary.text
                     showingSummary = true
                 case .failure(let error):
@@ -89,11 +84,7 @@ struct SettingsView: View {
             }
             .alert("清空确认", isPresented: $showingClearConfirm) {
                 Button("清空", role: .destructive) {
-                    for fabric in fabrics { context.delete(fabric) }
-                    for work in works { context.delete(work) }
-                    for pattern in patterns { context.delete(pattern) }
-                    for item in items { context.delete(item) }
-                    try? context.save()
+                    store.clearRecords()
                 }
                 Button("取消", role: .cancel) {}
             } message: {
@@ -104,14 +95,15 @@ struct SettingsView: View {
 }
 
 struct DictionaryView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Tag.sortOrder) private var tags: [Tag]
-    @Query(sort: \Material.sortOrder) private var materials: [Material]
-    @Query(sort: \Channel.sortOrder) private var channels: [Channel]
+    @EnvironmentObject private var store: Store
 
     var kind: DictKind
     @State private var newName = ""
     @State private var showingAdd = false
+
+    private var tags: [Tag] { store.tags.sorted { $0.sortOrder < $1.sortOrder } }
+    private var materials: [Material] { store.materials.sorted { $0.sortOrder < $1.sortOrder } }
+    private var channels: [Channel] { store.channels.sorted { $0.sortOrder < $1.sortOrder } }
 
     private var count: Int {
         switch kind {
@@ -127,15 +119,14 @@ struct DictionaryView: View {
         switch kind {
         case .tag:
             if tags.contains(where: { $0.name == name }) { return }
-            context.insert(Tag(name: name, sortOrder: tags.count))
+            store.addTag(Tag(name: name, sortOrder: tags.count))
         case .material:
             if materials.contains(where: { $0.name == name }) { return }
-            context.insert(Material(name: name, sortOrder: materials.count))
+            store.addMaterial(Material(name: name, sortOrder: materials.count))
         case .channel:
             if channels.contains(where: { $0.name == name }) { return }
-            context.insert(Channel(name: name, sortOrder: channels.count))
+            store.addChannel(Channel(name: name, sortOrder: channels.count))
         }
-        try? context.save()
         newName = ""
         showingAdd = false
     }
@@ -143,13 +134,15 @@ struct DictionaryView: View {
     private func delete(at offsets: IndexSet) {
         switch kind {
         case .tag:
-            for index in offsets { context.delete(tags[index]) }
+            let toDelete = offsets.map { tags[$0] }
+            for tag in toDelete { store.deleteTag(tag) }
         case .material:
-            for index in offsets { context.delete(materials[index]) }
+            let toDelete = offsets.map { materials[$0] }
+            for material in toDelete { store.deleteMaterial(material) }
         case .channel:
-            for index in offsets { context.delete(channels[index]) }
+            let toDelete = offsets.map { channels[$0] }
+            for channel in toDelete { store.deleteChannel(channel) }
         }
-        try? context.save()
     }
 
     private func move(from source: IndexSet, to destination: Int) {
@@ -158,16 +151,21 @@ struct DictionaryView: View {
             var list = tags
             list.move(fromOffsets: source, toOffset: destination)
             for (index, tag) in list.enumerated() { tag.sortOrder = index }
+            store.tags = list
+            store.save()
         case .material:
             var list = materials
             list.move(fromOffsets: source, toOffset: destination)
             for (index, item) in list.enumerated() { item.sortOrder = index }
+            store.materials = list
+            store.save()
         case .channel:
             var list = channels
             list.move(fromOffsets: source, toOffset: destination)
             for (index, item) in list.enumerated() { item.sortOrder = index }
+            store.channels = list
+            store.save()
         }
-        try? context.save()
     }
 
     var body: some View {
@@ -205,7 +203,16 @@ struct DictionaryView: View {
         }
         .overlay {
             if count == 0 {
-                ContentUnavailableView("暂无\(kind.title)", systemImage: "tag", description: Text("点右上角加号新增"))
+                VStack(spacing: 8) {
+                    Image(systemName: "tag")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+                    Text("暂无\(kind.title)")
+                        .font(.headline)
+                    Text("点右上角加号新增")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }

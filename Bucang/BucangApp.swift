@@ -1,24 +1,17 @@
 import SwiftUI
-import SwiftData
 
 // 布仓 Bucang：原创重做版入口。
-// 本机 SwiftData，不联网、不做 iCloud 同步、不做订阅，第一版不存图片。
+// 本机 JSON 存储（Documents/bucang-store.json），不联网、不做 iCloud 同步、
+// 不做订阅，第一版不存图片。目标 iOS 16，不用旧数据框架。
 @main
 struct BucangApp: App {
+    @StateObject private var store = Store()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(store)
         }
-        .modelContainer(for: [
-            Fabric.self,
-            Tag.self,
-            Material.self,
-            Channel.self,
-            UsageRecord.self,
-            Work.self,
-            Pattern.self,
-            Item.self
-        ])
     }
 }
 

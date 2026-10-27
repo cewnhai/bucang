@@ -1,18 +1,31 @@
 import SwiftUI
-import SwiftData
 
 // MARK: - 作品
 
 struct WorkListView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Work.createdAt, order: .reverse) private var works: [Work]
+    @EnvironmentObject private var store: Store
     @State private var showingAdd = false
     @State private var searchText = ""
+
+    private var works: [Work] { store.works.sorted { $0.createdAt > $1.createdAt } }
 
     private var filtered: [Work] {
         let keyword = searchText.trimmingCharacters(in: .whitespaces)
         if keyword.isEmpty { return works }
         return works.filter { $0.name.localizedCaseInsensitiveContains(keyword) || $0.note.localizedCaseInsensitiveContains(keyword) }
+    }
+
+    private var emptyPlaceholder: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "tshirt")
+                .font(.largeTitle)
+                .foregroundColor(.secondary)
+            Text("暂无作品")
+                .font(.headline)
+            Text("点右上角加号新增")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
     }
 
     var body: some View {
@@ -24,13 +37,13 @@ struct WorkListView: View {
                             Text(work.name.isEmpty ? "未命名作品" : work.name).font(.headline)
                             Text("进度 \(Int(work.progress))% · 成本 ¥\(work.costPrice, specifier: "%.2f") · 售价 ¥\(work.sellPrice, specifier: "%.2f")")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
                 .onDelete { indexSet in
-                    for index in indexSet { context.delete(filtered[index]) }
-                    try? context.save()
+                    let toDelete = indexSet.map { filtered[$0] }
+                    for work in toDelete { store.deleteWork(work) }
                 }
             }
             .searchable(text: $searchText, prompt: "搜索作品")
@@ -39,7 +52,7 @@ struct WorkListView: View {
             .sheet(isPresented: $showingAdd) { NavigationStack { WorkEditView(work: nil) } }
             .overlay {
                 if filtered.isEmpty {
-                    ContentUnavailableView("暂无作品", systemImage: "tshirt", description: Text("点右上角加号新增"))
+                    emptyPlaceholder
                 }
             }
         }
@@ -47,7 +60,7 @@ struct WorkListView: View {
 }
 
 struct WorkEditView: View {
-    @Environment(\.modelContext) private var context
+    @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var work: Work?
     @State private var name: String
@@ -77,8 +90,7 @@ struct WorkEditView: View {
             TextField("备注", text: $note, axis: .vertical)
             if let work {
                 Button("删除这个作品", role: .destructive) {
-                    context.delete(work)
-                    try? context.save()
+                    store.deleteWork(work)
                     dismiss()
                 }
             }
@@ -96,10 +108,10 @@ struct WorkEditView: View {
                         existing.sellPrice = Double(sellText) ?? 0
                         existing.timeHours = Double(hoursText) ?? 0
                         existing.note = note
+                        store.save()
                     } else {
-                        context.insert(Work(name: name, progress: progress, costPrice: Double(costText) ?? 0, sellPrice: Double(sellText) ?? 0, timeHours: Double(hoursText) ?? 0, note: note))
+                        store.addWork(Work(name: name, progress: progress, costPrice: Double(costText) ?? 0, sellPrice: Double(sellText) ?? 0, timeHours: Double(hoursText) ?? 0, note: note))
                     }
-                    try? context.save()
                     dismiss()
                 }
             }
@@ -110,10 +122,11 @@ struct WorkEditView: View {
 // MARK: - 纸样
 
 struct PatternListView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Pattern.createdAt, order: .reverse) private var patterns: [Pattern]
+    @EnvironmentObject private var store: Store
     @State private var showingAdd = false
     @State private var searchText = ""
+
+    private var patterns: [Pattern] { store.patterns.sorted { $0.createdAt > $1.createdAt } }
 
     private var filtered: [Pattern] {
         let keyword = searchText.trimmingCharacters(in: .whitespaces)
@@ -130,13 +143,13 @@ struct PatternListView: View {
                             Text(pattern.name.isEmpty ? "未命名纸样" : pattern.name).font(.headline)
                             Text("价格 ¥\(pattern.price, specifier: "%.2f") · 片数 \(pattern.pieceCount)")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
                 .onDelete { indexSet in
-                    for index in indexSet { context.delete(filtered[index]) }
-                    try? context.save()
+                    let toDelete = indexSet.map { filtered[$0] }
+                    for pattern in toDelete { store.deletePattern(pattern) }
                 }
             }
             .searchable(text: $searchText, prompt: "搜索纸样")
@@ -145,7 +158,16 @@ struct PatternListView: View {
             .sheet(isPresented: $showingAdd) { NavigationStack { PatternEditView(pattern: nil) } }
             .overlay {
                 if filtered.isEmpty {
-                    ContentUnavailableView("暂无纸样", systemImage: "doc", description: Text("点右上角加号新增"))
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("暂无纸样")
+                            .font(.headline)
+                        Text("点右上角加号新增")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }
@@ -153,7 +175,7 @@ struct PatternListView: View {
 }
 
 struct PatternEditView: View {
-    @Environment(\.modelContext) private var context
+    @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var pattern: Pattern?
     @State private var name: String
@@ -180,8 +202,7 @@ struct PatternEditView: View {
             TextField("备注", text: $note, axis: .vertical)
             if let pattern {
                 Button("删除这个纸样", role: .destructive) {
-                    context.delete(pattern)
-                    try? context.save()
+                    store.deletePattern(pattern)
                     dismiss()
                 }
             }
@@ -197,10 +218,10 @@ struct PatternEditView: View {
                         existing.pieceCount = Int(pieceText) ?? 0
                         existing.sizeDesc = sizeDesc
                         existing.note = note
+                        store.save()
                     } else {
-                        context.insert(Pattern(name: name, price: Double(priceText) ?? 0, pieceCount: Int(pieceText) ?? 0, sizeDesc: sizeDesc, note: note))
+                        store.addPattern(Pattern(name: name, price: Double(priceText) ?? 0, pieceCount: Int(pieceText) ?? 0, sizeDesc: sizeDesc, note: note))
                     }
-                    try? context.save()
                     dismiss()
                 }
             }
@@ -211,10 +232,11 @@ struct PatternEditView: View {
 // MARK: - 物品
 
 struct ItemListView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Item.createdAt, order: .reverse) private var items: [Item]
+    @EnvironmentObject private var store: Store
     @State private var showingAdd = false
     @State private var searchText = ""
+
+    private var items: [Item] { store.items.sorted { $0.createdAt > $1.createdAt } }
 
     private var filtered: [Item] {
         let keyword = searchText.trimmingCharacters(in: .whitespaces)
@@ -231,13 +253,13 @@ struct ItemListView: View {
                             Text(item.name.isEmpty ? "未命名物品" : item.name).font(.headline)
                             Text("价格 ¥\(item.price, specifier: "%.2f") · 数量 \(item.quantity)")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
                 .onDelete { indexSet in
-                    for index in indexSet { context.delete(filtered[index]) }
-                    try? context.save()
+                    let toDelete = indexSet.map { filtered[$0] }
+                    for item in toDelete { store.deleteItem(item) }
                 }
             }
             .searchable(text: $searchText, prompt: "搜索物品")
@@ -246,7 +268,16 @@ struct ItemListView: View {
             .sheet(isPresented: $showingAdd) { NavigationStack { ItemEditView(item: nil) } }
             .overlay {
                 if filtered.isEmpty {
-                    ContentUnavailableView("暂无物品", systemImage: "bag", description: Text("点右上角加号新增"))
+                    VStack(spacing: 8) {
+                        Image(systemName: "bag")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("暂无物品")
+                            .font(.headline)
+                        Text("点右上角加号新增")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }
@@ -254,7 +285,7 @@ struct ItemListView: View {
 }
 
 struct ItemEditView: View {
-    @Environment(\.modelContext) private var context
+    @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var item: Item?
     @State private var name: String
@@ -281,8 +312,7 @@ struct ItemEditView: View {
             TextField("备注", text: $note, axis: .vertical)
             if let item {
                 Button("删除这个物品", role: .destructive) {
-                    context.delete(item)
-                    try? context.save()
+                    store.deleteItem(item)
                     dismiss()
                 }
             }
@@ -298,10 +328,10 @@ struct ItemEditView: View {
                         existing.quantity = Int(quantityText) ?? 0
                         existing.sizeDesc = sizeDesc
                         existing.note = note
+                        store.save()
                     } else {
-                        context.insert(Item(name: name, price: Double(priceText) ?? 0, quantity: Int(quantityText) ?? 0, sizeDesc: sizeDesc, note: note))
+                        store.addItem(Item(name: name, price: Double(priceText) ?? 0, quantity: Int(quantityText) ?? 0, sizeDesc: sizeDesc, note: note))
                     }
-                    try? context.save()
                     dismiss()
                 }
             }
