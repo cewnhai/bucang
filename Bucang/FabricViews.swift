@@ -147,12 +147,12 @@ struct FabricDetailView: View {
                 LabeledContent("名称", value: fabric.displayName)
                 LabeledContent("材质", value: fabric.material?.name ?? "未分类")
                 LabeledContent("渠道", value: fabric.channel?.name ?? "未分类")
-                LabeledContent("幅宽", value: "\(fabric.width, specifier: "%.2f") 米")
-                LabeledContent("总长", value: "\(fabric.length, specifier: "%.2f") 米")
-                LabeledContent("已用", value: "\(fabric.usedLength, specifier: "%.2f") 米")
-                LabeledContent("剩余", value: "\(fabric.remainingLength, specifier: "%.2f") 米")
-                LabeledContent("总价", value: "¥\(fabric.purchasePrice, specifier: "%.2f")")
-                LabeledContent("单价", value: "¥\(fabric.pricePerMeter, specifier: "%.2f") / 米")
+                LabeledContent("幅宽", value: "\(String(format: "%.2f", fabric.width)) 米")
+                LabeledContent("总长", value: "\(String(format: "%.2f", fabric.length)) 米")
+                LabeledContent("已用", value: "\(String(format: "%.2f", fabric.usedLength)) 米")
+                LabeledContent("剩余", value: "\(String(format: "%.2f", fabric.remainingLength)) 米")
+                LabeledContent("总价", value: "¥\(String(format: "%.2f", fabric.purchasePrice))")
+                LabeledContent("单价", value: "¥\(String(format: "%.2f", fabric.pricePerMeter)) / 米")
                 LabeledContent("购买日期", value: CSVValues.dateString(fabric.purchaseDate))
                 if !fabric.tags.isEmpty {
                     LabeledContent("标签", value: fabric.tags.map { $0.name }.joined(separator: "、"))
@@ -230,7 +230,7 @@ struct FabricDetailView: View {
                                 return
                             }
                             guard amount <= fabric.remainingLength else {
-                                usageError = "使用长度不能大于剩余长度（剩余 \(fabric.remainingLength, specifier: "%.2f") 米）"
+                                usageError = "使用长度不能大于剩余长度（剩余 \(String(format: "%.2f", fabric.remainingLength)) 米）"
                                 return
                             }
                             let record = UsageRecord(date: Date(), length: amount, note: usageNote, fabric: fabric)
@@ -301,7 +301,7 @@ struct FabricEditView: View {
         }
         let selectedTags = tags.filter { selectedTagIDs.contains($0.id) }
         if let existing = fabric, length < existing.usedLength {
-            errorMessage = "总长不能小于已用长度（已用 \(existing.usedLength, specifier: "%.2f") 米）"
+            errorMessage = "总长不能小于已用长度（已用 \(String(format: "%.2f", existing.usedLength)) 米）"
             return
         }
         if let existing = fabric {
@@ -318,7 +318,7 @@ struct FabricEditView: View {
             existing.tags = selectedTags
             existing.updatedAt = Date()
             if existing.usedLength > length {
-                errorMessage = "总长不能小于已用长度（已用 \(existing.usedLength, specifier: "%.2f") 米）"
+                errorMessage = "总长不能小于已用长度（已用 \(String(format: "%.2f", existing.usedLength)) 米）"
                 return
             }
         } else {

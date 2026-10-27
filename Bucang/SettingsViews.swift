@@ -33,9 +33,9 @@ struct SettingsView: View {
             List {
                 Section("总览") {
                     LabeledContent("布料", value: "\(fabrics.count) 条")
-                    LabeledContent("总长", value: "\(fabrics.reduce(0.0) { $0 + $1.length }, specifier: "%.2f") 米")
-                    LabeledContent("剩余", value: "\(fabrics.reduce(0.0) { $0 + $1.remainingLength }, specifier: "%.2f") 米")
-                    LabeledContent("总价", value: "¥\(fabrics.reduce(0.0) { $0 + $1.purchasePrice }, specifier: "%.2f")")
+                    LabeledContent("总长", value: "\(String(format: "%.2f", fabrics.reduce(0.0) { $0 + $1.length })) 米")
+                    LabeledContent("剩余", value: "\(String(format: "%.2f", fabrics.reduce(0.0) { $0 + $1.remainingLength })) 米")
+                    LabeledContent("总价", value: "¥\(String(format: "%.2f", fabrics.reduce(0.0) { $0 + $1.purchasePrice }))")
                     LabeledContent("作品 / 纸样 / 物品", value: "\(works.count) / \(patterns.count) / \(items.count)")
                 }
                 Section("字典管理") {

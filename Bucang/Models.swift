@@ -113,7 +113,7 @@ final class UsageRecord {
     var length: Double
     var note: String
 
-    @Relationship(inverse: \Fabric.usageRecords) var fabric: Fabric?
+    @Relationship var fabric: Fabric?
 
     init(id: UUID = UUID(), date: Date = Date(), length: Double = 0, note: String = "", fabric: Fabric? = nil) {
         self.id = id
