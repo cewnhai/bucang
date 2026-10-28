@@ -29,6 +29,69 @@ enum Design {
     static let smallCorner: CGFloat = 12
 }
 
+// MARK: - 个性化主题（设置 > 个性化）
+// 主色跟随设置里的主题名；默认深蓝。统计卡、FAB、顶栏下划线、
+// 状态胶囊、卡片进度条等关键位置用主题色，其余次要按钮仍用默认深蓝，
+// 避免一次全量替换带来的回归风险（见报告）。
+enum ThemeHelper {
+    static let options = ["深蓝", "珊瑚", "绿色", "紫色", "橙色", "粉色"]
+    static func accent(_ themeName: String) -> Color {
+        switch themeName {
+        case "珊瑚": return Color(red: 0.95, green: 0.45, blue: 0.35)
+        case "绿色": return Color(red: 0.20, green: 0.65, blue: 0.35)
+        case "紫色": return Color(red: 0.55, green: 0.35, blue: 0.85)
+        case "橙色": return Color(red: 0.95, green: 0.55, blue: 0.15)
+        case "粉色": return Color(red: 0.90, green: 0.45, blue: 0.65)
+        default: return Color(red: 0.12, green: 0.44, blue: 0.88)
+        }
+    }
+    static func accentSoft(_ themeName: String) -> Color {
+        accent(themeName).opacity(0.15)
+    }
+}
+
+// 主题图：只用在统计卡背景（图片 + 深色遮罩，保证白字可读），
+// 不做全屏背景，避免可读性风险。文件固定为 Documents/bucang-theme/theme.jpg。
+enum ThemeImageStore {
+    static func fileURL() -> URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("bucang-theme").appendingPathComponent("theme.jpg")
+    }
+    static func exists() -> Bool {
+        guard let url = fileURL() else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+    static func load() -> UIImage? {
+        guard let url = fileURL(), let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+    @discardableResult
+    static func save(_ image: UIImage) -> Bool {
+        guard let url = fileURL() else { return false }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard let data = image.jpegData(compressionQuality: 0.85) else { return false }
+        do { try data.write(to: url, options: .atomic); return true } catch { return false }
+    }
+    static func clear() {
+        guard let url = fileURL() else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+}
+
+// 统计卡背景：有主题图时图片 + 深色遮罩，否则纯主题色。
+struct ThemeStatsBackground: View {
+    var themeName: String
+    var body: some View {
+        ZStack {
+            ThemeHelper.accent(themeName)
+            if let uiImage = ThemeImageStore.load() {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+                Color.black.opacity(0.45)
+            }
+        }
+    }
+}
+
 // 白色圆角卡片：首页、统计、我的页共用。
 struct CardView<Content: View>: View {
     var content: Content
@@ -47,6 +110,7 @@ struct CardView<Content: View>: View {
 struct ChipButton: View {
     var title: String
     var selected: Bool
+    var accent: Color = Design.accent
     var action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -56,7 +120,7 @@ struct ChipButton: View {
                 .foregroundColor(selected ? .white : .primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(selected ? Design.accent : Design.card)
+                .background(selected ? accent : Design.card)
                 .cornerRadius(20)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)
@@ -71,6 +135,7 @@ struct ChipButton: View {
 struct ProgressBarView: View {
     var fraction: Double
     var height: CGFloat = 8
+    var accent: Color = Design.accent
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
@@ -78,7 +143,7 @@ struct ProgressBarView: View {
                     .fill(Color.gray.opacity(0.15))
                     .frame(height: height)
                 RoundedRectangle(cornerRadius: height / 2)
-                    .fill(Design.accent)
+                    .fill(accent)
                     .frame(width: geo.size.width * max(0, min(1, fraction)), height: height)
             }
         }

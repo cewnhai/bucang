@@ -15,6 +15,14 @@ struct WorkEditView: View {
     @State private var hasFinishDate: Bool
     @State private var note: String
     @State private var imageNames: [String]
+    @State private var isSold: Bool
+    @State private var salePriceText: String
+    @State private var hasSalePrice: Bool
+    @State private var saleDate: Date
+    @State private var hasSaleDate: Bool
+    @State private var saleChannel: String
+    @State private var isUsed: Bool
+    @State private var usageCount: Int
     private let originalImageNames: [String]
 
     init(work: Work?) {
@@ -27,6 +35,14 @@ struct WorkEditView: View {
         _hasFinishDate = State(initialValue: work?.finishedAt != nil)
         _note = State(initialValue: work?.note ?? "")
         _imageNames = State(initialValue: work?.imageFileNames ?? [])
+        _isSold = State(initialValue: work?.isSold ?? false)
+        _salePriceText = State(initialValue: work == nil || !work!.hasSalePrice ? "" : String(work!.salePrice))
+        _hasSalePrice = State(initialValue: work?.hasSalePrice ?? false)
+        _saleDate = State(initialValue: work?.saleDate ?? Date())
+        _hasSaleDate = State(initialValue: work?.saleDate != nil)
+        _saleChannel = State(initialValue: work?.saleChannel ?? "")
+        _isUsed = State(initialValue: work?.isUsed ?? false)
+        _usageCount = State(initialValue: work?.usageCount ?? 0)
     }
 
     private func save() {
@@ -35,6 +51,13 @@ struct WorkEditView: View {
             existing.startedAt = hasStartDate ? startDate : nil
             existing.finishedAt = hasFinishDate ? finishDate : nil
             existing.note = note
+            existing.isSold = isSold
+            existing.salePrice = Double(salePriceText) ?? 0
+            existing.hasSalePrice = isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            existing.saleDate = (isSold && hasSaleDate) ? saleDate : nil
+            existing.saleChannel = saleChannel
+            existing.isUsed = isUsed
+            existing.usageCount = usageCount
             for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
             existing.imageFileNames = imageNames
             store.save()
@@ -43,7 +66,11 @@ struct WorkEditView: View {
                 name: name,
                 startedAt: hasStartDate ? startDate : nil,
                 finishedAt: hasFinishDate ? finishDate : nil,
-                note: note, imageFileNames: imageNames
+                note: note, imageFileNames: imageNames,
+                isSold: isSold, salePrice: Double(salePriceText) ?? 0,
+                hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                saleDate: (isSold && hasSaleDate) ? saleDate : nil,
+                saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount
             )
             store.addWork(newWork)
         }
@@ -59,6 +86,20 @@ struct WorkEditView: View {
                 Toggle("填写完成时间（填了即视为已完成）", isOn: $hasFinishDate)
                 if hasFinishDate { DatePicker("完成时间", selection: Binding(get: { finishDate ?? Date() }, set: { finishDate = $0 }), displayedComponents: .date) }
                 TextField("备注", text: $note, axis: .vertical)
+            }
+            Section("出售 / 使用") {
+                Toggle("是否出售", isOn: $isSold)
+                if isSold {
+                    TextField("出售价格（元，留空=未填）", text: $salePriceText).keyboardType(.decimalPad)
+                    Toggle("填写出售时间", isOn: $hasSaleDate)
+                    if hasSaleDate { DatePicker("出售时间", selection: $saleDate, displayedComponents: .date) }
+                    Picker("出售渠道", selection: $saleChannel) {
+                        Text("未填").tag("")
+                        ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
+                    }
+                }
+                Toggle("是否使用", isOn: $isUsed)
+                Stepper("使用次数：\(usageCount)", value: $usageCount, in: 0...9999)
             }
             Section("成品照片") {
                 FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})

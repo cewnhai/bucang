@@ -109,6 +109,18 @@ enum CSVValues {
     static func dateString(_ d: Date) -> String {
         dateFormatter.string(from: d)
     }
+    static func dateString(_ d: Date?) -> String {
+        guard let d else { return "" }
+        return dateFormatter.string(from: d)
+    }
+    // 购买日期可选：空串/无法解析 = nil，绝不默认今天。
+    static func dateOptional(_ s: String) -> Date? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return nil }
+        if let d = dateFormatter.date(from: t) { return d }
+        if let d = dateTimeFormatter.date(from: t) { return d }
+        return nil
+    }
 
     static func double(_ s: String) -> Double {
         Double(s.trimmingCharacters(in: .whitespaces)) ?? 0
@@ -303,7 +315,7 @@ enum CSVImporter {
                     existing.width = widthValue
                     existing.purchasePrice = CSVValues.double(row["purchasePrice"] ?? "")
                     existing.pricePerMeter = CSVValues.double(row["purchasePricePerMeter"] ?? "")
-                    existing.purchaseDate = CSVValues.date(row["purchaseDate"] ?? "")
+                    existing.purchaseDate = CSVValues.dateOptional(row["purchaseDate"] ?? "")
                     existing.usedLength = CSVValues.double(row["usedLength"] ?? "")
                     existing.isFavorite = CSVValues.bool(row["isFavorite"] ?? "")
                     existing.status = CSVValues.int(row["status"] ?? "")
@@ -329,7 +341,7 @@ enum CSVImporter {
                         width: widthValue,
                         purchasePrice: CSVValues.double(row["purchasePrice"] ?? ""),
                         pricePerMeter: CSVValues.double(row["purchasePricePerMeter"] ?? ""),
-                        purchaseDate: CSVValues.date(row["purchaseDate"] ?? ""),
+                        purchaseDate: CSVValues.dateOptional(row["purchaseDate"] ?? ""),
                         usedLength: CSVValues.double(row["usedLength"] ?? ""),
                         isFavorite: CSVValues.bool(row["isFavorite"] ?? ""),
                         status: CSVValues.int(row["status"] ?? ""),

@@ -38,7 +38,9 @@ struct ChartsView: View {
     private var monthlyPurchase: [String: Double] {
         var sums: [String: Double] = [:]
         for fabric in store.fabrics where fabric.hasPurchaseLength {
-            sums[monthKey(fabric.purchaseDate), default: 0] += fabric.length
+            // 购买日期未填的布料不进按月购入趋势（不默认今天）。
+            guard let date = fabric.purchaseDate else { continue }
+            sums[monthKey(date), default: 0] += fabric.length
         }
         return sums
     }

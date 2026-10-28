@@ -73,7 +73,7 @@ struct BucangView: View {
     @State private var statsExpanded = true
     @State private var hideAmounts: Bool = false
     @State private var searchText = ""
-    @State private var viewMode: FabricViewMode = .list
+    @State private var viewMode: FabricViewMode = .grid
     @State private var statusFilter: FabricStatusFilter = .all
     @State private var sortMethod: FabricSortMethod = .purchaseDate
     @State private var sortAscending = false
@@ -92,6 +92,16 @@ struct BucangView: View {
     @State private var usageFabric: Fabric?
     @State private var showingUsage = false
     @State private var showingWishlistAdd = false
+    @State private var showingTabSelection = false
+    @State private var saleFabric: Fabric?
+    @State private var showingSale = false
+    private var visibleTabs: [BucangTab] {
+        let keys = store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs
+        var list = BucangTab.allCases.filter { keys.contains($0.rawValue) }
+        if !list.contains(.fabric) { list.insert(.fabric, at: 0) }
+        return list
+    }
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var filteredFabrics: [Fabric] {
         var list = store.fabrics
@@ -113,18 +123,21 @@ struct BucangView: View {
                 let tagNames = store.tags(for: fabric).map { $0.name }.joined(separator: " ")
                 return fabric.name.localizedCaseInsensitiveContains(keyword)
                     || fabric.code.localizedCaseInsensitiveContains(keyword)
+                    || fabric.subCodes.joined(separator: " ").localizedCaseInsensitiveContains(keyword)
                     || fabric.materialName.localizedCaseInsensitiveContains(keyword)
                     || fabric.composition.localizedCaseInsensitiveContains(keyword)
                     || fabric.colorName.localizedCaseInsensitiveContains(keyword)
                     || tagNames.localizedCaseInsensitiveContains(keyword)
                     || fabric.channelName.localizedCaseInsensitiveContains(keyword)
+                    || fabric.merchantName.localizedCaseInsensitiveContains(keyword)
                     || fabric.usageNotes.localizedCaseInsensitiveContains(keyword)
+                    || fabric.brainstorm.localizedCaseInsensitiveContains(keyword)
                     || fabric.note.localizedCaseInsensitiveContains(keyword)
             }
         }
         let sorted: [Fabric]
         switch sortMethod {
-        case .purchaseDate: sorted = list.sorted { $0.purchaseDate > $1.purchaseDate }
+        case .purchaseDate: sorted = list.sorted { ($0.purchaseDate ?? Date.distantPast) > ($1.purchaseDate ?? Date.distantPast) }
         case .saleDate: sorted = list.sorted { (store.lastSaleDate(for: $0.id) ?? Date.distantPast) > (store.lastSaleDate(for: $1.id) ?? Date.distantPast) }
         case .price: sorted = list.sorted { $0.purchasePrice > $1.purchasePrice }
         case .length: sorted = list.sorted { $0.length > $1.length }
@@ -140,9 +153,9 @@ struct BucangView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 顶栏
+                // 顶栏（只显示设置里开启的 Tab，布料始终显示）
                 HStack(spacing: 0) {
-                    ForEach(BucangTab.allCases) { t in
+                    ForEach(visibleTabs) { t in
                         Button(action: { tab = t }) {
                             VStack(spacing: 4) {
                                 HStack(spacing: 2) {
@@ -159,13 +172,16 @@ struct BucangView: View {
                                     }
                                 }
                                 Rectangle()
-                                    .fill(tab == t ? Design.accent : Color.clear)
+                                    .fill(tab == t ? themeAccent : Color.clear)
                                     .frame(height: 2)
                             }
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
                     }
+                    Button(action: { showingTabSelection = true }) {
+                        Image(systemName: "ellipsis").foregroundColor(.secondary).padding(.horizontal, 4)
+                    }.buttonStyle(.plain)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -178,7 +194,7 @@ struct BucangView: View {
                             Button(action: { showOutbound.toggle() }) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "arrow.left.arrow.right")
-                                    Text(showOutbound ? "切到入库" : "切到出库")
+                                    Text(showOutbound ? "入库" : "出库")
                                 }
                                 .font(.caption).fontWeight(.semibold)
                                 .foregroundColor(.white)
@@ -203,12 +219,18 @@ struct BucangView: View {
                         }
                         if statsExpanded {
                             if showOutbound {
-                                HStack(spacing: 0) {
-                                    statColumn(label: "售出块数", value: "\(store.soldPieceCount)")
-                                    Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                                    statColumn(label: "售出米数", value: "\(LengthUnitHelper.format(store.totalSoldMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                                    Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                                    statColumn(label: "售出回款", value: hideAmounts ? "****" : "¥\(String(format: "%.2f", store.soldRevenue))")
+                                VStack(spacing: 6) {
+                                    HStack(spacing: 0) {
+                                        statColumn(label: "售出块数", value: "\(store.soldPieceCount)")
+                                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                                        statColumn(label: "售出米数", value: "\(LengthUnitHelper.format(store.totalSoldMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                                        statColumn(label: "售出回款", value: hideAmounts ? "****" : "¥\(String(format: "%.2f", store.soldRevenue))")
+                                    }
+                                    if store.soldPiecesTotal() > 0 {
+                                        Text("另有份数出售 \(store.soldPiecesTotal()) 份（不计入售出米数，不扣剩余长度）")
+                                            .font(.caption).foregroundColor(.white.opacity(0.85))
+                                    }
                                 }
                             } else {
                                 HStack(spacing: 0) {
@@ -235,7 +257,7 @@ struct BucangView: View {
                         }
                     }
                     .padding(14)
-                    .background(Design.accent)
+                    .background(ThemeStatsBackground(themeName: store.themeName))
                     .cornerRadius(Design.corner)
                     .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
                     .padding(.horizontal, 16)
@@ -281,7 +303,7 @@ struct BucangView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(FabricStatusFilter.allCases) { status in
-                                ChipButton(title: status.title, selected: statusFilter == status) {
+                                ChipButton(title: status.title, selected: statusFilter == status, accent: themeAccent) {
                                     statusFilter = status
                                 }
                             }
@@ -369,6 +391,42 @@ struct BucangView: View {
             }
             .sheet(isPresented: $showingImportExport) { NavigationStack { ImportExportSheetView() } }
             .sheet(isPresented: $showingSimilar) { NavigationStack { SimilarSearchView() } }
+            .sheet(isPresented: $showingTabSelection) {
+                NavigationStack {
+                    Form {
+                        Section("顶栏显示（布料始终显示，不可关闭）") {
+                            ForEach(BucangTab.allCases) { t in
+                                if t == .fabric {
+                                    HStack { Text(t.title); Spacer(); Text("始终显示").font(.caption).foregroundColor(.secondary) }
+                                } else {
+                                    Toggle(t.title, isOn: Binding(
+                                        get: { (store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs).contains(t.rawValue) },
+                                        set: { on in
+                                            var keys = store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs
+                                            if on { if !keys.contains(t.rawValue) { keys.append(t.rawValue) } }
+                                            else { keys.removeAll { $0 == t.rawValue } }
+                                            if !keys.contains("fabric") { keys.insert("fabric", at: 0) }
+                                            store.visibleTabs = Store.allTabKeys.filter { keys.contains($0) }
+                                            if !store.visibleTabs.contains(tab.rawValue) { tab = .fabric }
+                                            store.save()
+                                        }
+                                    ))
+                                }
+                            }
+                        }
+                    }
+                    .navigationTitle("顶栏")
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { showingTabSelection = false } } }
+                }
+            }
+            .sheet(isPresented: $showingSale) {
+                if let saleFabric {
+                    NavigationStack { SaleFormView(fabric: saleFabric) }
+                }
+            }
+            .onChange(of: store.visibleTabs) { keys in
+                if !keys.isEmpty && !keys.contains(tab.rawValue) { tab = .fabric }
+            }
             .sheet(isPresented: $showingAddFabric) { NavigationStack { FabricEditView(fabric: nil) } }
             .sheet(isPresented: $showingWishlistPicker) { NavigationStack { WishlistPickerView(onPick: convertWishlist) } }
             .sheet(isPresented: $showingConvertedEdit) {
@@ -390,7 +448,7 @@ struct BucangView: View {
                 // 长按 = 从心愿单转入库，点按 = 新增布料；不用 Button 包手势，
                 // 避免 Button 的点击抢走长按手势。
                 Circle()
-                    .fill(Design.accent)
+                    .fill(themeAccent)
                     .frame(width: 56, height: 56)
                     .overlay(Image(systemName: "plus").foregroundColor(.white).font(.title2))
                     .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
@@ -469,6 +527,8 @@ struct BucangView: View {
                                 NavigationLink(destination: FabricDetailView(fabric: fabric)) {
                                     FabricCardView(fabric: fabric, onAddUsage: {
                                         usageFabric = fabric; showingUsage = true
+                                    }, onAddSale: {
+                                        saleFabric = fabric; showingSale = true
                                     })
                                 }
                                 .buttonStyle(.plain)
@@ -485,6 +545,8 @@ struct BucangView: View {
                                 NavigationLink(destination: FabricDetailView(fabric: fabric)) {
                                     FabricCardView(fabric: fabric, onAddUsage: {
                                         usageFabric = fabric; showingUsage = true
+                                    }, onAddSale: {
+                                        saleFabric = fabric; showingSale = true
                                     }, compact: true)
                                 }
                                 .buttonStyle(.plain)
@@ -501,6 +563,8 @@ struct BucangView: View {
                                 NavigationLink(destination: FabricDetailView(fabric: fabric)) {
                                     FabricCardView(fabric: fabric, onAddUsage: {
                                         usageFabric = fabric; showingUsage = true
+                                    }, onAddSale: {
+                                        saleFabric = fabric; showingSale = true
                                     })
                                     .frame(width: 280)
                                 }
@@ -525,7 +589,11 @@ struct FilterPanelView: View {
     @Binding var filterChannels: Set<String>
 
     private var channels: [String] {
-        Array(Set(store.fabrics.map { $0.channelName }.filter { !$0.isEmpty })).sorted()
+        // 设置渠道选项 + 数据里已有但不在选项里的渠道名（旧数据仍可筛选）。
+        let fromOptions = store.channelOptions
+        let fromData = store.fabrics.map { $0.channelName }.filter { !$0.isEmpty }
+        let fromSales = store.saleRecords.map { $0.channel }.filter { !$0.isEmpty }
+        return Array(Set(fromOptions + fromData + fromSales)).sorted()
     }
 
     var body: some View {

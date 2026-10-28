@@ -304,19 +304,29 @@ enum ZipBackup {
             works: store.works, patterns: store.patterns, items: store.items,
             saleRecords: store.saleRecords, otherItems: store.otherItems, wishlistItems: store.wishlistItems,
             materialOptions: store.materialOptions, otherCategories: store.otherCategories,
-            lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix
+            lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix,
+            channelOptions: store.channelOptions, patternOptions: store.patternOptions,
+            visibleTabs: store.visibleTabs, themeName: store.themeName
         )
         if let json = try? JSONEncoder().encode(storeData) {
             files.append((path: "\(rootFolder)/bucang-store.json", data: json))
         }
-        // 图片：按布料去重文件名，只导本地确实存在的文件。
+        // 图片：按布料 + 出售记录去重文件名，只导本地确实存在的文件。
         var seen: Set<String> = []
-        for fabric in store.fabrics {
-            for name in fabric.imageFileNames {
-                if seen.contains(name) { continue }
-                seen.insert(name)
-                if let data = FabricImageStore.data(for: name) {
-                    files.append((path: "\(rootFolder)/images/\(name)", data: data))
+        for name in store.fabrics.flatMap({ $0.imageFileNames }) + store.saleRecords.flatMap({ $0.imageFileNames }) {
+            if seen.contains(name) { continue }
+            seen.insert(name)
+            if let data = FabricImageStore.data(for: name) {
+                files.append((path: "\(rootFolder)/images/\(name)", data: data))
+            }
+        }
+        // 视频：布料视频同样进包，放在 videos/，恢复时按 basename 写回 bucang-videos/。
+        if let videoDir = FabricVideoStore.directoryURL() {
+            for fabric in store.fabrics {
+                for name in fabric.videoFileNames {
+                    if let data = try? Data(contentsOf: videoDir.appendingPathComponent(name)) {
+                        files.append((path: "\(rootFolder)/videos/\(name)", data: data))
+                    }
                 }
             }
         }
@@ -353,7 +363,7 @@ enum ZipBackup {
             summary.restoredItems = decoded.items.count
             // 图片：全部 images/ 条目都复制回本地（按 basename 覆盖同名），
             // 再报告其中未被任何布料引用的（已复制，但可能是旧图）。
-            let referenced = Set(decoded.fabrics.flatMap { $0.imageFileNames })
+            let referenced = Set(decoded.fabrics.flatMap { $0.imageFileNames } + decoded.saleRecords.flatMap { $0.imageFileNames })
             for entry in read.entries where isImageEntry(entry.path) {
                 let name = basename(entry.path)
                 if FabricImageStore.saveData(entry.data, named: name) {
@@ -361,6 +371,14 @@ enum ZipBackup {
                     if !referenced.contains(name) {
                         summary.orphanedImages.append(name)
                     }
+                }
+            }
+            // 视频：videos/ 条目写回 bucang-videos/（JSON 里 videoFileNames 已恢复，文件名对应上即可播放）。
+            if let videoDir = FabricVideoStore.directoryURL() {
+                try? FileManager.default.createDirectory(at: videoDir, withIntermediateDirectories: true)
+                for entry in read.entries where entry.path.lowercased().contains("/videos/") {
+                    let name = basename(entry.path)
+                    try? entry.data.write(to: videoDir.appendingPathComponent(name), options: .atomic)
                 }
             }
             return summary

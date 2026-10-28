@@ -7,9 +7,23 @@ struct WorksListView: View {
     @State private var showingAdd = false
     @State private var editingWork: Work?
     @State private var addingMaterialWork: Work?
+    @State private var showSold = false
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var making: [Work] { store.works.filter { !$0.isFinished }.sorted { $0.createdAt > $1.createdAt } }
     private var finished: [Work] { store.works.filter { $0.isFinished }.sorted { $0.createdAt > $1.createdAt } }
+    private var soldWorks: [Work] { store.works.filter { $0.isSold } }
+    private var usedWorks: [Work] { store.works.filter { $0.isUsed } }
+    private var totalCost: Double { store.works.reduce(0) { $0 + store.workCost(for: $1).total } }
+    private var totalSoldAmount: Double { soldWorks.reduce(0) { $0 + ($1.hasSalePrice ? $1.salePrice : 0) } }
+
+    private func workStatColumn(label: String, value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(label).font(.caption).foregroundColor(.white.opacity(0.85))
+            Text(value).font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+    }
 
     private func workRow(_ work: Work) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -27,6 +41,13 @@ struct WorksListView: View {
             let cost = store.workCost(for: work)
             Text("用料成本合计：¥\(String(format: "%.2f", cost.total))\(cost.hasMissingPrice ? "（部分布料无单价，未计入）" : "")")
                 .font(.caption).foregroundColor(.secondary)
+            if work.isUsed {
+                Text("已使用 \(work.usageCount) 次").font(.caption).foregroundColor(.secondary)
+            }
+            if work.isSold {
+                Text("已售出\(work.hasSalePrice ? " ¥\(String(format: "%.2f", work.salePrice))" : "")\(work.saleDate.map { " · \(CSVValues.dateString($0))" } ?? "")")
+                    .font(.caption).foregroundColor(.secondary)
+            }
             Button("加用料") { addingMaterialWork = work }
                 .font(.caption)
         }
@@ -39,12 +60,51 @@ struct WorksListView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // 成品统计栏（粘性在滚动区顶部，类比布料统计卡但更简单）。
+                VStack(spacing: 8) {
+                    HStack {
+                        Button(action: { showSold.toggle() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.left.arrow.right")
+                                Text(showSold ? "成品" : "售出")
+                            }
+                            .font(.caption).fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(Color.white.opacity(0.2))
+                            .cornerRadius(14)
+                        }.buttonStyle(.plain)
+                        Spacer()
+                        Text("\(store.works.count) 件成品").font(.headline).fontWeight(.bold).foregroundColor(.white)
+                        Spacer()
+                        Spacer().frame(width: 44)
+                    }
+                    if showSold {
+                        HStack(spacing: 0) {
+                            workStatColumn(label: "已售出数", value: "\(soldWorks.count)")
+                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                            workStatColumn(label: "总金额", value: "¥\(String(format: "%.2f", totalSoldAmount))")
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            workStatColumn(label: "成品数", value: "\(store.works.count)")
+                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                            workStatColumn(label: "已使用数", value: "已使用 \(usedWorks.count) 件，共 \(usedWorks.reduce(0) { $0 + $1.usageCount }) 次")
+                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                            workStatColumn(label: "成本金额", value: "¥\(String(format: "%.2f", totalCost))")
+                        }
+                    }
+                }
+                .padding(14)
+                .background(ThemeStatsBackground(themeName: store.themeName))
+                .cornerRadius(Design.corner)
+                .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
                 HStack {
                     Spacer()
                     Button(action: { showingAdd = true }) {
                         Label("新建成品", systemImage: "plus")
                     }
-                    .buttonStyle(.borderedProminent).tint(Design.accent)
+                    .buttonStyle(.borderedProminent).tint(themeAccent)
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeaderView(title: "制作中")

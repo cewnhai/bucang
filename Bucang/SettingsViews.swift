@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import UniformTypeIdentifiers
 
 enum DictKind: String, CaseIterable, Identifiable {
@@ -82,9 +83,15 @@ struct SettingsView: View {
     @State private var localZips: [LocalZipFile] = []
     @State private var newMaterial = ""
     @State private var newCategory = ""
+    @State private var newChannel = ""
+    @State private var newPattern = ""
     @State private var renamingMaterial: String?
     @State private var renamingCategory: String?
+    @State private var renamingChannel: String?
+    @State private var renamingPattern: String?
     @State private var renameText = ""
+    @State private var themePickerItems: [PhotosPickerItem] = []
+    @State private var themeImageStamp = Date()
 
     private func refreshLocalZips() { localZips = LocalZipHelper.list() }
     private func importLocalZip(_ file: LocalZipFile) {
@@ -141,6 +148,134 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
                             Text("编号唯一且重复时禁止保存，保存时会提示与哪条档案冲突。")
                                 .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "编号体系", subtitle: "多级生成：颜色体系（第一级）+ 纹样（第二级）+ 该组合下序号（第三级）+ 自定义备注（后续级）")
+                            Text("第一级颜色：生成编号时每次选一个颜色作符号，色板与布料颜色字段相同；布料已填颜色时生成表会预选它。格式：[前缀-]颜色-纹样-001[-备注]，如 B-红-提花-001。")
+                                .font(.caption).foregroundColor(.secondary)
+                            SectionHeaderView(title: "纹样选项", subtitle: "第二级纹样，可增删改名")
+                            HStack {
+                                TextField("新增纹样", text: $newPattern)
+                                    .textFieldStyle(.roundedBorder)
+                                Button("添加") {
+                                    let name = newPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !name.isEmpty, !store.patternOptions.contains(name) else { return }
+                                    store.patternOptions.append(name); store.save(); newPattern = ""
+                                }
+                                .buttonStyle(.borderedProminent).tint(Design.accent)
+                            }
+                            ForEach(store.patternOptions, id: \.self) { option in
+                                HStack {
+                                    Text(option)
+                                    Spacer()
+                                    Button("改名") { renamingPattern = option; renameText = option }
+                                        .font(.caption)
+                                    Button("删除", role: .destructive) {
+                                        store.patternOptions.removeAll { $0 == option }; store.save()
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "渠道", subtitle: "布料渠道与出售渠道的选项；商家是渠道下二级自定义文本，在布料/出售表单里填")
+                            HStack {
+                                TextField("新增渠道", text: $newChannel)
+                                    .textFieldStyle(.roundedBorder)
+                                Button("添加") {
+                                    let name = newChannel.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !name.isEmpty, !store.channelOptions.contains(name) else { return }
+                                    store.channelOptions.append(name); store.save(); newChannel = ""
+                                }
+                                .buttonStyle(.borderedProminent).tint(Design.accent)
+                            }
+                            ForEach(store.channelOptions, id: \.self) { option in
+                                HStack {
+                                    Text(option)
+                                    Spacer()
+                                    Button("改名") { renamingChannel = option; renameText = option }
+                                        .font(.caption)
+                                    Button("删除", role: .destructive) {
+                                        store.channelOptions.removeAll { $0 == option }; store.save()
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                            Text("筛选面板的渠道组读这里，外加数据里已有但不在选项里的渠道名，旧数据仍可筛选。")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "顶栏显示", subtitle: "布仓顶部一级 Tab 的可见性，布料始终显示、不可关闭")
+                            ForEach([("fabric", "布料"), ("work", "成品"), ("other", "其他"), ("wishlist", "心愿单")], id: \.0) { key, title in
+                                if key == "fabric" {
+                                    HStack { Text(title); Spacer(); Text("始终显示").font(.caption).foregroundColor(.secondary) }
+                                } else {
+                                    Toggle(title, isOn: Binding(
+                                        get: { (store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs).contains(key) },
+                                        set: { on in
+                                            var keys = store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs
+                                            if on { if !keys.contains(key) { keys.append(key) } }
+                                            else { keys.removeAll { $0 == key } }
+                                            if !keys.contains("fabric") { keys.insert("fabric", at: 0) }
+                                            store.visibleTabs = Store.allTabKeys.filter { keys.contains($0) }
+                                            store.save()
+                                        }
+                                    ))
+                                }
+                            }
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "个性化", subtitle: "主题色系跟随统计卡、悬浮按钮、顶栏、状态胶囊；主题图只用在统计卡背景，不做全屏背景")
+                            Picker("主题色系", selection: Binding(
+                                get: { store.themeName },
+                                set: { store.themeName = $0; store.save() }
+                            )) {
+                                ForEach(ThemeHelper.options, id: \.self) { Text($0).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            HStack {
+                                Text(ThemeImageStore.exists() ? "已设置主题图（统计卡背景用图 + 深色遮罩）" : "未设置主题图（统计卡用纯主题色）")
+                                    .font(.caption).foregroundColor(.secondary)
+                                Spacer()
+                                PhotosPicker(selection: $themePickerItems, maxSelectionCount: 1, matching: .images) {
+                                    Text("选图作统计卡背景")
+                                }
+                                .buttonStyle(.bordered).tint(Design.accent)
+                                if ThemeImageStore.exists() {
+                                    Button("清除主题图", role: .destructive) {
+                                        ThemeImageStore.clear()
+                                        store.themeName = store.themeName
+                                        themeImageStamp = Date()
+                                    }
+                                }
+                            }
+                            .onChange(of: themePickerItems) { items in
+                                guard let item = items.first else { return }
+                                themePickerItems = []
+                                Task {
+                                    if let data = try? await item.loadTransferable(type: Data.self),
+                                       let uiImage = UIImage(data: data),
+                                       ThemeImageStore.save(uiImage) {
+                                        store.themeName = store.themeName
+                                        themeImageStamp = Date()
+                                    }
+                                }
+                            }
+                            Text("暗黑模式下主题色卡片仍是白字，其余背景自适应。").font(.caption).foregroundColor(.secondary)
                         }
                     }
 
@@ -351,11 +486,11 @@ struct SettingsView: View {
                 Button("取消", role: .cancel) {}
             } message: { Text("此操作会删除本 App 里的全部布料、成品、其他、心愿单、使用与出售记录，无法恢复。先导出备份再清。") }
             .alert("改名", isPresented: Binding(
-                get: { renamingMaterial != nil || renamingCategory != nil },
-                set: { if !$0 { renamingMaterial = nil; renamingCategory = nil } }
+                get: { renamingMaterial != nil || renamingCategory != nil || renamingChannel != nil || renamingPattern != nil },
+                set: { if !$0 { renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil; renamingPattern = nil } }
             )) {
                 TextField("新名称", text: $renameText)
-                Button("取消", role: .cancel) { renamingMaterial = nil; renamingCategory = nil }
+                Button("取消", role: .cancel) { renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil; renamingPattern = nil }
                 Button("确定") {
                     let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !newName.isEmpty {
@@ -367,9 +502,17 @@ struct SettingsView: View {
                             store.otherCategories[idx] = newName
                             for item in store.otherItems where item.category == old { item.category = newName }
                         }
+                        if let old = renamingChannel, let idx = store.channelOptions.firstIndex(of: old) {
+                            store.channelOptions[idx] = newName
+                            for fabric in store.fabrics where fabric.channelName == old { fabric.channelName = newName }
+                            for record in store.saleRecords where record.channel == old { record.channel = newName }
+                        }
+                        if let old = renamingPattern, let idx = store.patternOptions.firstIndex(of: old) {
+                            store.patternOptions[idx] = newName
+                        }
                         store.save()
                     }
-                    renamingMaterial = nil; renamingCategory = nil
+                    renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil; renamingPattern = nil
                 }
             } message: { Text("改名会同步改已用该选项的记录。") }
         }

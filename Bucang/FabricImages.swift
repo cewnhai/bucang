@@ -1,6 +1,91 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import AVKit
+
+// MARK: - 布料视频存储（Documents/bucang-videos/<UUID>.mov）
+// 与图片存储同 pattern：JSON 里只存文件名，字节存文件；删布料/删视频时删文件。
+enum FabricVideoStore {
+    static let directoryName = "bucang-videos"
+    static func directoryURL() -> URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent(directoryName)
+    }
+    static func fileURL(for name: String) -> URL? {
+        directoryURL()?.appendingPathComponent(name)
+    }
+    @discardableResult
+    static func saveData(_ data: Data) -> String? {
+        guard let dir = directoryURL() else { return nil }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let name = UUID().uuidString + ".mov"
+        do { try data.write(to: dir.appendingPathComponent(name), options: .atomic); return name } catch { return nil }
+    }
+    static func delete(named name: String) {
+        guard let url = fileURL(for: name) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+}
+
+// 视频列表编辑器：从相册选视频（PhotosPicker .videos），点行播放（VideoPlayer）。
+struct FabricVideoEditor: View {
+    @Binding var videoNames: [String]
+    var deleteFilesImmediately: Bool
+    var onNamesChanged: () -> Void
+    @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var playingURL: URL?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if videoNames.isEmpty {
+                Text("还没有视频").font(.caption).foregroundColor(.secondary)
+            } else {
+                ForEach(videoNames, id: \.self) { name in
+                    HStack {
+                        Image(systemName: "video.fill").foregroundColor(Design.accent)
+                        Text(name).font(.caption).lineLimit(1)
+                        Spacer()
+                        Button("播放") {
+                            if let url = FabricVideoStore.fileURL(for: name) { playingURL = url }
+                        }.font(.caption)
+                        Button(action: {
+                            videoNames.removeAll { $0 == name }
+                            if deleteFilesImmediately { FabricVideoStore.delete(named: name) }
+                            onNamesChanged()
+                        }) {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+            PhotosPicker(selection: $selectedItems, matching: .videos, photoLibrary: .shared()) {
+                Label("从相册选视频", systemImage: "video")
+            }
+            .buttonStyle(.bordered).tint(Design.accent)
+            Text("视频存在本机 bucang-videos/，不进 JSON，只存文件名。").font(.caption).foregroundColor(.secondary)
+        }
+        .onChange(of: selectedItems) { items in
+            guard !items.isEmpty else { return }
+            let toLoad = items; selectedItems = []
+            Task {
+                for item in toLoad {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let name = FabricVideoStore.saveData(data) {
+                        videoNames.append(name); onNamesChanged()
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { playingURL != nil },
+            set: { if !$0 { playingURL = nil } }
+        )) {
+            if let url = playingURL {
+                VideoPlayer(player: AVPlayer(url: url))
+                    .ignoresSafeArea()
+            }
+        }
+    }
+}
 
 // MARK: - 布料图片存储
 // 图片字节不进 bucang-store.json，只存文件名在 Fabric.imageFileNames 里。

@@ -121,7 +121,7 @@ final class Fabric: Identifiable, Codable {
     var width: Double
     var purchasePrice: Double
     var pricePerMeter: Double
-    var purchaseDate: Date
+    var purchaseDate: Date?
     var usedLength: Double
     var isFavorite: Bool
     var status: Int
@@ -142,6 +142,10 @@ final class Fabric: Identifiable, Codable {
     var washing: [String]
     var usageNotes: String
     var channelName: String
+    var merchantName: String
+    var brainstorm: String
+    var subCodes: [String]
+    var videoFileNames: [String]
     var hasTotalPrice: Bool
     var hasPurchaseLength: Bool
 
@@ -162,7 +166,7 @@ final class Fabric: Identifiable, Codable {
 
     init(
         id: UUID = UUID(), name: String = "", length: Double = 0, width: Double = 0,
-        purchasePrice: Double = 0, pricePerMeter: Double = 0, purchaseDate: Date = Date(),
+        purchasePrice: Double = 0, pricePerMeter: Double = 0, purchaseDate: Date? = nil,
         usedLength: Double = 0, isFavorite: Bool = false, status: Int = 0, note: String = "",
         createdAt: Date = Date(), updatedAt: Date = Date(),
         materialId: UUID? = nil, channelId: UUID? = nil, tagIds: [UUID] = [],
@@ -170,6 +174,8 @@ final class Fabric: Identifiable, Codable {
         code: String = "", materialName: String = "", composition: String = "",
         colorName: String = "", weightGsm: Double? = nil, shrinkagePct: Double? = nil,
         washing: [String] = [], usageNotes: String = "", channelName: String = "",
+        merchantName: String = "", brainstorm: String = "", subCodes: [String] = [],
+        videoFileNames: [String] = [],
         hasTotalPrice: Bool = true, hasPurchaseLength: Bool = true
     ) {
         self.id = id; self.name = name; self.length = length; self.width = width
@@ -181,7 +187,9 @@ final class Fabric: Identifiable, Codable {
         self.imageFileNames = imageFileNames; self.code = code; self.materialName = materialName
         self.composition = composition; self.colorName = colorName; self.weightGsm = weightGsm
         self.shrinkagePct = shrinkagePct; self.washing = washing; self.usageNotes = usageNotes
-        self.channelName = channelName; self.hasTotalPrice = hasTotalPrice
+        self.channelName = channelName; self.merchantName = merchantName
+        self.brainstorm = brainstorm; self.subCodes = subCodes
+        self.videoFileNames = videoFileNames; self.hasTotalPrice = hasTotalPrice
         self.hasPurchaseLength = hasPurchaseLength
     }
 
@@ -190,7 +198,8 @@ final class Fabric: Identifiable, Codable {
         case usedLength, isFavorite, status, note, createdAt, updatedAt
         case materialId, channelId, tagIds, imageFileNames
         case code, materialName, composition, colorName, weightGsm, shrinkagePct
-        case washing, usageNotes, channelName, hasTotalPrice, hasPurchaseLength
+        case washing, usageNotes, channelName, merchantName, brainstorm, subCodes, videoFileNames
+        case hasTotalPrice, hasPurchaseLength
     }
 
     required init(from decoder: Decoder) throws {
@@ -201,7 +210,7 @@ final class Fabric: Identifiable, Codable {
         width = try c.decodeIfPresent(Double.self, forKey: .width) ?? 0
         purchasePrice = try c.decodeIfPresent(Double.self, forKey: .purchasePrice) ?? 0
         pricePerMeter = try c.decodeIfPresent(Double.self, forKey: .pricePerMeter) ?? 0
-        purchaseDate = try c.decodeIfPresent(Date.self, forKey: .purchaseDate) ?? Date()
+        purchaseDate = try c.decodeIfPresent(Date.self, forKey: .purchaseDate)
         usedLength = try c.decodeIfPresent(Double.self, forKey: .usedLength) ?? 0
         isFavorite = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         status = try c.decodeIfPresent(Int.self, forKey: .status) ?? 0
@@ -221,6 +230,10 @@ final class Fabric: Identifiable, Codable {
         washing = try c.decodeIfPresent([String].self, forKey: .washing) ?? []
         usageNotes = try c.decodeIfPresent(String.self, forKey: .usageNotes) ?? ""
         channelName = try c.decodeIfPresent(String.self, forKey: .channelName) ?? ""
+        merchantName = try c.decodeIfPresent(String.self, forKey: .merchantName) ?? ""
+        brainstorm = try c.decodeIfPresent(String.self, forKey: .brainstorm) ?? ""
+        subCodes = try c.decodeIfPresent([String].self, forKey: .subCodes) ?? []
+        videoFileNames = try c.decodeIfPresent([String].self, forKey: .videoFileNames) ?? []
         // 旧数据没有这两个标志时按旧值推断：有价格/有长度即视为已填，0 视为未填。
         hasTotalPrice = try c.decodeIfPresent(Bool.self, forKey: .hasTotalPrice) ?? (purchasePrice > 0)
         hasPurchaseLength = try c.decodeIfPresent(Bool.self, forKey: .hasPurchaseLength) ?? (length > 0)
@@ -234,7 +247,7 @@ final class Fabric: Identifiable, Codable {
         try c.encode(width, forKey: .width)
         try c.encode(purchasePrice, forKey: .purchasePrice)
         try c.encode(pricePerMeter, forKey: .pricePerMeter)
-        try c.encode(purchaseDate, forKey: .purchaseDate)
+        try c.encodeIfPresent(purchaseDate, forKey: .purchaseDate)
         try c.encode(usedLength, forKey: .usedLength)
         try c.encode(isFavorite, forKey: .isFavorite)
         try c.encode(status, forKey: .status)
@@ -254,6 +267,10 @@ final class Fabric: Identifiable, Codable {
         try c.encode(washing, forKey: .washing)
         try c.encode(usageNotes, forKey: .usageNotes)
         try c.encode(channelName, forKey: .channelName)
+        try c.encode(merchantName, forKey: .merchantName)
+        try c.encode(brainstorm, forKey: .brainstorm)
+        try c.encode(subCodes, forKey: .subCodes)
+        try c.encode(videoFileNames, forKey: .videoFileNames)
         try c.encode(hasTotalPrice, forKey: .hasTotalPrice)
         try c.encode(hasPurchaseLength, forKey: .hasPurchaseLength)
     }
@@ -296,26 +313,39 @@ final class SaleRecord: Identifiable, Codable {
     var fabricId: UUID
     var length: Double
     var channel: String
+    var merchant: String
     var price: Double
     var date: Date
-    init(id: UUID = UUID(), fabricId: UUID, length: Double = 0, channel: String = "", price: Double = 0, date: Date = Date()) {
-        self.id = id; self.fabricId = fabricId; self.length = length; self.channel = channel; self.price = price; self.date = date
+    var note: String
+    var imageFileNames: [String]
+    var isPieces: Bool
+    var pieces: Int
+    init(id: UUID = UUID(), fabricId: UUID, length: Double = 0, channel: String = "", merchant: String = "", price: Double = 0, date: Date = Date(), note: String = "", imageFileNames: [String] = [], isPieces: Bool = false, pieces: Int = 0) {
+        self.id = id; self.fabricId = fabricId; self.length = length; self.channel = channel; self.merchant = merchant; self.price = price; self.date = date; self.note = note; self.imageFileNames = imageFileNames; self.isPieces = isPieces; self.pieces = pieces
     }
-    private enum CodingKeys: String, CodingKey { case id, fabricId, length, channel, price, date }
+    private enum CodingKeys: String, CodingKey { case id, fabricId, length, channel, merchant, price, date, note, imageFileNames, isPieces, pieces }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         fabricId = try c.decodeIfPresent(UUID.self, forKey: .fabricId) ?? UUID()
         length = try c.decodeIfPresent(Double.self, forKey: .length) ?? 0
         channel = try c.decodeIfPresent(String.self, forKey: .channel) ?? ""
+        merchant = try c.decodeIfPresent(String.self, forKey: .merchant) ?? ""
         price = try c.decodeIfPresent(Double.self, forKey: .price) ?? 0
         date = try c.decodeIfPresent(Date.self, forKey: .date) ?? Date()
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        imageFileNames = try c.decodeIfPresent([String].self, forKey: .imageFileNames) ?? []
+        isPieces = try c.decodeIfPresent(Bool.self, forKey: .isPieces) ?? false
+        pieces = try c.decodeIfPresent(Int.self, forKey: .pieces) ?? 0
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id); try c.encode(fabricId, forKey: .fabricId)
         try c.encode(length, forKey: .length); try c.encode(channel, forKey: .channel)
+        try c.encode(merchant, forKey: .merchant)
         try c.encode(price, forKey: .price); try c.encode(date, forKey: .date)
+        try c.encode(note, forKey: .note); try c.encode(imageFileNames, forKey: .imageFileNames)
+        try c.encode(isPieces, forKey: .isPieces); try c.encode(pieces, forKey: .pieces)
     }
 }
 
@@ -345,22 +375,34 @@ final class Work: Identifiable, Codable {
     var createdAt: Date
     var imageFileNames: [String]
     var materials: [WorkMaterial]
+    var isSold: Bool
+    var salePrice: Double
+    var hasSalePrice: Bool
+    var saleDate: Date?
+    var saleChannel: String
+    var isUsed: Bool
+    var usageCount: Int
     var isFinished: Bool { finishedAt != nil }
     init(
         id: UUID = UUID(), name: String = "", progress: Double = 0,
         startedAt: Date? = nil, finishedAt: Date? = nil,
         costPrice: Double = 0, sellPrice: Double = 0, timeHours: Double = 0,
         note: String = "", createdAt: Date = Date(),
-        imageFileNames: [String] = [], materials: [WorkMaterial] = []
+        imageFileNames: [String] = [], materials: [WorkMaterial] = [],
+        isSold: Bool = false, salePrice: Double = 0, hasSalePrice: Bool = false,
+        saleDate: Date? = nil, saleChannel: String = "", isUsed: Bool = false, usageCount: Int = 0
     ) {
         self.id = id; self.name = name; self.progress = progress
         self.startedAt = startedAt; self.finishedAt = finishedAt
         self.costPrice = costPrice; self.sellPrice = sellPrice; self.timeHours = timeHours
         self.note = note; self.createdAt = createdAt
         self.imageFileNames = imageFileNames; self.materials = materials
+        self.isSold = isSold; self.salePrice = salePrice; self.hasSalePrice = hasSalePrice
+        self.saleDate = saleDate; self.saleChannel = saleChannel; self.isUsed = isUsed; self.usageCount = usageCount
     }
     private enum CodingKeys: String, CodingKey {
         case id, name, progress, startedAt, finishedAt, costPrice, sellPrice, timeHours, note, createdAt, imageFileNames, materials
+        case isSold, salePrice, hasSalePrice, saleDate, saleChannel, isUsed, usageCount
     }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -376,6 +418,13 @@ final class Work: Identifiable, Codable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         imageFileNames = try c.decodeIfPresent([String].self, forKey: .imageFileNames) ?? []
         materials = try c.decodeIfPresent([WorkMaterial].self, forKey: .materials) ?? []
+        isSold = try c.decodeIfPresent(Bool.self, forKey: .isSold) ?? false
+        salePrice = try c.decodeIfPresent(Double.self, forKey: .salePrice) ?? 0
+        hasSalePrice = try c.decodeIfPresent(Bool.self, forKey: .hasSalePrice) ?? (salePrice > 0)
+        saleDate = try c.decodeIfPresent(Date.self, forKey: .saleDate)
+        saleChannel = try c.decodeIfPresent(String.self, forKey: .saleChannel) ?? ""
+        isUsed = try c.decodeIfPresent(Bool.self, forKey: .isUsed) ?? false
+        usageCount = try c.decodeIfPresent(Int.self, forKey: .usageCount) ?? 0
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -385,6 +434,10 @@ final class Work: Identifiable, Codable {
         try c.encode(sellPrice, forKey: .sellPrice); try c.encode(timeHours, forKey: .timeHours)
         try c.encode(note, forKey: .note); try c.encode(createdAt, forKey: .createdAt)
         try c.encode(imageFileNames, forKey: .imageFileNames); try c.encode(materials, forKey: .materials)
+        try c.encode(isSold, forKey: .isSold); try c.encode(salePrice, forKey: .salePrice)
+        try c.encode(hasSalePrice, forKey: .hasSalePrice); try c.encodeIfPresent(saleDate, forKey: .saleDate)
+        try c.encode(saleChannel, forKey: .saleChannel); try c.encode(isUsed, forKey: .isUsed)
+        try c.encode(usageCount, forKey: .usageCount)
     }
 }
 
@@ -485,6 +538,10 @@ struct StoreData: Codable {
     var lengthUnit: String = "米"
     var hideAmounts: Bool = false
     var codePrefix: String = ""
+    var channelOptions: [String] = []
+    var patternOptions: [String] = []
+    var visibleTabs: [String] = []
+    var themeName: String = "深蓝"
 }
 
 @MainActor
@@ -505,9 +562,16 @@ final class Store: ObservableObject {
     @Published var lengthUnit: String = "米"
     @Published var hideAmounts: Bool = false
     @Published var codePrefix: String = ""
+    @Published var channelOptions: [String] = []
+    @Published var patternOptions: [String] = []
+    @Published var visibleTabs: [String] = []
+    @Published var themeName: String = "深蓝"
 
     static let defaultMaterialOptions = ["棉", "麻", "丝", "毛", "化纤", "混纺", "针织", "其他"]
     static let defaultOtherCategories = ["其他"]
+    static let defaultChannelOptions = ["淘宝", "闲鱼", "小红书"]
+    static let defaultPatternOptions = ["素色", "提花", "印花", "格纹", "条纹", "碎花", "暗花", "缎面"]
+    static let allTabKeys = ["fabric", "work", "other", "wishlist"]
 
     init() { load() }
 
@@ -533,6 +597,11 @@ final class Store: ObservableObject {
         otherCategories = decoded.otherCategories.isEmpty ? Self.defaultOtherCategories : decoded.otherCategories
         lengthUnit = ["米", "厘米", "码"].contains(decoded.lengthUnit) ? decoded.lengthUnit : "米"
         hideAmounts = decoded.hideAmounts; codePrefix = decoded.codePrefix
+        channelOptions = decoded.channelOptions.isEmpty ? Self.defaultChannelOptions : decoded.channelOptions
+        patternOptions = decoded.patternOptions.isEmpty ? Self.defaultPatternOptions : decoded.patternOptions
+        visibleTabs = decoded.visibleTabs.isEmpty ? Self.allTabKeys : decoded.visibleTabs.filter { Self.allTabKeys.contains($0) }
+        if !visibleTabs.contains("fabric") { visibleTabs.insert("fabric", at: 0) }
+        themeName = decoded.themeName.isEmpty ? "深蓝" : decoded.themeName
         normalizeLegacyFabrics()
     }
 
@@ -556,6 +625,12 @@ final class Store: ObservableObject {
         for fabric in fabrics where !fabric.materialName.isEmpty && !materialOptions.contains(fabric.materialName) {
             materialOptions.append(fabric.materialName)
         }
+        for name in channels.map({ $0.name }) where !name.isEmpty && !channelOptions.contains(name) {
+            channelOptions.append(name)
+        }
+        for fabric in fabrics where !fabric.channelName.isEmpty && !channelOptions.contains(fabric.channelName) {
+            channelOptions.append(fabric.channelName)
+        }
     }
 
     func save() {
@@ -567,7 +642,9 @@ final class Store: ObservableObject {
             works: works, patterns: patterns, items: items,
             saleRecords: saleRecords, otherItems: otherItems, wishlistItems: wishlistItems,
             materialOptions: materialOptions, otherCategories: otherCategories,
-            lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix
+            lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix,
+            channelOptions: channelOptions, patternOptions: patternOptions,
+            visibleTabs: visibleTabs, themeName: themeName
         )
         if let encoded = try? JSONEncoder().encode(data) {
             try? encoded.write(to: url, options: .atomic)
@@ -577,7 +654,11 @@ final class Store: ObservableObject {
     // MARK: - 派生统计（V3 口径：消耗不含售出，剩余 = 买入 - 消耗 - 售出）
 
     func soldLength(for fabricId: UUID) -> Double {
-        saleRecords.filter { $0.fabricId == fabricId }.reduce(0) { $0 + $1.length }
+        // 只计长度出售，份数出售不进米数。
+        saleRecords.filter { $0.fabricId == fabricId && !$0.isPieces }.reduce(0) { $0 + $1.length }
+    }
+    func soldPiecesTotal() -> Int {
+        saleRecords.filter { $0.isPieces }.reduce(0) { $0 + $1.pieces }
     }
     func saleRecords(for fabricId: UUID) -> [SaleRecord] {
         saleRecords.filter { $0.fabricId == fabricId }.sorted { $0.date > $1.date }
@@ -612,8 +693,9 @@ final class Store: ObservableObject {
     var totalValue: Double { fabrics.filter { $0.hasTotalPrice }.reduce(0) { $0 + $1.purchasePrice } }
     var totalMeters: Double { fabrics.filter { $0.hasPurchaseLength }.reduce(0) { $0 + $1.length } }
     var totalConsumed: Double { fabrics.reduce(0) { $0 + $1.usedLength } }
-    var totalSoldMeters: Double { saleRecords.reduce(0) { $0 + $1.length } }
+    var totalSoldMeters: Double { saleRecords.filter { !$0.isPieces }.reduce(0) { $0 + $1.length } }
     var totalRemaining: Double { max(0, totalMeters - totalConsumed - totalSoldMeters) }
+    // 售出块数：有出售记录的布料去重数（长度出售与份数出售都计入一块布料），售出米数只计长度出售。
     var soldPieceCount: Int { Set(saleRecords.map { $0.fabricId }).count }
     var soldRevenue: Double { saleRecords.reduce(0) { $0 + $1.price } }
     func lastSaleDate(for fabricId: UUID) -> Date? { saleRecords(for: fabricId).first?.date }
@@ -667,11 +749,54 @@ final class Store: ObservableObject {
         for fabric in fabrics where fabric.channelId == channel.id { fabric.channelId = nil }
         save()
     }
+    func codeConflict(code: String, excluding fabricId: UUID) -> (fabric: Fabric, code: String)? {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        for fabric in fabrics where fabric.id != fabricId {
+            if fabric.code == trimmed { return (fabric, trimmed) }
+            if fabric.subCodes.contains(trimmed) { return (fabric, trimmed) }
+        }
+        return nil
+    }
+    // 多级编号：[前缀-]颜色-纹样-001[-自定义备注]，序号按颜色+纹样组合独立递增。
+    func nextCode(color: String, pattern: String, customSuffix: String) -> String {
+        let prefix = codePrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        var maxSeq = 0
+        let allCodes = fabrics.flatMap { [$0.code] + $0.subCodes }
+        for code in allCodes {
+            let parts = code.split(separator: "-").map(String.init)
+            let seqIndex: Int?
+            if !prefix.isEmpty && parts.count >= 4 && parts[0] == prefix && parts[1] == color && parts[2] == pattern {
+                seqIndex = 3
+            } else if prefix.isEmpty && parts.count >= 3 && parts[0] == color && parts[1] == pattern {
+                seqIndex = 2
+            } else { seqIndex = nil }
+            if let idx = seqIndex, let n = Int(parts[idx]) { maxSeq = max(maxSeq, n) }
+        }
+        var seq = maxSeq + 1
+        while true {
+            let base = prefix.isEmpty ? "\(color)-\(pattern)-\(String(format: "%03d", seq))" : "\(prefix)-\(color)-\(pattern)-\(String(format: "%03d", seq))"
+            let suffix = customSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
+            let candidate = suffix.isEmpty ? base : "\(base)-\(suffix)"
+            if codeConflict(code: candidate, excluding: UUID()) == nil { return candidate }
+            seq += 1
+        }
+    }
     func deleteFabric(_ fabric: Fabric) {
         if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
             .appendingPathComponent("bucang-images") {
             for name in fabric.imageFileNames {
                 try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+            }
+        }
+        if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("bucang-videos") {
+            for name in fabric.videoFileNames { try? FileManager.default.removeItem(at: dir.appendingPathComponent(name)) }
+        }
+        if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("bucang-images") {
+            for record in saleRecords where record.fabricId == fabric.id {
+                for name in record.imageFileNames { try? FileManager.default.removeItem(at: dir.appendingPathComponent(name)) }
             }
         }
         fabrics.removeAll { $0.id == fabric.id }
