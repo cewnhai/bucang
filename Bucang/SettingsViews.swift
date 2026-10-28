@@ -22,6 +22,15 @@ enum ImportKind {
     case csv, zip
 }
 
+// 本地压缩包（无需选择器）：只列 Documents 根目录和 Documents/Inbox/ 里的 .zip，
+// 不扫描 bucang-images/ 等子文件夹，导入后不删除原压缩包。
+struct LocalZipFile: Identifiable {
+    var id: URL { url }
+    var url: URL
+    var size: Int64
+    var modified: Date
+}
+
 struct ProfileView: View {
     @EnvironmentObject private var store: Store
 
@@ -34,6 +43,68 @@ struct ProfileView: View {
     @State private var showingClearConfirm = false
     @State private var zipDocument: ZipBackupDocument?
     @State private var showingZipExporter = false
+    @State private var localZips: [LocalZipFile] = []
+
+    // 只扫描 Documents 根目录和 Documents/Inbox/，Inbox 不存在时当作空，不崩溃也不强制创建。
+    private func refreshLocalZips() {
+        let fileManager = FileManager.default
+        guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            localZips = []
+            return
+        }
+        var found: [LocalZipFile] = []
+        for directory in [documents, documents.appendingPathComponent("Inbox")] {
+            guard let urls = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            for url in urls {
+                guard url.pathExtension.lowercased() == "zip" else { continue }
+                var isDirectory: ObjCBool = false
+                guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                      !isDirectory.boolValue else { continue }
+                let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+                found.append(LocalZipFile(
+                    url: url,
+                    size: Int64(values?.fileSize ?? 0),
+                    modified: values?.contentModificationDate ?? Date.distantPast
+                ))
+            }
+        }
+        found.sort {
+            if $0.modified != $1.modified { return $0.modified > $1.modified }
+            return $0.url.lastPathComponent < $1.url.lastPathComponent
+        }
+        localZips = found
+    }
+
+    private func formattedSize(_ bytes: Int64) -> String {
+        if bytes >= 1_048_576 {
+            return String(format: "%.1f MB", Double(bytes) / 1_048_576.0)
+        } else {
+            return String(format: "%.1f KB", Double(bytes) / 1024.0)
+        }
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    // 本地列表导入：文件已在本 App 自己的 Documents 里，直接读，不需要选择器，
+    // 也不需要 security-scoped 访问；走和选择器同一条 ZipBackup.importZip，导入后不删文件。
+    private func importLocalZip(_ file: LocalZipFile) {
+        if let data = try? Data(contentsOf: file.url) {
+            importSummary = ZipBackup.importZip(data, store: store).text
+        } else {
+            importSummary = "读不到压缩包文件。"
+        }
+        showingSummary = true
+        refreshLocalZips()
+    }
 
     var body: some View {
         NavigationStack {
@@ -104,6 +175,46 @@ struct ProfileView: View {
                         }
                     }
 
+                    // 本地压缩包（无需选择器）：不走系统选择器、不走分享弹窗，
+                    // 直接列出布仓文件夹里的压缩包，点“导入”就走同一条 ZipBackup.importZip。
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(
+                                title: "本地压缩包（无需选择器）",
+                                subtitle: "不走系统选择器，直接读布仓文件夹里的压缩包"
+                            )
+                            Text("在文件 App 里，把压缩包移到 我的iPhone > Bucang 文件夹（或分享到布仓），然后回来点下面列表里的文件导入。")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Button("刷新列表") { refreshLocalZips() }
+                                .buttonStyle(.bordered)
+                                .tint(Design.accent)
+                            if localZips.isEmpty {
+                                Text("Bucang 文件夹里还没有压缩包，请先在文件 App 里把压缩包移到 我的iPhone > Bucang")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                ForEach(localZips) { file in
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(file.url.lastPathComponent)
+                                                .font(.subheadline)
+                                                .lineLimit(2)
+                                            Text("\(formattedSize(file.size)) · \(formattedDate(file.modified))")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        Button("导入") { importLocalZip(file) }
+                                            .buttonStyle(.borderedProminent)
+                                            .tint(Design.accent)
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                        }
+                    }
+
                     // 字典管理卡片
                     CardView {
                         VStack(alignment: .leading, spacing: 8) {
@@ -142,6 +253,7 @@ struct ProfileView: View {
                 .padding(.vertical, 16)
             }
             .background(Design.background)
+            .onAppear { refreshLocalZips() }
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.inline)
             // 单一选择器：同一视图上挂两个 fileImporter 会冲突，导致
@@ -176,6 +288,7 @@ struct ProfileView: View {
                         importSummary = "没有选到文件。"
                     }
                     showingSummary = true
+                    refreshLocalZips()
                 case .failure(let error):
                     importSummary = "选择文件失败：\(error.localizedDescription)"
                     showingSummary = true
