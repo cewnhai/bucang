@@ -216,7 +216,10 @@ final class WebDAVManager: ObservableObject {
         let data = StoreData(
             tags: store.tags, materials: store.materials, channels: store.channels,
             fabrics: store.fabrics, usageRecords: store.usageRecords,
-            works: store.works, patterns: store.patterns, items: store.items
+            works: store.works, patterns: store.patterns, items: store.items,
+            saleRecords: store.saleRecords, otherItems: store.otherItems, wishlistItems: store.wishlistItems,
+            materialOptions: store.materialOptions, otherCategories: store.otherCategories,
+            lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix
         )
         guard let json = try? JSONEncoder().encode(data) else {
             errorMessage = "备份失败：本机数据编码失败"
@@ -311,15 +314,7 @@ final class WebDAVManager: ObservableObject {
             return
         }
         // 校验通过后才替换。
-        store.tags = decoded.tags
-        store.materials = decoded.materials
-        store.channels = decoded.channels
-        store.fabrics = decoded.fabrics
-        store.usageRecords = decoded.usageRecords
-        store.works = decoded.works
-        store.patterns = decoded.patterns
-        store.items = decoded.items
-        store.save()
+        store.apply(decoded)
 
         let imageNames = Array(Set(store.fabrics.flatMap { $0.imageFileNames })).sorted()
         var missingImages: [String] = []
@@ -350,7 +345,7 @@ final class WebDAVManager: ObservableObject {
     }
 
     func countsText(store: Store) -> String {
-        "布料 \(store.fabrics.count) · 标签 \(store.tags.count) · 材质 \(store.materials.count) · 渠道 \(store.channels.count) · 作品 \(store.works.count) · 纸样 \(store.patterns.count) · 物品 \(store.items.count) · 使用记录 \(store.usageRecords.count)"
+        "布料 \(store.fabrics.count) · 成品 \(store.works.count) · 其他 \(store.otherItems.count) · 心愿单 \(store.wishlistItems.count) · 使用记录 \(store.usageRecords.count) · 出售记录 \(store.saleRecords.count)"
     }
 }
 

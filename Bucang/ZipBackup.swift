@@ -301,7 +301,10 @@ enum ZipBackup {
         let storeData = StoreData(
             tags: store.tags, materials: store.materials, channels: store.channels,
             fabrics: store.fabrics, usageRecords: store.usageRecords,
-            works: store.works, patterns: store.patterns, items: store.items
+            works: store.works, patterns: store.patterns, items: store.items,
+            saleRecords: store.saleRecords, otherItems: store.otherItems, wishlistItems: store.wishlistItems,
+            materialOptions: store.materialOptions, otherCategories: store.otherCategories,
+            lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix
         )
         if let json = try? JSONEncoder().encode(storeData) {
             files.append((path: "\(rootFolder)/bucang-store.json", data: json))
@@ -338,15 +341,7 @@ enum ZipBackup {
         if let jsonEntry,
            let decoded = try? JSONDecoder().decode(StoreData.self, from: jsonEntry.data) {
             // 校验通过后才替换本机数据；解码失败绝不清空本机（见下文 CSV 回退）。
-            store.tags = decoded.tags
-            store.materials = decoded.materials
-            store.channels = decoded.channels
-            store.fabrics = decoded.fabrics
-            store.usageRecords = decoded.usageRecords
-            store.works = decoded.works
-            store.patterns = decoded.patterns
-            store.items = decoded.items
-            store.save()
+            store.apply(decoded)
             summary.usedJSON = true
             summary.restoredFabrics = decoded.fabrics.count
             summary.restoredTags = decoded.tags.count

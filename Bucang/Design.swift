@@ -14,14 +14,15 @@ enum Design {
     static let background = Color(UIColor.systemGroupedBackground)
     // 系统二级分组背景：浅色纯白，深色深灰，和 background 有明确分层。
     static let card = Color(UIColor.secondarySystemGroupedBackground)
-    static let accent = Color(red: 0.98, green: 0.45, blue: 0.29)
-    // 自适应柔和主色底：浅色浅桃红，深色深珊瑚色底，保证深色下
-    // 上面的珊瑚色图标/文字仍有对比，不会白底白字。
+    // V3 原型主色：深蓝 #1E6FE0 左右（浅深色下都用同一深蓝，
+    // 白字配深蓝在暗黑下也可读）。旧珊瑚色已替换。
+    static let accent = Color(red: 0.12, green: 0.44, blue: 0.88)
+    // 自适应柔和主色底：浅色浅蓝，深色深蓝底。
     static let accentSoft = Color(UIColor { trait in
         if trait.userInterfaceStyle == .dark {
-            return UIColor(red: 0.35, green: 0.18, blue: 0.14, alpha: 1.0)
+            return UIColor(red: 0.13, green: 0.20, blue: 0.35, alpha: 1.0)
         } else {
-            return UIColor(red: 1.0, green: 0.93, blue: 0.90, alpha: 1.0)
+            return UIColor(red: 0.90, green: 0.94, blue: 1.0, alpha: 1.0)
         }
     })
     static let corner: CGFloat = 18

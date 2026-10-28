@@ -13,17 +13,10 @@ enum DictKind: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - 我的：用户卡片 + WebDAV 备份 + 数据管理 + 字典管理 + 关于
-// 清空行为和提示文案保持原样：提示说会删字典，但实际 clearRecords()
-// 只清布料（含使用记录）、作品、纸样、物品，字典保留（见 Models.swift 注释）。
-// 这里不悄悄改清空范围，只保留原有行为和原有提示。
-
 enum ImportKind {
     case csv, zip
 }
 
-// 本地压缩包（无需选择器）：只列 Documents 根目录和 Documents/Inbox/ 里的 .zip，
-// 不扫描 bucang-images/ 等子文件夹，导入后不删除原压缩包。
 struct LocalZipFile: Identifiable {
     var id: URL { url }
     var url: URL
@@ -31,27 +24,10 @@ struct LocalZipFile: Identifiable {
     var modified: Date
 }
 
-struct ProfileView: View {
-    @EnvironmentObject private var store: Store
-
-    @State private var showingImporter = false
-    @State private var importKind: ImportKind = .csv
-    @State private var importSummary: String?
-    @State private var showingSummary = false
-    @State private var exportURLs: [URL] = []
-    @State private var showingExporter = false
-    @State private var showingClearConfirm = false
-    @State private var zipDocument: ZipBackupDocument?
-    @State private var showingZipExporter = false
-    @State private var localZips: [LocalZipFile] = []
-
-    // 只扫描 Documents 根目录和 Documents/Inbox/，Inbox 不存在时当作空，不崩溃也不强制创建。
-    private func refreshLocalZips() {
+enum LocalZipHelper {
+    static func list() -> [LocalZipFile] {
         let fileManager = FileManager.default
-        guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            localZips = []
-            return
-        }
+        guard let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return [] }
         var found: [LocalZipFile] = []
         for directory in [documents, documents.appendingPathComponent("Inbox")] {
             guard let urls = try? fileManager.contentsOfDirectory(
@@ -76,26 +52,41 @@ struct ProfileView: View {
             if $0.modified != $1.modified { return $0.modified > $1.modified }
             return $0.url.lastPathComponent < $1.url.lastPathComponent
         }
-        localZips = found
+        return found
     }
-
-    private func formattedSize(_ bytes: Int64) -> String {
-        if bytes >= 1_048_576 {
-            return String(format: "%.1f MB", Double(bytes) / 1_048_576.0)
-        } else {
-            return String(format: "%.1f KB", Double(bytes) / 1024.0)
-        }
+    static func formattedSize(_ bytes: Int64) -> String {
+        if bytes >= 1_048_576 { return String(format: "%.1f MB", Double(bytes) / 1_048_576.0) }
+        return String(format: "%.1f KB", Double(bytes) / 1024.0)
     }
-
-    private func formattedDate(_ date: Date) -> String {
+    static func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
+}
 
-    // 本地列表导入：文件已在本 App 自己的 Documents 里，直接读，不需要选择器，
-    // 也不需要 security-scoped 访问；走和选择器同一条 ZipBackup.importZip，导入后不删文件。
+// MARK: - V3 设置页（底部导航右项）
+
+struct SettingsView: View {
+    @EnvironmentObject private var store: Store
+    @State private var showingImporter = false
+    @State private var importKind: ImportKind = .csv
+    @State private var importSummary: String?
+    @State private var showingSummary = false
+    @State private var exportURLs: [URL] = []
+    @State private var showingExporter = false
+    @State private var showingClearConfirm = false
+    @State private var zipDocument: ZipBackupDocument?
+    @State private var showingZipExporter = false
+    @State private var localZips: [LocalZipFile] = []
+    @State private var newMaterial = ""
+    @State private var newCategory = ""
+    @State private var renamingMaterial: String?
+    @State private var renamingCategory: String?
+    @State private var renameText = ""
+
+    private func refreshLocalZips() { localZips = LocalZipHelper.list() }
     private func importLocalZip(_ file: LocalZipFile) {
         if let data = try? Data(contentsOf: file.url) {
             importSummary = ZipBackup.importZip(data, store: store).text
@@ -110,23 +101,15 @@ struct ProfileView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // 用户卡片
                     HStack(spacing: 14) {
                         ZStack {
-                            Circle()
-                                .fill(Design.accentSoft)
-                                .frame(width: 60, height: 60)
-                            Image(systemName: "scissors")
-                                .font(.title2)
-                                .foregroundColor(Design.accent)
+                            Circle().fill(Design.accentSoft).frame(width: 60, height: 60)
+                            Image(systemName: "scissors").font(.title2).foregroundColor(Design.accent)
                         }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("我的布仓")
-                                .font(.title3)
-                                .fontWeight(.bold)
-                            Text("本地数据 · \(store.fabrics.count) 块布料 · \(store.works.count) 个作品")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                            Text("我的布仓").font(.title3).fontWeight(.bold)
+                            Text("本地数据 · \(store.fabrics.count) 块布料 · \(store.works.count) 个成品 · \(store.otherItems.count) 个其他 · \(store.wishlistItems.count) 个心愿")
+                                .font(.subheadline).foregroundColor(.secondary)
                         }
                         Spacer()
                     }
@@ -135,79 +118,145 @@ struct ProfileView: View {
                     .cornerRadius(Design.corner)
                     .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
 
-                    // WebDAV 备份卡片
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "全局设置", subtitle: "长度单位全库统一，内部按米存，显示时换算")
+                            Picker("长度单位", selection: Binding(
+                                get: { store.lengthUnit },
+                                set: { store.lengthUnit = $0; store.save() }
+                            )) {
+                                Text("米").tag("米")
+                                Text("厘米").tag("厘米")
+                                Text("码").tag("码")
+                            }
+                            .pickerStyle(.segmented)
+                            Toggle("金额默认隐藏（统计卡总价值默认打星）", isOn: Binding(
+                                get: { store.hideAmounts },
+                                set: { store.hideAmounts = $0; store.save() }
+                            ))
+                            TextField("编号体系前缀（如 B、FAB，生成编号时用）", text: Binding(
+                                get: { store.codePrefix },
+                                set: { store.codePrefix = $0; store.save() }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            Text("编号唯一且重复时禁止保存，保存时会提示与哪条档案冲突。")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "材质选项", subtitle: "布料材质单选的选项，筛选面板直接读这里")
+                            HStack {
+                                TextField("新增材质", text: $newMaterial)
+                                    .textFieldStyle(.roundedBorder)
+                                Button("添加") {
+                                    let name = newMaterial.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !name.isEmpty, !store.materialOptions.contains(name) else { return }
+                                    store.materialOptions.append(name); store.save(); newMaterial = ""
+                                }
+                                .buttonStyle(.borderedProminent).tint(Design.accent)
+                            }
+                            ForEach(store.materialOptions, id: \.self) { option in
+                                HStack {
+                                    Text(option)
+                                    Spacer()
+                                    Button("改名") { renamingMaterial = option; renameText = option }
+                                        .font(.caption)
+                                    Button("删除", role: .destructive) {
+                                        store.materialOptions.removeAll { $0 == option }; store.save()
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "其他分类", subtitle: "“其他” Tab 的分类，增删改名即时生效")
+                            HStack {
+                                TextField("新增分类", text: $newCategory)
+                                    .textFieldStyle(.roundedBorder)
+                                Button("添加") {
+                                    let name = newCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !name.isEmpty, !store.otherCategories.contains(name) else { return }
+                                    store.otherCategories.append(name); store.save(); newCategory = ""
+                                }
+                                .buttonStyle(.borderedProminent).tint(Design.accent)
+                            }
+                            ForEach(store.otherCategories, id: \.self) { option in
+                                HStack {
+                                    Text(option)
+                                    Spacer()
+                                    Button("改名") { renamingCategory = option; renameText = option }
+                                        .font(.caption)
+                                    Button("删除", role: .destructive) {
+                                        store.otherCategories.removeAll { $0 == option }; store.save()
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+
                     CardView {
                         WebDAVBackupView()
                     }
 
-                    // 数据管理卡片
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
                             SectionHeaderView(title: "数据管理", subtitle: "CSV 是原数据格式，导入按原 UUID 更新不重复建")
                             Button("导入原数据（选多个 CSV）") { importKind = .csv; showingImporter = true }
-                                .buttonStyle(.borderedProminent)
-                                .tint(Design.accent)
+                                .buttonStyle(.borderedProminent).tint(Design.accent)
                             Button("导出全部数据为 CSV") {
-                                exportURLs = CSVExporter.exportFiles(store: store)
-                                showingExporter = true
+                                exportURLs = CSVExporter.exportFiles(store: store); showingExporter = true
                             }
-                            .buttonStyle(.bordered)
-                            .tint(Design.accent)
+                            .buttonStyle(.bordered).tint(Design.accent)
+                            Button("导出全字段空模板（批量初始化用）") {
+                                exportURLs = CSVExporter.exportTemplateFiles(); showingExporter = true
+                            }
+                            .buttonStyle(.bordered).tint(Design.accent)
                             Button("导出备份压缩包 (.zip)") {
                                 if let data = ZipBackup.buildExportData(store: store) {
-                                    zipDocument = ZipBackupDocument(data: data)
-                                    showingZipExporter = true
+                                    zipDocument = ZipBackupDocument(data: data); showingZipExporter = true
                                 } else {
-                                    importSummary = "生成备份压缩包失败，请重试。"
-                                    showingSummary = true
+                                    importSummary = "生成备份压缩包失败，请重试."; showingSummary = true
                                 }
                             }
-                            .buttonStyle(.bordered)
-                            .tint(Design.accent)
+                            .buttonStyle(.bordered).tint(Design.accent)
                             Button("导入备份压缩包 (.zip)") { importKind = .zip; showingImporter = true }
-                                .buttonStyle(.borderedProminent)
-                                .tint(Design.accent)
-                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。单 CSV 导入不读图片；压缩包导入会按原 zip 格式读 CSV + 图片，也能读自家备份（含 JSON 全量 + 图片）。如果选不到文件，可在文件 App 里长按压缩包 > 分享 > 布仓直接导入。")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                .buttonStyle(.borderedProminent).tint(Design.accent)
+                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。压缩包导入会按原 zip 格式读 CSV + 图片，也能读自家备份（含 JSON 全量 + 图片）。如果选不到文件，可用下面本地压缩包列表导入。")
+                                .font(.caption).foregroundColor(.secondary)
                             Divider()
                             Button("清空全部本地数据", role: .destructive) { showingClearConfirm = true }
                         }
                     }
 
-                    // 本地压缩包（无需选择器）：不走系统选择器、不走分享弹窗，
-                    // 直接列出布仓文件夹里的压缩包，点“导入”就走同一条 ZipBackup.importZip。
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(
-                                title: "本地压缩包（无需选择器）",
-                                subtitle: "不走系统选择器，直接读布仓文件夹里的压缩包"
-                            )
+                            SectionHeaderView(title: "本地压缩包（无需选择器）", subtitle: "不走系统选择器，直接读布仓文件夹里的压缩包")
                             Text("在文件 App 里，把压缩包移到 我的iPhone > Bucang 文件夹（或分享到布仓），然后回来点下面列表里的文件导入。")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                .font(.caption).foregroundColor(.secondary)
                             Button("刷新列表") { refreshLocalZips() }
-                                .buttonStyle(.bordered)
-                                .tint(Design.accent)
+                                .buttonStyle(.bordered).tint(Design.accent)
                             if localZips.isEmpty {
                                 Text("Bucang 文件夹里还没有压缩包，请先在文件 App 里把压缩包移到 我的iPhone > Bucang")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .font(.subheadline).foregroundColor(.secondary)
                             } else {
                                 ForEach(localZips) { file in
                                     HStack {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text(file.url.lastPathComponent)
-                                                .font(.subheadline)
-                                                .lineLimit(2)
-                                            Text("\(formattedSize(file.size)) · \(formattedDate(file.modified))")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
+                                            Text(file.url.lastPathComponent).font(.subheadline).lineLimit(2)
+                                            Text("\(LocalZipHelper.formattedSize(file.size)) · \(LocalZipHelper.formattedDate(file.modified))")
+                                                .font(.caption).foregroundColor(.secondary)
                                         }
                                         Spacer()
                                         Button("导入") { importLocalZip(file) }
-                                            .buttonStyle(.borderedProminent)
-                                            .tint(Design.accent)
+                                            .buttonStyle(.borderedProminent).tint(Design.accent)
                                     }
                                     .padding(.vertical, 4)
                                 }
@@ -215,20 +264,17 @@ struct ProfileView: View {
                         }
                     }
 
-                    // 字典管理卡片
                     CardView {
                         VStack(alignment: .leading, spacing: 8) {
-                            SectionHeaderView(title: "字典管理", subtitle: "标签 / 材质 / 渠道，点进去可以新增、删除、拖动排序")
-                            ForEach(DictKind.allCases) { kind in
+                            SectionHeaderView(title: "字典管理", subtitle: "标签 / 渠道，点进去可以新增、删除、拖动排序（材质选项在上面单独管）")
+                            ForEach([DictKind.tag, DictKind.channel]) { kind in
                                 NavigationLink(destination: DictionaryView(kind: kind)) {
                                     HStack {
                                         Text(kind.title)
                                         Spacer()
-                                        Text("\(kind == .tag ? store.tags.count : kind == .material ? store.materials.count : store.channels.count) 个")
+                                        Text("\(kind == .tag ? store.tags.count : store.channels.count) 个")
                                             .foregroundColor(.secondary)
-                                        Image(systemName: "chevron.right")
-                                            .foregroundColor(.secondary)
-                                            .font(.caption)
+                                        Image(systemName: "chevron.right").foregroundColor(.secondary).font(.caption)
                                     }
                                     .foregroundColor(.primary)
                                     .padding(.vertical, 6)
@@ -237,15 +283,13 @@ struct ProfileView: View {
                         }
                     }
 
-                    // 关于卡片
                     CardView {
                         VStack(alignment: .leading, spacing: 8) {
                             SectionHeaderView(title: "关于")
                             Text("布仓：本机存储，不做 iCloud 同步，不做订阅。")
                             Text("目标 iOS 16，可用 TrollStore 安装自己编译的包。")
                             Text("本机数据在 Documents/bucang-store.json，图片在 Documents/bucang-images/，WebDAV 备份文件默认 bucang-backup.json，包含全部数据和图片。")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                .font(.caption).foregroundColor(.secondary)
                         }
                     }
                 }
@@ -254,13 +298,8 @@ struct ProfileView: View {
             }
             .background(Design.background)
             .onAppear { refreshLocalZips() }
-            .navigationTitle("我的")
+            .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
-            // 单一选择器：同一视图上挂两个 fileImporter 会冲突，导致
-            // zip 选择器实际按 CSV 类型过滤、zip 文件变灰选不了。
-            // zip 改用通用文件类型 UTType.data，让所有文件都可选，
-            // 再在代码里按 .zip 后缀校验，避免 UTType.zip 在
-            // iOS 16.3.1 上对别家 App 导出的 zip 过滤过严。
             .fileImporter(
                 isPresented: $showingImporter,
                 allowedContentTypes: importKind == .zip ? [UTType.data] : [UTType.commaSeparatedText],
@@ -269,15 +308,13 @@ struct ProfileView: View {
                 switch result {
                 case .success(let urls):
                     if importKind == .csv {
-                        let summary = CSVImporter.importFiles(urls, store: store)
-                        importSummary = summary.text
+                        importSummary = CSVImporter.importFiles(urls, store: store).text
                     } else if let url = urls.first {
                         if url.pathExtension.lowercased() == "zip" {
                             let accessing = url.startAccessingSecurityScopedResource()
                             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
                             if let data = try? Data(contentsOf: url) {
-                                let summary = ZipBackup.importZip(data, store: store)
-                                importSummary = summary.text
+                                importSummary = ZipBackup.importZip(data, store: store).text
                             } else {
                                 importSummary = "读不到压缩包文件。"
                             }
@@ -307,27 +344,118 @@ struct ProfileView: View {
             }
             .alert("导入结果", isPresented: $showingSummary) {
                 Button("好", role: .cancel) {}
-            } message: {
-                Text(importSummary ?? "")
-            }
-            .sheet(isPresented: $showingExporter) {
-                ActivityView(urls: exportURLs)
-            }
+            } message: { Text(importSummary ?? "") }
+            .sheet(isPresented: $showingExporter) { ActivityView(urls: exportURLs) }
             .alert("清空确认", isPresented: $showingClearConfirm) {
-                Button("清空", role: .destructive) {
-                    store.clearRecords()
-                }
+                Button("清空", role: .destructive) { store.clearRecords() }
                 Button("取消", role: .cancel) {}
-            } message: {
-                Text("此操作会删除本 App 里的全部布料、作品、纸样、物品和字典，无法恢复。先导出备份再清。")
+            } message: { Text("此操作会删除本 App 里的全部布料、成品、其他、心愿单、使用与出售记录，无法恢复。先导出备份再清。") }
+            .alert("改名", isPresented: Binding(
+                get: { renamingMaterial != nil || renamingCategory != nil },
+                set: { if !$0 { renamingMaterial = nil; renamingCategory = nil } }
+            )) {
+                TextField("新名称", text: $renameText)
+                Button("取消", role: .cancel) { renamingMaterial = nil; renamingCategory = nil }
+                Button("确定") {
+                    let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !newName.isEmpty {
+                        if let old = renamingMaterial, let idx = store.materialOptions.firstIndex(of: old) {
+                            store.materialOptions[idx] = newName
+                            for fabric in store.fabrics where fabric.materialName == old { fabric.materialName = newName }
+                        }
+                        if let old = renamingCategory, let idx = store.otherCategories.firstIndex(of: old) {
+                            store.otherCategories[idx] = newName
+                            for item in store.otherItems where item.category == old { item.category = newName }
+                        }
+                        store.save()
+                    }
+                    renamingMaterial = nil; renamingCategory = nil
+                }
+            } message: { Text("改名会同步改已用该选项的记录。") }
+        }
+    }
+}
+
+// MARK: - 布仓工具行导入导出弹层（复用同一导入导出逻辑，不含本地列表）
+
+struct ImportExportSheetView: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingImporter = false
+    @State private var importKind: ImportKind = .csv
+    @State private var importSummary: String?
+    @State private var showingSummary = false
+    @State private var exportURLs: [URL] = []
+    @State private var showingExporter = false
+    @State private var zipDocument: ZipBackupDocument?
+    @State private var showingZipExporter = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("导入导出").font(.headline)
+                Button("导入原数据（选多个 CSV）") { importKind = .csv; showingImporter = true }
+                    .buttonStyle(.borderedProminent).tint(Design.accent)
+                Button("导出全部数据为 CSV") { exportURLs = CSVExporter.exportFiles(store: store); showingExporter = true }
+                    .buttonStyle(.bordered).tint(Design.accent)
+                Button("导出备份压缩包 (.zip)") {
+                    if let data = ZipBackup.buildExportData(store: store) {
+                        zipDocument = ZipBackupDocument(data: data); showingZipExporter = true
+                    }
+                }
+                .buttonStyle(.bordered).tint(Design.accent)
+                Button("导入备份压缩包 (.zip)") { importKind = .zip; showingImporter = true }
+                    .buttonStyle(.borderedProminent).tint(Design.accent)
+                Text("如果在选择器里选不到 zip 文件，请用设置页的“本地压缩包（无需选择器）”列表导入：把压缩包移到文件 App 的 Bucang 文件夹，再回设置页点列表里的导入。")
+                    .font(.caption).foregroundColor(.secondary)
+                Button("完成") { dismiss() }
+                    .buttonStyle(.bordered).tint(Design.accent)
+            }
+            .padding()
+        }
+        .background(Design.background)
+        .navigationTitle("导入导出")
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: importKind == .zip ? [UTType.data] : [UTType.commaSeparatedText],
+            allowsMultipleSelection: importKind == .csv
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if importKind == .csv {
+                    importSummary = CSVImporter.importFiles(urls, store: store).text
+                } else if let url = urls.first, url.pathExtension.lowercased() == "zip" {
+                    let accessing = url.startAccessingSecurityScopedResource()
+                    defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                    if let data = try? Data(contentsOf: url) {
+                        importSummary = ZipBackup.importZip(data, store: store).text
+                    } else {
+                        importSummary = "读不到压缩包文件。"
+                    }
+                } else {
+                    importSummary = "请选择 .zip 文件。"
+                }
+                showingSummary = true
+            case .failure(let error):
+                importSummary = "选择文件失败：\(error.localizedDescription)"
+                showingSummary = true
             }
         }
+        .fileExporter(
+            isPresented: $showingZipExporter,
+            document: zipDocument,
+            contentType: UTType.zip,
+            defaultFilename: ZipBackup.defaultExportFileName()
+        ) { _ in }
+        .alert("导入结果", isPresented: $showingSummary) {
+            Button("好", role: .cancel) {}
+        } message: { Text(importSummary ?? "") }
+        .sheet(isPresented: $showingExporter) { ActivityView(urls: exportURLs) }
     }
 }
 
 struct DictionaryView: View {
     @EnvironmentObject private var store: Store
-
     var kind: DictKind
     @State private var newName = ""
     @State private var showingAdd = false
@@ -382,20 +510,17 @@ struct DictionaryView: View {
             var list = tags
             list.move(fromOffsets: source, toOffset: destination)
             for (index, tag) in list.enumerated() { tag.sortOrder = index }
-            store.tags = list
-            store.save()
+            store.tags = list; store.save()
         case .material:
             var list = materials
             list.move(fromOffsets: source, toOffset: destination)
             for (index, item) in list.enumerated() { item.sortOrder = index }
-            store.materials = list
-            store.save()
+            store.materials = list; store.save()
         case .channel:
             var list = channels
             list.move(fromOffsets: source, toOffset: destination)
             for (index, item) in list.enumerated() { item.sortOrder = index }
-            store.channels = list
-            store.save()
+            store.channels = list; store.save()
         }
     }
 
@@ -403,46 +528,29 @@ struct DictionaryView: View {
         List {
             switch kind {
             case .tag:
-                ForEach(tags) { Text($0.name) }
-                    .onDelete(perform: delete)
-                    .onMove(perform: move)
+                ForEach(tags) { Text($0.name) }.onDelete(perform: delete).onMove(perform: move)
             case .material:
-                ForEach(materials) { Text($0.name) }
-                    .onDelete(perform: delete)
-                    .onMove(perform: move)
+                ForEach(materials) { Text($0.name) }.onDelete(perform: delete).onMove(perform: move)
             case .channel:
-                ForEach(channels) { Text($0.name) }
-                    .onDelete(perform: delete)
-                    .onMove(perform: move)
+                ForEach(channels) { Text($0.name) }.onDelete(perform: delete).onMove(perform: move)
             }
         }
         .navigationTitle(kind.title)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: { showingAdd = true }) { Image(systemName: "plus") }
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                EditButton()
-            }
+            ToolbarItem(placement: .primaryAction) { Button(action: { showingAdd = true }) { Image(systemName: "plus") } }
+            ToolbarItem(placement: .secondaryAction) { EditButton() }
         }
         .alert("新增\(kind.title)", isPresented: $showingAdd) {
             TextField("名称", text: $newName)
             Button("取消", role: .cancel) {}
             Button("添加", action: add)
-        } message: {
-            Text("同名不能重复。")
-        }
+        } message: { Text("同名不能重复。") }
         .overlay {
             if count == 0 {
                 VStack(spacing: 8) {
-                    Image(systemName: "tag")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
-                    Text("暂无\(kind.title)")
-                        .font(.headline)
-                    Text("点右上角加号新增")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Image(systemName: "tag").font(.largeTitle).foregroundColor(.secondary)
+                    Text("暂无\(kind.title)").font(.headline)
+                    Text("点右上角加号新增").font(.caption).foregroundColor(.secondary)
                 }
             }
         }
@@ -451,10 +559,8 @@ struct DictionaryView: View {
 
 struct ActivityView: UIViewControllerRepresentable {
     var urls: [URL]
-
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: urls, applicationActivities: nil)
     }
-
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

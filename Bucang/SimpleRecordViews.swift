@@ -1,227 +1,162 @@
 import SwiftUI
 
-// MARK: - 作品
-
-struct WorkListView: View {
-    @EnvironmentObject private var store: Store
-    @State private var showingAdd = false
-    @State private var searchText = ""
-
-    private var works: [Work] { store.works.sorted { $0.createdAt > $1.createdAt } }
-
-    private var filtered: [Work] {
-        let keyword = searchText.trimmingCharacters(in: .whitespaces)
-        if keyword.isEmpty { return works }
-        return works.filter { $0.name.localizedCaseInsensitiveContains(keyword) || $0.note.localizedCaseInsensitiveContains(keyword) }
-    }
-
-    private var emptyPlaceholder: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "tshirt")
-                .font(.largeTitle)
-                .foregroundColor(.secondary)
-            Text("暂无作品")
-                .font(.headline)
-            Text("点右上角加号新增")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(filtered) { work in
-                    NavigationLink(destination: WorkEditView(work: work)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(work.name.isEmpty ? "未命名作品" : work.name).font(.headline)
-                            Text("进度 \(Int(work.progress))% · 成本 ¥\(work.costPrice, specifier: "%.2f") · 售价 ¥\(work.sellPrice, specifier: "%.2f")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .onDelete { indexSet in
-                    let toDelete = indexSet.map { filtered[$0] }
-                    for work in toDelete { store.deleteWork(work) }
-                }
-            }
-            .searchable(text: $searchText, prompt: "搜索作品")
-            .navigationTitle("作品")
-            .toolbar { Button(action: { showingAdd = true }) { Image(systemName: "plus") } }
-            .sheet(isPresented: $showingAdd) { NavigationStack { WorkEditView(work: nil) } }
-            .overlay {
-                if filtered.isEmpty {
-                    emptyPlaceholder
-                }
-            }
-        }
-    }
-}
+// MARK: - V3 成品 / 其他 / 心愿单表单
+// 成品用料与使用记录同源：成品页加用料 = 给该布新建一条使用记录，
+// 剩余只扣一次，绝不重复计量。
 
 struct WorkEditView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var work: Work?
     @State private var name: String
-    @State private var progressText: String
-    @State private var costText: String
-    @State private var sellText: String
-    @State private var hoursText: String
+    @State private var startDate: Date?
+    @State private var hasStartDate: Bool
+    @State private var finishDate: Date?
+    @State private var hasFinishDate: Bool
     @State private var note: String
+    @State private var imageNames: [String]
+    private let originalImageNames: [String]
 
     init(work: Work?) {
         self.work = work
+        self.originalImageNames = work?.imageFileNames ?? []
         _name = State(initialValue: work?.name ?? "")
-        _progressText = State(initialValue: work == nil ? "" : String(Int(work!.progress)))
-        _costText = State(initialValue: work == nil ? "" : String(work!.costPrice))
-        _sellText = State(initialValue: work == nil ? "" : String(work!.sellPrice))
-        _hoursText = State(initialValue: work == nil ? "" : String(work!.timeHours))
+        _startDate = State(initialValue: work?.startedAt ?? Date())
+        _hasStartDate = State(initialValue: work?.startedAt != nil)
+        _finishDate = State(initialValue: work?.finishedAt ?? Date())
+        _hasFinishDate = State(initialValue: work?.finishedAt != nil)
         _note = State(initialValue: work?.note ?? "")
+        _imageNames = State(initialValue: work?.imageFileNames ?? [])
+    }
+
+    private func save() {
+        if let existing = work {
+            existing.name = name
+            existing.startedAt = hasStartDate ? startDate : nil
+            existing.finishedAt = hasFinishDate ? finishDate : nil
+            existing.note = note
+            for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
+            existing.imageFileNames = imageNames
+            store.save()
+        } else {
+            let newWork = Work(
+                name: name,
+                startedAt: hasStartDate ? startDate : nil,
+                finishedAt: hasFinishDate ? finishDate : nil,
+                note: note, imageFileNames: imageNames
+            )
+            store.addWork(newWork)
+        }
+        dismiss()
     }
 
     var body: some View {
         Form {
-            TextField("作品名称", text: $name)
-            TextField("进度（0-100）", text: $progressText).keyboardType(.decimalPad)
-            TextField("成本价（元）", text: $costText).keyboardType(.decimalPad)
-            TextField("售价（元）", text: $sellText).keyboardType(.decimalPad)
-            TextField("累计工时（小时）", text: $hoursText).keyboardType(.decimalPad)
-            TextField("备注", text: $note, axis: .vertical)
+            Section("成品（全部可留空）") {
+                TextField("成品名称", text: $name)
+                Toggle("填写开始创作时间", isOn: $hasStartDate)
+                if hasStartDate { DatePicker("开始创作时间", selection: Binding(get: { startDate ?? Date() }, set: { startDate = $0 }), displayedComponents: .date) }
+                Toggle("填写完成时间（填了即视为已完成）", isOn: $hasFinishDate)
+                if hasFinishDate { DatePicker("完成时间", selection: Binding(get: { finishDate ?? Date() }, set: { finishDate = $0 }), displayedComponents: .date) }
+                TextField("备注", text: $note, axis: .vertical)
+            }
+            Section("成品照片") {
+                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
+            }
             if let work {
-                Button("删除这个作品", role: .destructive) {
-                    store.deleteWork(work)
-                    dismiss()
-                }
-            }
-        }
-        .navigationTitle(work == nil ? "新增作品" : "编辑作品")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
-                    let progress = min(100, max(0, Double(progressText) ?? 0))
-                    if let existing = work {
-                        existing.name = name
-                        existing.progress = progress
-                        existing.costPrice = Double(costText) ?? 0
-                        existing.sellPrice = Double(sellText) ?? 0
-                        existing.timeHours = Double(hoursText) ?? 0
-                        existing.note = note
-                        store.save()
-                    } else {
-                        store.addWork(Work(name: name, progress: progress, costPrice: Double(costText) ?? 0, sellPrice: Double(sellText) ?? 0, timeHours: Double(hoursText) ?? 0, note: note))
-                    }
-                    dismiss()
-                }
-            }
-        }
-    }
-}
-
-// MARK: - 纸样
-
-struct PatternListView: View {
-    @EnvironmentObject private var store: Store
-    @State private var showingAdd = false
-    @State private var searchText = ""
-
-    private var patterns: [Pattern] { store.patterns.sorted { $0.createdAt > $1.createdAt } }
-
-    private var filtered: [Pattern] {
-        let keyword = searchText.trimmingCharacters(in: .whitespaces)
-        if keyword.isEmpty { return patterns }
-        return patterns.filter { $0.name.localizedCaseInsensitiveContains(keyword) || $0.note.localizedCaseInsensitiveContains(keyword) }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(filtered) { pattern in
-                    NavigationLink(destination: PatternEditView(pattern: pattern)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(pattern.name.isEmpty ? "未命名纸样" : pattern.name).font(.headline)
-                            Text("价格 ¥\(pattern.price, specifier: "%.2f") · 片数 \(pattern.pieceCount)")
+                Section("用料清单") {
+                    if work.materials.isEmpty { Text("还没有用料，回到成品页点“加用料”").foregroundColor(.secondary) }
+                    else {
+                        ForEach(work.materials) { material in
+                            HStack {
+                                Text(store.fabric(for: material.fabricId)?.displayName ?? "已删除的布料")
+                                Spacer()
+                                Text("\(LengthUnitHelper.format(material.amount, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))").font(.caption).foregroundColor(.secondary)
+                                // Form 里 swipe 删除不可靠，另给明确的删除按钮；
+                                // 删用料不自动回补剩余（已生成的使用记录仍在），
+                                // 如需回补请在布料详情里删对应使用记录。
+                                Button("删除", role: .destructive) {
+                                    work.materials.removeAll { $0.id == material.id }
+                                    store.save()
+                                }
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                            }
                         }
                     }
+                    let cost = store.workCost(for: work)
+                    Text("用料成本合计：¥\(String(format: "%.2f", cost.total))\(cost.hasMissingPrice ? "（部分布料无单价，未计入）" : "")")
+                        .font(.subheadline)
                 }
-                .onDelete { indexSet in
-                    let toDelete = indexSet.map { filtered[$0] }
-                    for pattern in toDelete { store.deletePattern(pattern) }
-                }
-            }
-            .searchable(text: $searchText, prompt: "搜索纸样")
-            .navigationTitle("纸样")
-            .toolbar { Button(action: { showingAdd = true }) { Image(systemName: "plus") } }
-            .sheet(isPresented: $showingAdd) { NavigationStack { PatternEditView(pattern: nil) } }
-            .overlay {
-                if filtered.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "doc")
-                            .font(.largeTitle)
-                            .foregroundColor(.secondary)
-                        Text("暂无纸样")
-                            .font(.headline)
-                        Text("点右上角加号新增")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                Section {
+                    Button("删除这个成品", role: .destructive) {
+                        store.deleteWork(work); dismiss()
                     }
                 }
             }
         }
+        .navigationTitle(work == nil ? "新建成品" : "编辑成品")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") {
+                    for name in imageNames where !originalImageNames.contains(name) { FabricImageStore.delete(named: name) }
+                    dismiss()
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) { Button("保存", action: save) }
+        }
     }
 }
 
-struct PatternEditView: View {
+struct WorkMaterialAddView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
-    var pattern: Pattern?
-    @State private var name: String
-    @State private var priceText: String
-    @State private var pieceText: String
-    @State private var sizeDesc: String
-    @State private var note: String
-
-    init(pattern: Pattern?) {
-        self.pattern = pattern
-        _name = State(initialValue: pattern?.name ?? "")
-        _priceText = State(initialValue: pattern == nil ? "" : String(pattern!.price))
-        _pieceText = State(initialValue: pattern == nil ? "" : String(pattern!.pieceCount))
-        _sizeDesc = State(initialValue: pattern?.sizeDesc ?? "")
-        _note = State(initialValue: pattern?.note ?? "")
-    }
+    var work: Work
+    @State private var selectedFabricId: UUID?
+    @State private var amountText = ""
+    @State private var errorMessage: String?
 
     var body: some View {
         Form {
-            TextField("纸样名称", text: $name)
-            TextField("价格（元）", text: $priceText).keyboardType(.decimalPad)
-            TextField("片数", text: $pieceText).keyboardType(.numberPad)
-            TextField("尺寸说明（如 S/M/L/均码）", text: $sizeDesc)
-            TextField("备注", text: $note, axis: .vertical)
-            if let pattern {
-                Button("删除这个纸样", role: .destructive) {
-                    store.deletePattern(pattern)
-                    dismiss()
+            Section {
+                Text("成品：\(work.name.isEmpty ? "未命名成品" : work.name)")
+                Text("加用料会同时给这块布生成一条使用记录，剩余只扣一次。")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            Section("选布料") {
+                if store.fabrics.isEmpty { Text("还没有布料").foregroundColor(.secondary) }
+                else {
+                    ForEach(store.fabrics) { fabric in
+                        Button(action: { selectedFabricId = fabric.id }) {
+                            HStack {
+                                Text(fabric.displayName)
+                                Spacer()
+                                Text("剩余 \(LengthUnitHelper.format(store.remaining(for: fabric), unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))").font(.caption).foregroundColor(.secondary)
+                                if selectedFabricId == fabric.id { Image(systemName: "checkmark") }
+                            }
+                        }
+                        .foregroundColor(.primary)
+                    }
                 }
             }
+            Section {
+                TextField("用量（\(store.lengthUnit)）", text: $amountText).keyboardType(.decimalPad)
+            }
+            if let errorMessage { Text(errorMessage).foregroundColor(.red) }
         }
-        .navigationTitle(pattern == nil ? "新增纸样" : "编辑纸样")
+        .navigationTitle("成品加用料")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
-                    if let existing = pattern {
-                        existing.name = name
-                        existing.price = Double(priceText) ?? 0
-                        existing.pieceCount = Int(pieceText) ?? 0
-                        existing.sizeDesc = sizeDesc
-                        existing.note = note
-                        store.save()
-                    } else {
-                        store.addPattern(Pattern(name: name, price: Double(priceText) ?? 0, pieceCount: Int(pieceText) ?? 0, sizeDesc: sizeDesc, note: note))
+                    guard let fabricId = selectedFabricId, let fabric = store.fabric(for: fabricId) else { errorMessage = "请先选一块布料"; return }
+                    guard let display = Double(amountText), display > 0 else { errorMessage = "请输入大于 0 的用量"; return }
+                    let metres = LengthUnitHelper.fromDisplay(display, unit: store.lengthUnit)
+                    if fabric.hasPurchaseLength && metres > store.remaining(for: fabric) {
+                        errorMessage = "用量不能大于剩余长度"; return
                     }
+                    work.materials.append(WorkMaterial(fabricId: fabricId, amount: metres))
+                    store.addUsageAndDeduct(UsageRecord(date: Date(), length: metres, note: "用于成品：\(work.name.isEmpty ? "未命名成品" : work.name)", fabricId: fabricId, workIds: [work.id]))
+                    store.save()
                     dismiss()
                 }
             }
@@ -229,108 +164,144 @@ struct PatternEditView: View {
     }
 }
 
-// MARK: - 物品
-
-struct ItemListView: View {
-    @EnvironmentObject private var store: Store
-    @State private var showingAdd = false
-    @State private var searchText = ""
-
-    private var items: [Item] { store.items.sorted { $0.createdAt > $1.createdAt } }
-
-    private var filtered: [Item] {
-        let keyword = searchText.trimmingCharacters(in: .whitespaces)
-        if keyword.isEmpty { return items }
-        return items.filter { $0.name.localizedCaseInsensitiveContains(keyword) || $0.note.localizedCaseInsensitiveContains(keyword) }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(filtered) { item in
-                    NavigationLink(destination: ItemEditView(item: item)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.name.isEmpty ? "未命名物品" : item.name).font(.headline)
-                            Text("价格 ¥\(item.price, specifier: "%.2f") · 数量 \(item.quantity)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .onDelete { indexSet in
-                    let toDelete = indexSet.map { filtered[$0] }
-                    for item in toDelete { store.deleteItem(item) }
-                }
-            }
-            .searchable(text: $searchText, prompt: "搜索物品")
-            .navigationTitle("物品")
-            .toolbar { Button(action: { showingAdd = true }) { Image(systemName: "plus") } }
-            .sheet(isPresented: $showingAdd) { NavigationStack { ItemEditView(item: nil) } }
-            .overlay {
-                if filtered.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "bag")
-                            .font(.largeTitle)
-                            .foregroundColor(.secondary)
-                        Text("暂无物品")
-                            .font(.headline)
-                        Text("点右上角加号新增")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct ItemEditView: View {
+struct OtherEditView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
-    var item: Item?
+    var item: OtherItem?
+    @State private var category: String
+    @State private var customCategory: String
     @State private var name: String
-    @State private var priceText: String
     @State private var quantityText: String
-    @State private var sizeDesc: String
+    @State private var priceText: String
+    @State private var channel: String
     @State private var note: String
+    @State private var imageNames: [String]
+    private let originalImageNames: [String]
 
-    init(item: Item?) {
+    init(item: OtherItem?) {
         self.item = item
+        self.originalImageNames = item?.imageFileNames ?? []
+        _category = State(initialValue: item?.category ?? "")
+        _customCategory = State(initialValue: "")
         _name = State(initialValue: item?.name ?? "")
-        _priceText = State(initialValue: item == nil ? "" : String(item!.price))
-        _quantityText = State(initialValue: item == nil ? "" : String(item!.quantity))
-        _sizeDesc = State(initialValue: item?.sizeDesc ?? "")
+        _quantityText = State(initialValue: item?.quantityText ?? "")
+        _priceText = State(initialValue: item == nil || !item!.hasPrice ? "" : String(item!.price))
+        _channel = State(initialValue: item?.channel ?? "")
         _note = State(initialValue: item?.note ?? "")
+        _imageNames = State(initialValue: item?.imageFileNames ?? [])
+    }
+
+    private func save() {
+        let categoryValue = customCategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? category.trimmingCharacters(in: .whitespacesAndNewlines) : customCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !categoryValue.isEmpty && !store.otherCategories.contains(categoryValue) {
+            store.otherCategories.append(categoryValue)
+        }
+        if let existing = item {
+            existing.category = categoryValue; existing.name = name; existing.quantityText = quantityText
+            existing.price = Double(priceText) ?? 0; existing.hasPrice = !priceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            existing.channel = channel; existing.note = note
+            for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
+            existing.imageFileNames = imageNames
+            store.save()
+        } else {
+            let newItem = OtherItem(
+                category: categoryValue, name: name, imageFileNames: imageNames,
+                quantityText: quantityText, price: Double(priceText) ?? 0,
+                hasPrice: !priceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                channel: channel, note: note
+            )
+            store.addOtherItem(newItem)
+        }
+        dismiss()
     }
 
     var body: some View {
         Form {
-            TextField("物品名称", text: $name)
-            TextField("价格（元）", text: $priceText).keyboardType(.decimalPad)
-            TextField("数量", text: $quantityText).keyboardType(.numberPad)
-            TextField("尺寸说明", text: $sizeDesc)
-            TextField("备注", text: $note, axis: .vertical)
+            Section("其他条目（全部可留空，最少填名称加照片就能存）") {
+                Picker("所属分类", selection: $category) {
+                    Text("未分类").tag("")
+                    ForEach(store.otherCategories, id: \.self) { Text($0).tag($0) }
+                }
+                TextField("自定义分类（填了就用这个）", text: $customCategory)
+                TextField("名称", text: $name)
+                TextField("数量或长度", text: $quantityText)
+                TextField("价格（元）", text: $priceText).keyboardType(.decimalPad)
+                TextField("渠道", text: $channel)
+                TextField("备注", text: $note, axis: .vertical)
+            }
+            Section("照片") {
+                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
+            }
             if let item {
-                Button("删除这个物品", role: .destructive) {
-                    store.deleteItem(item)
-                    dismiss()
+                Button("删除这个条目", role: .destructive) {
+                    store.deleteOtherItem(item); dismiss()
                 }
             }
         }
-        .navigationTitle(item == nil ? "新增物品" : "编辑物品")
+        .navigationTitle(item == nil ? "新增其他条目" : "编辑其他条目")
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") {
+                    for name in imageNames where !originalImageNames.contains(name) { FabricImageStore.delete(named: name) }
+                    dismiss()
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) { Button("保存", action: save) }
+        }
+    }
+}
+
+struct WishlistEditView: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    var item: WishlistItem?
+    var presetName: String
+    @State private var name: String
+    @State private var note: String
+    @State private var imageNames: [String]
+    private let originalImageNames: [String]
+
+    init(item: WishlistItem?, presetName: String) {
+        self.item = item
+        self.presetName = presetName
+        self.originalImageNames = item?.imageFileNames ?? []
+        _name = State(initialValue: item?.name ?? presetName)
+        _note = State(initialValue: item?.note ?? "")
+        _imageNames = State(initialValue: item?.imageFileNames ?? [])
+    }
+
+    var body: some View {
+        Form {
+            Section("心愿单（只当备忘）") {
+                TextField("名称", text: $name)
+                TextField("想法备注", text: $note, axis: .vertical)
+            }
+            Section("照片") {
+                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
+            }
+            if let item {
+                Button("删除这个心愿", role: .destructive) {
+                    store.deleteWishlistItem(item); dismiss()
+                }
+            }
+        }
+        .navigationTitle(item == nil ? "新增心愿" : "编辑心愿")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") {
+                    for name in imageNames where !originalImageNames.contains(name) { FabricImageStore.delete(named: name) }
+                    dismiss()
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
                     if let existing = item {
-                        existing.name = name
-                        existing.price = Double(priceText) ?? 0
-                        existing.quantity = Int(quantityText) ?? 0
-                        existing.sizeDesc = sizeDesc
-                        existing.note = note
+                        existing.name = name; existing.note = note
+                        for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
+                        existing.imageFileNames = imageNames
                         store.save()
                     } else {
-                        store.addItem(Item(name: name, price: Double(priceText) ?? 0, quantity: Int(quantityText) ?? 0, sizeDesc: sizeDesc, note: note))
+                        store.addWishlistItem(WishlistItem(name: name, imageFileNames: imageNames, note: note))
                     }
                     dismiss()
                 }

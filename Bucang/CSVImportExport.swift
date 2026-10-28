@@ -253,9 +253,10 @@ enum CSVImporter {
         }
 
         // 布料
-        if let text = texts["fabrics.csv"] {
+        if let text = texts["fabrics.csv"] ?? texts["fabrics_template.csv"] {
             for row in CSVParser.rowsByHeader(text) {
-                guard let id = CSVValues.uuid(row["id"] ?? "") else { summary.skipped += 1; continue }
+                // 模板行 id 留空时自动生成新 UUID（旧导出 id 必填，仍按原 UUID 匹配）。
+                let id = CSVValues.uuid(row["id"] ?? "") ?? UUID()
                 let materialId: UUID? = (row["materialId"] ?? "").isEmpty ? nil : CSVValues.uuid(row["materialId"] ?? "")
                 let channelId: UUID? = (row["purchaseChannelId"] ?? "").isEmpty ? nil : CSVValues.uuid(row["purchaseChannelId"] ?? "")
                 if let mid = row["materialId"], !mid.isEmpty, materialId == nil || materialByID[materialId!] == nil {
@@ -273,10 +274,33 @@ enum CSVImporter {
                     .split(separator: ",")
                     .compactMap { CSVValues.uuid(String($0)) }
                     .filter { tagByID[$0] != nil }
+                // V3 新列（模板导入）：code / material / composition / color /
+                // widthCm / usageNotes / channel（字符串渠道，优先于 ID）；
+                // 旧列仍按原口径读，不编造缺失值。
+                let v3Code = (row["code"] ?? "").trimmingCharacters(in: .whitespaces)
+                let v3Material = (row["material"] ?? "").trimmingCharacters(in: .whitespaces)
+                let v3Composition = (row["composition"] ?? "").trimmingCharacters(in: .whitespaces)
+                let v3Color = (row["color"] ?? "").trimmingCharacters(in: .whitespaces)
+                let v3UsageNotes = (row["usageNotes"] ?? "").trimmingCharacters(in: .whitespaces)
+                let v3Channel = (row["channel"] ?? "").trimmingCharacters(in: .whitespaces)
+                let widthCmText = (row["widthCm"] ?? "").trimmingCharacters(in: .whitespaces)
+                let widthValue: Double = !widthCmText.isEmpty ? CSVValues.double(widthCmText) / 100 : CSVValues.double(row["width"] ?? "")
+                // tagNames：按名称匹配已有标签，缺失则新建（模板批量导入用）。
+                var tagIDsAll = tagIDs
+                if let tagNamesRaw = row["tagNames"], !tagNamesRaw.trimmingCharacters(in: .whitespaces).isEmpty {
+                    for part in tagNamesRaw.split(separator: ";").map({ String($0).trimmingCharacters(in: .whitespaces) }) where !part.isEmpty {
+                        if let existingTag = store.tags.first(where: { $0.name == part }) {
+                            if !tagIDsAll.contains(existingTag.id) { tagIDsAll.append(existingTag.id) }
+                        } else {
+                            let newTag = Tag(name: part, sortOrder: store.tags.count)
+                            store.tags.append(newTag); tagByID[newTag.id] = newTag; tagIDsAll.append(newTag.id)
+                        }
+                    }
+                }
                 if let existing = fabricByID[id] {
                     existing.name = row["name"] ?? ""
                     existing.length = CSVValues.double(row["length"] ?? "")
-                    existing.width = CSVValues.double(row["width"] ?? "")
+                    existing.width = widthValue
                     existing.purchasePrice = CSVValues.double(row["purchasePrice"] ?? "")
                     existing.pricePerMeter = CSVValues.double(row["purchasePricePerMeter"] ?? "")
                     existing.purchaseDate = CSVValues.date(row["purchaseDate"] ?? "")
@@ -286,15 +310,23 @@ enum CSVImporter {
                     existing.note = row["note"] ?? ""
                     existing.materialId = materialId
                     existing.channelId = channelId
-                    existing.tagIds = tagIDs
+                    existing.tagIds = tagIDsAll
                     existing.updatedAt = Date()
+                    if !v3Code.isEmpty { existing.code = v3Code }
+                    if !v3Material.isEmpty { existing.materialName = v3Material }
+                    if !v3Composition.isEmpty { existing.composition = v3Composition }
+                    if !v3Color.isEmpty { existing.colorName = v3Color }
+                    if !v3UsageNotes.isEmpty { existing.usageNotes = v3UsageNotes }
+                    if !v3Channel.isEmpty { existing.channelName = v3Channel }
+                    existing.hasPurchaseLength = existing.length > 0
+                    existing.hasTotalPrice = existing.purchasePrice > 0
                     summary.fabricsUpdated += 1
                 } else {
                     let fabric = Fabric(
                         id: id,
                         name: row["name"] ?? "",
                         length: CSVValues.double(row["length"] ?? ""),
-                        width: CSVValues.double(row["width"] ?? ""),
+                        width: widthValue,
                         purchasePrice: CSVValues.double(row["purchasePrice"] ?? ""),
                         pricePerMeter: CSVValues.double(row["purchasePricePerMeter"] ?? ""),
                         purchaseDate: CSVValues.date(row["purchaseDate"] ?? ""),
@@ -306,8 +338,12 @@ enum CSVImporter {
                         updatedAt: CSVValues.date(row["modifiedAt"] ?? ""),
                         materialId: materialId,
                         channelId: channelId,
-                        tagIds: tagIDs
+                        tagIds: tagIDsAll,
+                        code: v3Code, materialName: v3Material, composition: v3Composition,
+                        colorName: v3Color, usageNotes: v3UsageNotes, channelName: v3Channel
                     )
+                    fabric.hasPurchaseLength = fabric.length > 0
+                    fabric.hasTotalPrice = fabric.purchasePrice > 0
                     store.fabrics.append(fabric)
                     fabricByID[id] = fabric
                     summary.fabricsAdded += 1
@@ -316,7 +352,7 @@ enum CSVImporter {
         }
 
         // 使用记录（fabric_images.csv 按要求忽略，不读）
-        if let text = texts["usage_records.csv"] {
+        if let text = texts["usage_records.csv"] ?? texts["usage_records_template.csv"] {
             for row in CSVParser.rowsByHeader(text) {
                 guard let id = CSVValues.uuid(row["id"] ?? ""),
                       let fabricID = CSVValues.uuid(row["fabricId"] ?? ""),
@@ -341,6 +377,32 @@ enum CSVImporter {
             }
         }
 
+        // 出售记录（V3 新增文件 sale_records.csv；旧包没有此文件时跳过）
+        if let text = texts["sale_records.csv"] ?? texts["sale_records_template.csv"] {
+            for row in CSVParser.rowsByHeader(text) {
+                guard let id = CSVValues.uuid(row["id"] ?? ""),
+                      let fabricID = CSVValues.uuid(row["fabricId"] ?? ""),
+                      fabricByID[fabricID] != nil else {
+                    summary.skipped += 1; continue
+                }
+                if let existing = store.saleRecords.first(where: { $0.id == id }) {
+                    existing.length = CSVValues.double(row["length"] ?? "")
+                    existing.channel = row["channel"] ?? ""
+                    existing.price = CSVValues.double(row["price"] ?? "")
+                    existing.date = CSVValues.date(row["date"] ?? "")
+                } else {
+                    store.saleRecords.append(SaleRecord(
+                        id: id, fabricId: fabricID,
+                        length: CSVValues.double(row["length"] ?? ""),
+                        channel: row["channel"] ?? "",
+                        price: CSVValues.double(row["price"] ?? ""),
+                        date: CSVValues.date(row["date"] ?? "")
+                    ))
+                }
+            }
+        }
+
+        store.normalizeLegacyFabrics()
         store.save()
         return summary
     }
@@ -410,7 +472,35 @@ enum CSVExporter {
         }
         files.append(("fabric_images.csv", imagesCSV))
 
+        var saleCSV = "id,fabricId,length,channel,price,date\n"
+        for s in store.saleRecords.sorted(by: { $0.date < $1.date }) {
+            let values = [s.id.uuidString, s.fabricId.uuidString, String(s.length), s.channel, String(s.price), CSVValues.dateString(s.date)]
+            saleCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
+        }
+        files.append(("sale_records.csv", saleCSV))
+
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("BucangExport-\(Int(Date().timeIntervalSince1970))", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var urls: [URL] = []
+        for (name, content) in files {
+            let url = dir.appendingPathComponent(name)
+            try? content.write(to: url, atomically: true, encoding: .utf8)
+            urls.append(url)
+        }
+        return urls
+    }
+
+    /// V3 全字段空模板：只含表头，填完回传可批量导入（走同一 CSVImporter）。
+    static func exportTemplateFiles() -> [URL] {
+        let files: [(String, String)] = [
+            ("fabrics_template.csv", "id,code,name,material,composition,color,widthCm,length,purchasePrice,purchaseDate,isFavorite,note,usageNotes,channel,tagNames\n"),
+            ("usage_records_template.csv", "id,fabricId,length,date,note\n"),
+            ("sale_records_template.csv", "id,fabricId,length,channel,price,date\n"),
+            ("works_template.csv", "id,name,startDate,finishDate,note\n"),
+            ("other_items_template.csv", "id,category,name,quantityText,price,channel,note\n"),
+            ("wishlist_template.csv", "id,name,note\n"),
+        ]
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("BucangTemplate-\(Int(Date().timeIntervalSince1970))", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var urls: [URL] = []
         for (name, content) in files {
