@@ -19,6 +19,12 @@ struct BucangApp: App {
 }
 
 struct ContentView: View {
+    @EnvironmentObject private var store: Store
+    @State private var pendingShareZipURL: URL?
+    @State private var showingShareZipConfirm = false
+    @State private var shareZipSummary: String?
+    @State private var showingShareZipSummary = false
+
     var body: some View {
         TabView {
             HomeView()
@@ -33,5 +39,35 @@ struct ContentView: View {
                 .tabItem { Label("我的", systemImage: "person.crop.circle") }
         }
         .tint(Design.accent)
+        // 文件 App 分享直导：用户在文件 App 长按 zip > 分享 > 布仓时，
+        // 系统把文件 URL 交给本 App；只认 .zip 后缀，其他文件忽略。
+        // 先弹确认，确认后才读文件并走和选择器同一条 ZipBackup.importZip。
+        .onOpenURL { url in
+            guard url.pathExtension.lowercased() == "zip" else { return }
+            pendingShareZipURL = url
+            showingShareZipConfirm = true
+        }
+        .alert("检测到分享的压缩包，是否导入到布仓？", isPresented: $showingShareZipConfirm) {
+            Button("导入") {
+                guard let url = pendingShareZipURL else { return }
+                let accessing = url.startAccessingSecurityScopedResource()
+                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                if let data = try? Data(contentsOf: url) {
+                    shareZipSummary = ZipBackup.importZip(data, store: store).text
+                } else {
+                    shareZipSummary = "读不到分享的压缩包文件。"
+                }
+                pendingShareZipURL = nil
+                showingShareZipSummary = true
+            }
+            Button("取消", role: .cancel) { pendingShareZipURL = nil }
+        } message: {
+            Text(pendingShareZipURL?.lastPathComponent ?? "")
+        }
+        .alert("导入结果", isPresented: $showingShareZipSummary) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(shareZipSummary ?? "")
+        }
     }
 }

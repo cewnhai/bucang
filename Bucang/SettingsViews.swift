@@ -18,16 +18,20 @@ enum DictKind: String, CaseIterable, Identifiable {
 // 只清布料（含使用记录）、作品、纸样、物品，字典保留（见 Models.swift 注释）。
 // 这里不悄悄改清空范围，只保留原有行为和原有提示。
 
+enum ImportKind {
+    case csv, zip
+}
+
 struct ProfileView: View {
     @EnvironmentObject private var store: Store
 
     @State private var showingImporter = false
+    @State private var importKind: ImportKind = .csv
     @State private var importSummary: String?
     @State private var showingSummary = false
     @State private var exportURLs: [URL] = []
     @State private var showingExporter = false
     @State private var showingClearConfirm = false
-    @State private var showingZipImporter = false
     @State private var zipDocument: ZipBackupDocument?
     @State private var showingZipExporter = false
 
@@ -69,7 +73,7 @@ struct ProfileView: View {
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
                             SectionHeaderView(title: "数据管理", subtitle: "CSV 是原数据格式，导入按原 UUID 更新不重复建")
-                            Button("导入原数据（选多个 CSV）") { showingImporter = true }
+                            Button("导入原数据（选多个 CSV）") { importKind = .csv; showingImporter = true }
                                 .buttonStyle(.borderedProminent)
                                 .tint(Design.accent)
                             Button("导出全部数据为 CSV") {
@@ -89,10 +93,10 @@ struct ProfileView: View {
                             }
                             .buttonStyle(.bordered)
                             .tint(Design.accent)
-                            Button("导入备份压缩包 (.zip)") { showingZipImporter = true }
+                            Button("导入备份压缩包 (.zip)") { importKind = .zip; showingImporter = true }
                                 .buttonStyle(.borderedProminent)
                                 .tint(Design.accent)
-                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。单 CSV 导入不读图片；压缩包导入会按原 zip 格式读 CSV + 图片，也能读自家备份（含 JSON 全量 + 图片）。")
+                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。单 CSV 导入不读图片；压缩包导入会按原 zip 格式读 CSV + 图片，也能读自家备份（含 JSON 全量 + 图片）。如果选不到文件，可在文件 App 里长按压缩包 > 分享 > 布仓直接导入。")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Divider()
@@ -140,36 +144,36 @@ struct ProfileView: View {
             .background(Design.background)
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.inline)
+            // 单一选择器：同一视图上挂两个 fileImporter 会冲突，导致
+            // zip 选择器实际按 CSV 类型过滤、zip 文件变灰选不了。
+            // zip 改用通用文件类型 UTType.data，让所有文件都可选，
+            // 再在代码里按 .zip 后缀校验，避免 UTType.zip 在
+            // iOS 16.3.1 上对别家 App 导出的 zip 过滤过严。
             .fileImporter(
                 isPresented: $showingImporter,
-                allowedContentTypes: [UTType.commaSeparatedText],
-                allowsMultipleSelection: true
+                allowedContentTypes: importKind == .zip ? [UTType.data] : [UTType.commaSeparatedText],
+                allowsMultipleSelection: importKind == .csv
             ) { result in
                 switch result {
                 case .success(let urls):
-                    let summary = CSVImporter.importFiles(urls, store: store)
-                    importSummary = summary.text
-                    showingSummary = true
-                case .failure(let error):
-                    importSummary = "选择文件失败：\(error.localizedDescription)"
-                    showingSummary = true
-                }
-            }
-            .fileImporter(
-                isPresented: $showingZipImporter,
-                allowedContentTypes: [UTType.zip],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    guard let url = urls.first else { break }
-                    let accessing = url.startAccessingSecurityScopedResource()
-                    defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-                    if let data = try? Data(contentsOf: url) {
-                        let summary = ZipBackup.importZip(data, store: store)
+                    if importKind == .csv {
+                        let summary = CSVImporter.importFiles(urls, store: store)
                         importSummary = summary.text
+                    } else if let url = urls.first {
+                        if url.pathExtension.lowercased() == "zip" {
+                            let accessing = url.startAccessingSecurityScopedResource()
+                            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                            if let data = try? Data(contentsOf: url) {
+                                let summary = ZipBackup.importZip(data, store: store)
+                                importSummary = summary.text
+                            } else {
+                                importSummary = "读不到压缩包文件。"
+                            }
+                        } else {
+                            importSummary = "请选择 .zip 文件，当前选的是 \(url.lastPathComponent)"
+                        }
                     } else {
-                        importSummary = "读不到压缩包文件。"
+                        importSummary = "没有选到文件。"
                     }
                     showingSummary = true
                 case .failure(let error):
