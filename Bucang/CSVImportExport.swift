@@ -165,6 +165,13 @@ struct ImportSummary {
 
 @MainActor
 enum CSVImporter {
+    /// 字典顺序列别名：原导出用 "order"，其他来源可能用 "sortOrder"，两者都接受，"order" 优先。
+    static func orderValue(_ row: [String: String]) -> Int {
+        let order = (row["order"] ?? "").trimmingCharacters(in: .whitespaces)
+        if !order.isEmpty { return CSVValues.int(order) }
+        return CSVValues.int(row["sortOrder"] ?? "")
+    }
+
     static func importFiles(_ urls: [URL], store: Store) -> ImportSummary {
         var summary = ImportSummary()
         var texts: [String: String] = [:]
@@ -200,10 +207,10 @@ enum CSVImporter {
                 if name.isEmpty { summary.skipped += 1; continue }
                 if let existing = tagByID[id] {
                     existing.name = name
-                    existing.sortOrder = CSVValues.int(row["order"] ?? "")
+                    existing.sortOrder = orderValue(row)
                     summary.tagsUpdated += 1
                 } else {
-                    let tag = Tag(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
+                    let tag = Tag(id: id, name: name, sortOrder: orderValue(row))
                     store.tags.append(tag)
                     tagByID[id] = tag
                     summary.tagsAdded += 1
@@ -217,10 +224,10 @@ enum CSVImporter {
                 if name.isEmpty { summary.skipped += 1; continue }
                 if let existing = materialByID[id] {
                     existing.name = name
-                    existing.sortOrder = CSVValues.int(row["order"] ?? "")
+                    existing.sortOrder = orderValue(row)
                     summary.materialsUpdated += 1
                 } else {
-                    let m = Material(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
+                    let m = Material(id: id, name: name, sortOrder: orderValue(row))
                     store.materials.append(m)
                     materialByID[id] = m
                     summary.materialsAdded += 1
@@ -234,10 +241,10 @@ enum CSVImporter {
                 if name.isEmpty { summary.skipped += 1; continue }
                 if let existing = channelByID[id] {
                     existing.name = name
-                    existing.sortOrder = CSVValues.int(row["order"] ?? "")
+                    existing.sortOrder = orderValue(row)
                     summary.channelsUpdated += 1
                 } else {
-                    let c = Channel(id: id, name: name, sortOrder: CSVValues.int(row["order"] ?? ""))
+                    let c = Channel(id: id, name: name, sortOrder: orderValue(row))
                     store.channels.append(c)
                     channelByID[id] = c
                     summary.channelsAdded += 1

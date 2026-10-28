@@ -27,6 +27,9 @@ struct ProfileView: View {
     @State private var exportURLs: [URL] = []
     @State private var showingExporter = false
     @State private var showingClearConfirm = false
+    @State private var showingZipImporter = false
+    @State private var zipDocument: ZipBackupDocument?
+    @State private var showingZipExporter = false
 
     var body: some View {
         NavigationStack {
@@ -75,7 +78,21 @@ struct ProfileView: View {
                             }
                             .buttonStyle(.bordered)
                             .tint(Design.accent)
-                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。图片文件按你的要求不导入。")
+                            Button("导出备份压缩包 (.zip)") {
+                                if let data = ZipBackup.buildExportData(store: store) {
+                                    zipDocument = ZipBackupDocument(data: data)
+                                    showingZipExporter = true
+                                } else {
+                                    importSummary = "生成备份压缩包失败，请重试。"
+                                    showingSummary = true
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(Design.accent)
+                            Button("导入备份压缩包 (.zip)") { showingZipImporter = true }
+                                .buttonStyle(.borderedProminent)
+                                .tint(Design.accent)
+                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。单 CSV 导入不读图片；压缩包导入会按原 zip 格式读 CSV + 图片，也能读自家备份（含 JSON 全量 + 图片）。")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Divider()
@@ -135,6 +152,39 @@ struct ProfileView: View {
                     showingSummary = true
                 case .failure(let error):
                     importSummary = "选择文件失败：\(error.localizedDescription)"
+                    showingSummary = true
+                }
+            }
+            .fileImporter(
+                isPresented: $showingZipImporter,
+                allowedContentTypes: [UTType.zip],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { break }
+                    let accessing = url.startAccessingSecurityScopedResource()
+                    defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                    if let data = try? Data(contentsOf: url) {
+                        let summary = ZipBackup.importZip(data, store: store)
+                        importSummary = summary.text
+                    } else {
+                        importSummary = "读不到压缩包文件。"
+                    }
+                    showingSummary = true
+                case .failure(let error):
+                    importSummary = "选择文件失败：\(error.localizedDescription)"
+                    showingSummary = true
+                }
+            }
+            .fileExporter(
+                isPresented: $showingZipExporter,
+                document: zipDocument,
+                contentType: UTType.zip,
+                defaultFilename: ZipBackup.defaultExportFileName()
+            ) { result in
+                if case .failure(let error) = result {
+                    importSummary = "导出压缩包失败：\(error.localizedDescription)"
                     showingSummary = true
                 }
             }

@@ -19,6 +19,7 @@
 		BD6ECAF590AB4ED3BDD9FD65 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BF3EC1971D7F68A9185777E /* HomeView.swift */; };
 		AA662385A46BD8F321671339 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 310895809D52998A95C086E6 /* StatsView.swift */; };
 		DAF753E8ACFB1472DEABD599 /* CreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FD60D85A823CF9DF974B1D /* CreationView.swift */; };
+		16BEC0643B3F67A9CE25D8C8 /* ZipBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DABF04A415FFD995DC97EC0 /* ZipBackup.swift */; };
 		D0687455C07D878E9DB04308 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 671E5B54412D9F8033A8454C /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -35,6 +36,7 @@
 		3BF3EC1971D7F68A9185777E /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		310895809D52998A95C086E6 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
 		09FD60D85A823CF9DF974B1D /* CreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationView.swift; sourceTree = "<group>"; };
+		9DABF04A415FFD995DC97EC0 /* ZipBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipBackup.swift; sourceTree = "<group>"; };
 		0683ECD9B7328DE45FCA9153 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		671E5B54412D9F8033A8454C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F5BF48AA40CAD7891EB709FC /* Bucang.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bucang.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -74,6 +76,7 @@
 				3BF3EC1971D7F68A9185777E /* HomeView.swift */,
 				310895809D52998A95C086E6 /* StatsView.swift */,
 				09FD60D85A823CF9DF974B1D /* CreationView.swift */,
+				9DABF04A415FFD995DC97EC0 /* ZipBackup.swift */,
 				0683ECD9B7328DE45FCA9153 /* Info.plist */, 
 				671E5B54412D9F8033A8454C /* Assets.xcassets */,
 			);
@@ -163,6 +166,7 @@
 				A4D6B6540E9F1F4252BB1477 /* SimpleRecordViews.swift in Sources */,
 				0D228C0A95BD12EE25122C92 /* SettingsViews.swift in Sources */,
 				DAF753E8ACFB1472DEABD599 /* CreationView.swift in Sources */,
+				16BEC0643B3F67A9CE25D8C8 /* ZipBackup.swift in Sources */,
 				AA662385A46BD8F321671339 /* StatsView.swift in Sources */,
 				BD6ECAF590AB4ED3BDD9FD65 /* HomeView.swift in Sources */,
 				5C7ECD0DF7FA13FEBF0D26C8 /* FabricImages.swift in Sources */,

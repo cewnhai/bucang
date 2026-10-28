@@ -1,16 +1,29 @@
 import SwiftUI
 
 // MARK: - 年轻化设计系统（全 App 共用一套，不许每个屏换一个主色）
-// 背景：暖灰白 #F6F7F9；卡片：纯白；主色：暖珊瑚橙（年轻、醒目、
-// 在浅色背景上对比足够）；次要文字：系统 secondary。
-// 全部用 iOS 16 已有 API：Color、cornerRadius、shadow、
+// 暗黑模式修复：以前 background/card/accentSoft 写死浅色，
+// 而文字用系统自适应 .primary/.secondary，暗黑下变白字，
+// 白字配白底/浅底就看不见了。现在全部改成自适应系统色，
+// 浅色下仍是暖灰白底 + 白卡片，暗黑下自动变深灰底 + 深灰卡片，
+// 文字 .primary/.secondary 在两种模式下都可读。不强制浅色模式。
+// 全部用 iOS 16 已有 API：Color(UIColor)、cornerRadius、shadow、
 // foregroundColor（不用 iOS 17 的 新版前景样式 API）。
 
 enum Design {
-    static let background = Color(red: 0.96, green: 0.97, blue: 0.98)
-    static let card = Color.white
+    // 系统分组背景：浅色 #F2F2F7 左右，深色接近黑色，自动适配。
+    static let background = Color(UIColor.systemGroupedBackground)
+    // 系统二级分组背景：浅色纯白，深色深灰，和 background 有明确分层。
+    static let card = Color(UIColor.secondarySystemGroupedBackground)
     static let accent = Color(red: 0.98, green: 0.45, blue: 0.29)
-    static let accentSoft = Color(red: 1.0, green: 0.93, blue: 0.90)
+    // 自适应柔和主色底：浅色浅桃红，深色深珊瑚色底，保证深色下
+    // 上面的珊瑚色图标/文字仍有对比，不会白底白字。
+    static let accentSoft = Color(UIColor { trait in
+        if trait.userInterfaceStyle == .dark {
+            return UIColor(red: 0.35, green: 0.18, blue: 0.14, alpha: 1.0)
+        } else {
+            return UIColor(red: 1.0, green: 0.93, blue: 0.90, alpha: 1.0)
+        }
+    })
     static let corner: CGFloat = 18
     static let smallCorner: CGFloat = 12
 }
@@ -28,7 +41,8 @@ struct CardView<Content: View>: View {
     }
 }
 
-// 胶囊筛选 chip：选中是主色底白字，未选中是白底深字。
+// 胶囊筛选 chip：选中是主色底白字（白字配珊瑚色，浅深色都可读），
+// 未选中是自适应卡片底 + 自适应 .primary 字，暗黑下不再是白底白字。
 struct ChipButton: View {
     var title: String
     var selected: Bool
@@ -41,7 +55,7 @@ struct ChipButton: View {
                 .foregroundColor(selected ? .white : .primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(selected ? Design.accent : Color.white)
+                .background(selected ? Design.accent : Design.card)
                 .cornerRadius(20)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)

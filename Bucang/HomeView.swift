@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // MARK: - 首页：总览仪表盘
-// 暖灰白背景 + 白卡片 + 珊瑚橙主色，和布料/统计/我的页同一套设计。
+// 自适应背景 + 自适应卡片 + 珊瑚橙主色，和布料/统计/我的页同一套设计（浅色/暗黑都可读）。
 
 struct HomeView: View {
     @EnvironmentObject private var store: Store
