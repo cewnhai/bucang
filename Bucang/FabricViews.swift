@@ -8,6 +8,7 @@ import UIKit
 // 最下剩余进度条（深蓝填充）+ 百分比 + 右侧蓝色方形 + 按钮填使用记录。
 // 剩余留空时不显示进度条；已出售且剩余为 0 时 + 按钮置灰禁用。
 
+@MainActor
 enum FabricStatusLabel {
     static func text(store: Store, fabric: Fabric) -> String { store.status(for: fabric) }
 }
