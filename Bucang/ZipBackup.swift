@@ -314,13 +314,15 @@ enum ZipBackup {
         }
         // 图片：按布料 + 出售记录 + 成品 + 其他 + 心愿单 + 脑洞去重文件名，只导本地确实存在的文件。
         var seen: Set<String> = []
-        let allImageNames = store.fabrics.flatMap({ $0.imageFileNames })
-            + store.saleRecords.flatMap({ $0.imageFileNames })
-            + store.works.flatMap({ $0.imageFileNames })
-            + store.otherItems.flatMap({ $0.imageFileNames })
-            + store.wishlistItems.flatMap({ $0.imageFileNames })
-            + store.brainstorms.flatMap({ $0.imageFileNames })
-        for name in allImageNames {
+        // 分段收集图片名，避免单行超长表达式导致编译器类型推导超时。
+        var zipImageNames: [String] = []
+        zipImageNames += store.fabrics.flatMap { $0.imageFileNames }
+        zipImageNames += store.saleRecords.flatMap { $0.imageFileNames }
+        zipImageNames += store.works.flatMap { $0.imageFileNames }
+        zipImageNames += store.otherItems.flatMap { $0.imageFileNames }
+        zipImageNames += store.wishlistItems.flatMap { $0.imageFileNames }
+        zipImageNames += store.brainstorms.flatMap { $0.imageFileNames }
+        for name in zipImageNames {
             if seen.contains(name) { continue }
             seen.insert(name)
             if let data = FabricImageStore.data(for: name) {

@@ -71,6 +71,7 @@ enum FabricSortMethod: String, CaseIterable, Identifiable {
 // MARK: - 脑洞转成品（详情页与表单共用）：
 // 新建 Work（标题→名称，内容→备注），把新成品 id 追加进 linkedWorkIds，
 // 状态置 已立项，记录 convertedWorkId；已转过则直接返回。
+@MainActor
 private func brainstormConvertToWork(store: Store, brainstorm: Brainstorm) {
     guard brainstorm.convertedWorkId == nil else { return }
     let work = Work(name: brainstorm.title, note: brainstorm.content)
@@ -346,7 +347,7 @@ struct BucangView: View {
 
     private var fabricTabView: some View {
         ScrollView {
-            LazyVStack(pinnedViews: [.sectionHeaders], spacing: 0) {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
                     fabricToolbar
                         .padding(.horizontal, 16)
@@ -856,7 +857,7 @@ struct BrainstormListView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(pinnedViews: [.sectionHeaders], spacing: 0) {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
                     searchRow
                         .padding(.horizontal, 16)
