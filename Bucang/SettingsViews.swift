@@ -869,7 +869,7 @@ struct CodeLevelEditView: View {
                         .font(.caption).foregroundColor(.secondary)
                 }
             } else {
-                Section("条目") {
+                Section(header: Text("条目"), footer: Text("关闭的条目在编号生成器里隐藏，不影响已有编号。")) {
                     ForEach(level.items) { item in
                         HStack(spacing: 8) {
                             Button(action: { editingItem = item }) {
@@ -902,8 +902,6 @@ struct CodeLevelEditView: View {
                         Button("添加条目", action: addItem)
                             .disabled(newItemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                } footer: {
-                    Text("关闭的条目在编号生成器里隐藏，不影响已有编号。")
                 }
             }
         }

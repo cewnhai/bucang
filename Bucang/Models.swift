@@ -858,7 +858,7 @@ final class Store: ObservableObject {
                 if let i = parts.indices.last(where: { !used.contains($0) }) {
                     segs[li] = parts[i]; used.insert(i)
                 }
-            } else if let i = parts.indices.first(where: { !used.contains($0) && level.items.contains(where: { $0.code == parts[$0] || $0.name == parts[$0] }) }) {
+            } else if let i = parts.indices.first(where: { idx in !used.contains(idx) && level.items.contains(where: { $0.code == parts[idx] || $0.name == parts[idx] }) }) {
                 segs[li] = parts[i]; used.insert(i)
             }
         }
