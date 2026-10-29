@@ -84,11 +84,9 @@ struct SettingsView: View {
     @State private var newMaterial = ""
     @State private var newCategory = ""
     @State private var newChannel = ""
-    @State private var newPattern = ""
     @State private var renamingMaterial: String?
     @State private var renamingCategory: String?
     @State private var renamingChannel: String?
-    @State private var renamingPattern: String?
     @State private var renameText = ""
     @State private var themePickerItems: [PhotosPickerItem] = []
     @State private var themeImageStamp = Date()
@@ -153,33 +151,33 @@ struct SettingsView: View {
 
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "编号体系", subtitle: "多级生成：颜色体系（第一级）+ 纹样（第二级）+ 该组合下序号（第三级）+ 自定义备注（后续级）")
-                            Text("第一级颜色：生成编号时每次选一个颜色作符号，色板与布料颜色字段相同；布料已填颜色时生成表会预选它。格式：[前缀-]颜色-纹样-001[-备注]，如 B-红-提花-001。")
-                                .font(.caption).foregroundColor(.secondary)
-                            SectionHeaderView(title: "纹样选项", subtitle: "第二级纹样，可增删改名")
-                            HStack {
-                                TextField("新增纹样", text: $newPattern)
-                                    .textFieldStyle(.roundedBorder)
-                                Button("添加") {
-                                    let name = newPattern.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    guard !name.isEmpty, !store.patternOptions.contains(name) else { return }
-                                    store.patternOptions.append(name); store.save(); newPattern = ""
-                                }
-                                .buttonStyle(.borderedProminent).tint(Design.accent)
-                            }
-                            ForEach(store.patternOptions, id: \.self) { option in
+                            SectionHeaderView(title: "编号体系", subtitle: "多级编号的层级与条目配置，历史编号不受影响")
+                            NavigationLink(destination: CodeLevelsEditorView()) {
                                 HStack {
-                                    Text(option)
+                                    Text("编号体系层级设置")
                                     Spacer()
-                                    Button("改名") { renamingPattern = option; renameText = option }
-                                        .font(.caption)
-                                    Button("删除", role: .destructive) {
-                                        store.patternOptions.removeAll { $0 == option }; store.save()
-                                    }
-                                    .font(.caption)
+                                    Text("\(store.codeLevels.count) 级").foregroundColor(.secondary)
+                                    Image(systemName: "chevron.right").foregroundColor(.secondary).font(.caption)
                                 }
-                                .padding(.vertical, 2)
+                                .foregroundColor(.primary)
+                                .padding(.vertical, 6)
                             }
+                            NavigationLink(destination: ColorItemsSettingsView()) {
+                                HStack {
+                                    Text("颜色选项")
+                                    Spacer()
+                                    if let colorLevel = store.codeLevels.first(where: { $0.kind == "color" }) {
+                                        Text("\(colorLevel.items.count) 条").foregroundColor(.secondary)
+                                    } else {
+                                        Text("未找到色系层级").foregroundColor(.secondary)
+                                    }
+                                    Image(systemName: "chevron.right").foregroundColor(.secondary).font(.caption)
+                                }
+                                .foregroundColor(.primary)
+                                .padding(.vertical, 6)
+                            }
+                            Text("关闭或删除层级只影响之后生成的新编号；历史编号保留，仍可按原编号筛选、排序。")
+                                .font(.caption).foregroundColor(.secondary)
                         }
                     }
 
@@ -217,7 +215,7 @@ struct SettingsView: View {
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
                             SectionHeaderView(title: "顶栏显示", subtitle: "布仓顶部一级 Tab 的可见性，布料始终显示、不可关闭")
-                            ForEach([("fabric", "布料"), ("work", "成品"), ("other", "其他"), ("wishlist", "心愿单")], id: \.0) { key, title in
+                            ForEach([("fabric", "布料"), ("work", "成品"), ("brainstorm", "脑洞"), ("other", "其他"), ("wishlist", "心愿单")], id: \.0) { key, title in
                                 if key == "fabric" {
                                     HStack { Text(title); Spacer(); Text("始终显示").font(.caption).foregroundColor(.secondary) }
                                 } else {
@@ -486,11 +484,11 @@ struct SettingsView: View {
                 Button("取消", role: .cancel) {}
             } message: { Text("此操作会删除本 App 里的全部布料、成品、其他、心愿单、使用与出售记录，无法恢复。先导出备份再清。") }
             .alert("改名", isPresented: Binding(
-                get: { renamingMaterial != nil || renamingCategory != nil || renamingChannel != nil || renamingPattern != nil },
-                set: { if !$0 { renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil; renamingPattern = nil } }
+                get: { renamingMaterial != nil || renamingCategory != nil || renamingChannel != nil },
+                set: { if !$0 { renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil } }
             )) {
                 TextField("新名称", text: $renameText)
-                Button("取消", role: .cancel) { renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil; renamingPattern = nil }
+                Button("取消", role: .cancel) { renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil }
                 Button("确定") {
                     let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !newName.isEmpty {
@@ -507,12 +505,9 @@ struct SettingsView: View {
                             for fabric in store.fabrics where fabric.channelName == old { fabric.channelName = newName }
                             for record in store.saleRecords where record.channel == old { record.channel = newName }
                         }
-                        if let old = renamingPattern, let idx = store.patternOptions.firstIndex(of: old) {
-                            store.patternOptions[idx] = newName
-                        }
                         store.save()
                     }
-                    renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil; renamingPattern = nil
+                    renamingMaterial = nil; renamingCategory = nil; renamingChannel = nil
                 }
             } message: { Text("改名会同步改已用该选项的记录。") }
         }
@@ -706,4 +701,294 @@ struct ActivityView: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: urls, applicationActivities: nil)
     }
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - 编号体系：层级与条目编辑（V8）
+
+// 层级种类标签（kind 只读展示，不允许改种类）。
+enum CodeKindLabel {
+    static let all: [(key: String, title: String)] = [
+        ("color", "色系"), ("pattern", "纹样"), ("sequence", "序号"), ("width", "幅宽"), ("note", "备注"),
+    ]
+    static func label(_ kind: String) -> String {
+        all.first { $0.key == kind }?.title ?? kind
+    }
+}
+
+// 设置 > 编号体系 > 编号体系层级设置：层级列表（排序/开关/删除/新增）。
+struct CodeLevelsEditorView: View {
+    @EnvironmentObject private var store: Store
+    @State private var newLevelName = ""
+    @State private var newLevelKind = "color"
+    @State private var deletingLevel: CodeLevel?
+
+    private func moveLevel(_ level: CodeLevel, by delta: Int) {
+        guard let idx = store.codeLevels.firstIndex(where: { $0.id == level.id }) else { return }
+        let target = idx + delta
+        guard target >= 0, target < store.codeLevels.count else { return }
+        store.codeLevels.swapAt(idx, target)
+        store.save()
+    }
+
+    private func addLevel() {
+        let name = newLevelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        store.codeLevels.append(CodeLevel(name: name, kind: newLevelKind, separatorBefore: "-"))
+        store.save()
+        newLevelName = ""
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(store.codeLevels) { level in
+                    let idx = store.codeLevels.firstIndex(where: { $0.id == level.id }) ?? 0
+                    NavigationLink(destination: CodeLevelEditView(level: level)) {
+                        HStack(spacing: 6) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(level.name.isEmpty ? "未命名层级" : level.name)
+                                Text(CodeKindLabel.label(level.kind))
+                                    .font(.caption).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Toggle("启用", isOn: Binding(
+                                get: { level.enabled },
+                                set: { level.enabled = $0; store.save() }
+                            ))
+                            .labelsHidden()
+                            Button(action: { moveLevel(level, by: -1) }) {
+                                Image(systemName: "chevron.up")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(idx == 0)
+                            Button(action: { moveLevel(level, by: 1) }) {
+                                Image(systemName: "chevron.down")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(idx == store.codeLevels.count - 1)
+                            Button(role: .destructive, action: { deletingLevel = level }) {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+            } footer: {
+                Text("关闭的层级不参与新编号生成（生成器里隐藏）；删除层级只影响之后生成的新编号，历史编号保留，仍可按原编号筛选、排序。")
+            }
+
+            Section("添加层级") {
+                TextField("层级名称（如 色系）", text: $newLevelName)
+                Picker("种类", selection: $newLevelKind) {
+                    ForEach(CodeKindLabel.all, id: \.key) { kind in
+                        Text(kind.title).tag(kind.key)
+                    }
+                }
+                if newLevelKind == "sequence",
+                   store.codeLevels.contains(where: { $0.kind == "sequence" }) {
+                    Text("已有序号层级，再添加一个可能让编号生成混乱（仍可继续）。")
+                        .font(.caption).foregroundColor(.orange)
+                }
+                Button("添加层级", action: addLevel)
+                    .disabled(newLevelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .navigationTitle("编号体系层级")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("删除层级", isPresented: Binding(
+            get: { deletingLevel != nil },
+            set: { if !$0 { deletingLevel = nil } }
+        )) {
+            Button("删除", role: .destructive) {
+                if let level = deletingLevel {
+                    store.codeLevels.removeAll { $0.id == level.id }
+                    store.save()
+                }
+                deletingLevel = nil
+            }
+            Button("取消", role: .cancel) { deletingLevel = nil }
+        } message: {
+            Text("删除后该段不再参与新编号生成，历史编号保留、不受影响。")
+        }
+    }
+}
+
+// 点某层级进入：改名 / 分隔符 / 序号位数 / 条目增删改开关。
+struct CodeLevelEditView: View {
+    @EnvironmentObject private var store: Store
+    let level: CodeLevel
+    @State private var newItemName = ""
+    @State private var newItemCode = ""
+    @State private var newItemIcon = ""
+    @State private var editingItem: CodeItem?
+    @State private var deletingItem: CodeItem?
+
+    private func addItem() {
+        let name = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        level.items.append(CodeItem(
+            name: name,
+            code: newItemCode.trimmingCharacters(in: .whitespacesAndNewlines),
+            icon: newItemIcon.trimmingCharacters(in: .whitespacesAndNewlines)
+        ))
+        store.save()
+        newItemName = ""; newItemCode = ""; newItemIcon = ""
+    }
+
+    var body: some View {
+        List {
+            Section("基本信息") {
+                TextField("层级名称", text: Binding(
+                    get: { level.name },
+                    set: { level.name = $0; store.save() }
+                ))
+                HStack {
+                    Text("种类")
+                    Spacer()
+                    Text(CodeKindLabel.label(level.kind)).foregroundColor(.secondary)
+                }
+                TextField("段前分隔符（如 -）", text: Binding(
+                    get: { level.separatorBefore },
+                    set: { level.separatorBefore = $0; store.save() }
+                ))
+                if level.kind == "sequence" {
+                    Stepper("序号位数：\(level.digits)", value: Binding(
+                        get: { level.digits },
+                        set: { level.digits = max(1, $0); store.save() }
+                    ), in: 1...6)
+                }
+                Toggle("启用", isOn: Binding(
+                    get: { level.enabled },
+                    set: { level.enabled = $0; store.save() }
+                ))
+            }
+
+            if level.kind == "sequence" {
+                Section {
+                    Text("序号自动递增，无需条目。")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            } else {
+                Section("条目") {
+                    ForEach(level.items) { item in
+                        HStack(spacing: 8) {
+                            Button(action: { editingItem = item }) {
+                                HStack(spacing: 8) {
+                                    if !item.icon.isEmpty { Text(item.icon) }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.name.isEmpty ? "未命名" : item.name)
+                                        Text("代码：\(item.code.isEmpty ? "—" : item.code)")
+                                            .font(.caption).foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                            Toggle("启用", isOn: Binding(
+                                get: { item.enabled },
+                                set: { item.enabled = $0; store.save() }
+                            ))
+                            .labelsHidden()
+                            Button(role: .destructive, action: { deletingItem = item }) {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    VStack(spacing: 8) {
+                        TextField("条目名称", text: $newItemName)
+                        TextField("条目代码", text: $newItemCode)
+                        TextField("图标（可选，如 🔴）", text: $newItemIcon)
+                        Button("添加条目", action: addItem)
+                            .disabled(newItemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                } footer: {
+                    Text("关闭的条目在编号生成器里隐藏，不影响已有编号。")
+                }
+            }
+        }
+        .navigationTitle(level.name.isEmpty ? "层级设置" : level.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $editingItem) { item in
+            CodeItemEditSheet(item: item)
+        }
+        .alert("删除条目", isPresented: Binding(
+            get: { deletingItem != nil },
+            set: { if !$0 { deletingItem = nil } }
+        )) {
+            Button("删除", role: .destructive) {
+                if let item = deletingItem {
+                    level.items.removeAll { $0.id == item.id }
+                    store.save()
+                }
+                deletingItem = nil
+            }
+            Button("取消", role: .cancel) { deletingItem = nil }
+        } message: {
+            Text("删除后该条目不再参与新编号生成，历史编号保留、不受影响。")
+        }
+    }
+}
+
+// 条目编辑弹层：名称 / 代码 / 图标 / 开关。
+struct CodeItemEditSheet: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    let item: CodeItem
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("名称", text: Binding(
+                    get: { item.name },
+                    set: { item.name = $0; store.save() }
+                ))
+                TextField("代码", text: Binding(
+                    get: { item.code },
+                    set: { item.code = $0; store.save() }
+                ))
+                TextField("图标（可选）", text: Binding(
+                    get: { item.icon },
+                    set: { item.icon = $0; store.save() }
+                ))
+                Toggle("启用", isOn: Binding(
+                    get: { item.enabled },
+                    set: { item.enabled = $0; store.save() }
+                ))
+            }
+            .navigationTitle("编辑条目")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// 设置 > 编号体系 > 颜色选项：直接编辑色系层级的条目。
+struct ColorItemsSettingsView: View {
+    @EnvironmentObject private var store: Store
+
+    private var colorLevel: CodeLevel? {
+        store.codeLevels.first { $0.kind == "color" }
+    }
+
+    var body: some View {
+        Group {
+            if let level = colorLevel {
+                CodeLevelEditView(level: level)
+            } else {
+                VStack(spacing: 12) {
+                    Text("未找到色系层级").font(.headline)
+                    Text("请先在编号体系层级设置里添加一个种类为“色系”的层级。")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                .padding()
+                .navigationTitle("颜色选项")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+    }
 }

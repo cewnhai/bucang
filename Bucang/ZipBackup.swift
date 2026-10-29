@@ -303,17 +303,24 @@ enum ZipBackup {
             fabrics: store.fabrics, usageRecords: store.usageRecords,
             works: store.works, patterns: store.patterns, items: store.items,
             saleRecords: store.saleRecords, otherItems: store.otherItems, wishlistItems: store.wishlistItems,
+            brainstorms: store.brainstorms,
             materialOptions: store.materialOptions, otherCategories: store.otherCategories,
             lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix,
-            channelOptions: store.channelOptions, patternOptions: store.patternOptions,
+            channelOptions: store.channelOptions, patternOptions: store.patternOptions, codeLevels: store.codeLevels,
             visibleTabs: store.visibleTabs, themeName: store.themeName
         )
         if let json = try? JSONEncoder().encode(storeData) {
             files.append((path: "\(rootFolder)/bucang-store.json", data: json))
         }
-        // 图片：按布料 + 出售记录去重文件名，只导本地确实存在的文件。
+        // 图片：按布料 + 出售记录 + 成品 + 其他 + 心愿单 + 脑洞去重文件名，只导本地确实存在的文件。
         var seen: Set<String> = []
-        for name in store.fabrics.flatMap({ $0.imageFileNames }) + store.saleRecords.flatMap({ $0.imageFileNames }) {
+        let allImageNames = store.fabrics.flatMap({ $0.imageFileNames })
+            + store.saleRecords.flatMap({ $0.imageFileNames })
+            + store.works.flatMap({ $0.imageFileNames })
+            + store.otherItems.flatMap({ $0.imageFileNames })
+            + store.wishlistItems.flatMap({ $0.imageFileNames })
+            + store.brainstorms.flatMap({ $0.imageFileNames })
+        for name in allImageNames {
             if seen.contains(name) { continue }
             seen.insert(name)
             if let data = FabricImageStore.data(for: name) {
@@ -363,7 +370,7 @@ enum ZipBackup {
             summary.restoredItems = decoded.items.count
             // 图片：全部 images/ 条目都复制回本地（按 basename 覆盖同名），
             // 再报告其中未被任何布料引用的（已复制，但可能是旧图）。
-            let referenced = Set(decoded.fabrics.flatMap { $0.imageFileNames } + decoded.saleRecords.flatMap { $0.imageFileNames })
+            let referenced = Set(decoded.fabrics.flatMap { $0.imageFileNames } + decoded.saleRecords.flatMap { $0.imageFileNames } + decoded.works.flatMap { $0.imageFileNames } + decoded.otherItems.flatMap { $0.imageFileNames } + decoded.wishlistItems.flatMap { $0.imageFileNames } + decoded.brainstorms.flatMap { $0.imageFileNames })
             for entry in read.entries where isImageEntry(entry.path) {
                 let name = basename(entry.path)
                 if FabricImageStore.saveData(entry.data, named: name) {

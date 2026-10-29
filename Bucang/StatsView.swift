@@ -62,6 +62,19 @@ struct ChartsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if store.totalMeters > 0 {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeaderView(title: "售出占比", subtitle: "售出米数 ÷ 购入总米数（购入总米数为 0 时不显示）")
+                        CardView {
+                            HStack {
+                                Text("已售出米数占比")
+                                Spacer()
+                                let pct = store.totalSoldMeters / store.totalMeters * 100
+                                Text(String(format: "%.1f%%", pct)).font(.headline)
+                            }
+                        }
+                    }
+                }
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeaderView(title: "按材质看金额分布", subtitle: "总价留空的布料不计入")
                     CardView {

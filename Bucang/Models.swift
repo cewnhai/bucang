@@ -83,6 +83,118 @@ enum FabricColors {
     }
 }
 
+// MARK: - 编号体系（V8：多层级编号，可在设置 > 编号体系里配置）
+// 默认 4 级：色系（12 色，代码 W/B/R/P/O/Y/G/L/Z/H/T/M）→ 纹样（1–6）
+// → 序号（2 位，"-" 分隔，按色系+纹样+幅宽范围独立递增，不回收）
+// → 幅宽（D 大身 / B 半幅 / J 卷布）。例：P1-01D。
+// 用户可增删改各级与条目、可开关；历史编号不受影响。
+
+final class CodeItem: Identifiable, Codable {
+    var id: UUID
+    var name: String   // 如 红
+    var code: String   // 如 R
+    var icon: String   // 如 🔴（可空）
+    var enabled: Bool
+    init(id: UUID = UUID(), name: String = "", code: String = "", icon: String = "", enabled: Bool = true) {
+        self.id = id; self.name = name; self.code = code; self.icon = icon; self.enabled = enabled
+    }
+    private enum CodingKeys: String, CodingKey { case id, name, code, icon, enabled }
+    required init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        code = try c.decodeIfPresent(String.self, forKey: .code) ?? ""
+        icon = try c.decodeIfPresent(String.self, forKey: .icon) ?? ""
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(name, forKey: .name)
+        try c.encode(code, forKey: .code); try c.encode(icon, forKey: .icon)
+        try c.encode(enabled, forKey: .enabled)
+    }
+}
+
+final class CodeLevel: Identifiable, Codable {
+    var id: UUID
+    var name: String            // 如 色系
+    var kind: String            // color / pattern / sequence / width / note
+    var separatorBefore: String // 该段与上一段之间的分隔符，如 "-"
+    var digits: Int             // 序号位数（sequence 用）
+    var enabled: Bool
+    var items: [CodeItem]
+    init(id: UUID = UUID(), name: String = "", kind: String = "note", separatorBefore: String = "-",
+         digits: Int = 2, enabled: Bool = true, items: [CodeItem] = []) {
+        self.id = id; self.name = name; self.kind = kind; self.separatorBefore = separatorBefore
+        self.digits = digits; self.enabled = enabled; self.items = items
+    }
+    private enum CodingKeys: String, CodingKey { case id, name, kind, separatorBefore, digits, enabled, items }
+    required init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? "note"
+        separatorBefore = try c.decodeIfPresent(String.self, forKey: .separatorBefore) ?? "-"
+        digits = try c.decodeIfPresent(Int.self, forKey: .digits) ?? 2
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        items = try c.decodeIfPresent([CodeItem].self, forKey: .items) ?? []
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(name, forKey: .name)
+        try c.encode(kind, forKey: .kind); try c.encode(separatorBefore, forKey: .separatorBefore)
+        try c.encode(digits, forKey: .digits); try c.encode(enabled, forKey: .enabled)
+        try c.encode(items, forKey: .items)
+    }
+}
+
+// MARK: - 脑洞（V8 新增：灵感想法，可关联布料/成品/其他，可转成品）
+
+final class Brainstorm: Identifiable, Codable {
+    var id: UUID
+    var title: String
+    var content: String
+    var imageFileNames: [String]
+    var linkedFabricIds: [UUID]
+    var linkedWorkIds: [UUID]
+    var linkedOtherIds: [UUID]
+    var status: String   // 想法中 / 已立项 / 已放弃
+    var createdAt: Date
+    var convertedWorkId: UUID?
+    init(id: UUID = UUID(), title: String = "", content: String = "", imageFileNames: [String] = [],
+         linkedFabricIds: [UUID] = [], linkedWorkIds: [UUID] = [], linkedOtherIds: [UUID] = [],
+         status: String = "想法中", createdAt: Date = Date(), convertedWorkId: UUID? = nil) {
+        self.id = id; self.title = title; self.content = content; self.imageFileNames = imageFileNames
+        self.linkedFabricIds = linkedFabricIds; self.linkedWorkIds = linkedWorkIds
+        self.linkedOtherIds = linkedOtherIds; self.status = status
+        self.createdAt = createdAt; self.convertedWorkId = convertedWorkId
+    }
+    private enum CodingKeys: String, CodingKey {
+        case id, title, content, imageFileNames, linkedFabricIds, linkedWorkIds, linkedOtherIds, status, createdAt, convertedWorkId
+    }
+    required init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        content = try c.decodeIfPresent(String.self, forKey: .content) ?? ""
+        imageFileNames = try c.decodeIfPresent([String].self, forKey: .imageFileNames) ?? []
+        linkedFabricIds = try c.decodeIfPresent([UUID].self, forKey: .linkedFabricIds) ?? []
+        linkedWorkIds = try c.decodeIfPresent([UUID].self, forKey: .linkedWorkIds) ?? []
+        linkedOtherIds = try c.decodeIfPresent([UUID].self, forKey: .linkedOtherIds) ?? []
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? "想法中"
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        convertedWorkId = try c.decodeIfPresent(UUID.self, forKey: .convertedWorkId)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(title, forKey: .title)
+        try c.encode(content, forKey: .content); try c.encode(imageFileNames, forKey: .imageFileNames)
+        try c.encode(linkedFabricIds, forKey: .linkedFabricIds); try c.encode(linkedWorkIds, forKey: .linkedWorkIds)
+        try c.encode(linkedOtherIds, forKey: .linkedOtherIds); try c.encode(status, forKey: .status)
+        try c.encode(createdAt, forKey: .createdAt); try c.encodeIfPresent(convertedWorkId, forKey: .convertedWorkId)
+    }
+}
+
 // MARK: - 长度单位（内部米，显示换算）
 
 enum LengthUnitHelper {
@@ -146,6 +258,10 @@ final class Fabric: Identifiable, Codable {
     var brainstorm: String
     var subCodes: [String]
     var videoFileNames: [String]
+    // V8 新增：codeSegments 生成时按层级顺序存每段（如 ["P","1","01","D"]），
+    // 用于层级排序；collapsedSections 存详情页收起的板块键，默认只收起"其他信息"。
+    var codeSegments: [String]
+    var collapsedSections: [String]
     var hasTotalPrice: Bool
     var hasPurchaseLength: Bool
 
@@ -175,7 +291,8 @@ final class Fabric: Identifiable, Codable {
         colorName: String = "", weightGsm: Double? = nil, shrinkagePct: Double? = nil,
         washing: [String] = [], usageNotes: String = "", channelName: String = "",
         merchantName: String = "", brainstorm: String = "", subCodes: [String] = [],
-        videoFileNames: [String] = [],
+        videoFileNames: [String] = [], codeSegments: [String] = [],
+        collapsedSections: [String] = ["other"],
         hasTotalPrice: Bool = true, hasPurchaseLength: Bool = true
     ) {
         self.id = id; self.name = name; self.length = length; self.width = width
@@ -189,7 +306,9 @@ final class Fabric: Identifiable, Codable {
         self.shrinkagePct = shrinkagePct; self.washing = washing; self.usageNotes = usageNotes
         self.channelName = channelName; self.merchantName = merchantName
         self.brainstorm = brainstorm; self.subCodes = subCodes
-        self.videoFileNames = videoFileNames; self.hasTotalPrice = hasTotalPrice
+        self.videoFileNames = videoFileNames; self.codeSegments = codeSegments
+        self.collapsedSections = collapsedSections
+        self.hasTotalPrice = hasTotalPrice
         self.hasPurchaseLength = hasPurchaseLength
     }
 
@@ -199,6 +318,7 @@ final class Fabric: Identifiable, Codable {
         case materialId, channelId, tagIds, imageFileNames
         case code, materialName, composition, colorName, weightGsm, shrinkagePct
         case washing, usageNotes, channelName, merchantName, brainstorm, subCodes, videoFileNames
+        case codeSegments, collapsedSections
         case hasTotalPrice, hasPurchaseLength
     }
 
@@ -234,6 +354,9 @@ final class Fabric: Identifiable, Codable {
         brainstorm = try c.decodeIfPresent(String.self, forKey: .brainstorm) ?? ""
         subCodes = try c.decodeIfPresent([String].self, forKey: .subCodes) ?? []
         videoFileNames = try c.decodeIfPresent([String].self, forKey: .videoFileNames) ?? []
+        codeSegments = try c.decodeIfPresent([String].self, forKey: .codeSegments) ?? []
+        // V8 前旧数据没有收起状态：默认只收起"其他信息"。
+        collapsedSections = try c.decodeIfPresent([String].self, forKey: .collapsedSections) ?? ["other"]
         // 旧数据没有这两个标志时按旧值推断：有价格/有长度即视为已填，0 视为未填。
         hasTotalPrice = try c.decodeIfPresent(Bool.self, forKey: .hasTotalPrice) ?? (purchasePrice > 0)
         hasPurchaseLength = try c.decodeIfPresent(Bool.self, forKey: .hasPurchaseLength) ?? (length > 0)
@@ -271,6 +394,8 @@ final class Fabric: Identifiable, Codable {
         try c.encode(brainstorm, forKey: .brainstorm)
         try c.encode(subCodes, forKey: .subCodes)
         try c.encode(videoFileNames, forKey: .videoFileNames)
+        try c.encode(codeSegments, forKey: .codeSegments)
+        try c.encode(collapsedSections, forKey: .collapsedSections)
         try c.encode(hasTotalPrice, forKey: .hasTotalPrice)
         try c.encode(hasPurchaseLength, forKey: .hasPurchaseLength)
     }
@@ -382,6 +507,9 @@ final class Work: Identifiable, Codable {
     var saleChannel: String
     var isUsed: Bool
     var usageCount: Int
+    // V8 新增：工费（非必填，留空不计入总成本）
+    var laborCost: Double
+    var hasLaborCost: Bool
     var isFinished: Bool { finishedAt != nil }
     init(
         id: UUID = UUID(), name: String = "", progress: Double = 0,
@@ -390,7 +518,8 @@ final class Work: Identifiable, Codable {
         note: String = "", createdAt: Date = Date(),
         imageFileNames: [String] = [], materials: [WorkMaterial] = [],
         isSold: Bool = false, salePrice: Double = 0, hasSalePrice: Bool = false,
-        saleDate: Date? = nil, saleChannel: String = "", isUsed: Bool = false, usageCount: Int = 0
+        saleDate: Date? = nil, saleChannel: String = "", isUsed: Bool = false, usageCount: Int = 0,
+        laborCost: Double = 0, hasLaborCost: Bool = false
     ) {
         self.id = id; self.name = name; self.progress = progress
         self.startedAt = startedAt; self.finishedAt = finishedAt
@@ -399,10 +528,12 @@ final class Work: Identifiable, Codable {
         self.imageFileNames = imageFileNames; self.materials = materials
         self.isSold = isSold; self.salePrice = salePrice; self.hasSalePrice = hasSalePrice
         self.saleDate = saleDate; self.saleChannel = saleChannel; self.isUsed = isUsed; self.usageCount = usageCount
+        self.laborCost = laborCost; self.hasLaborCost = hasLaborCost
     }
     private enum CodingKeys: String, CodingKey {
         case id, name, progress, startedAt, finishedAt, costPrice, sellPrice, timeHours, note, createdAt, imageFileNames, materials
         case isSold, salePrice, hasSalePrice, saleDate, saleChannel, isUsed, usageCount
+        case laborCost, hasLaborCost
     }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -425,6 +556,8 @@ final class Work: Identifiable, Codable {
         saleChannel = try c.decodeIfPresent(String.self, forKey: .saleChannel) ?? ""
         isUsed = try c.decodeIfPresent(Bool.self, forKey: .isUsed) ?? false
         usageCount = try c.decodeIfPresent(Int.self, forKey: .usageCount) ?? 0
+        laborCost = try c.decodeIfPresent(Double.self, forKey: .laborCost) ?? 0
+        hasLaborCost = try c.decodeIfPresent(Bool.self, forKey: .hasLaborCost) ?? (laborCost > 0)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -438,6 +571,7 @@ final class Work: Identifiable, Codable {
         try c.encode(hasSalePrice, forKey: .hasSalePrice); try c.encodeIfPresent(saleDate, forKey: .saleDate)
         try c.encode(saleChannel, forKey: .saleChannel); try c.encode(isUsed, forKey: .isUsed)
         try c.encode(usageCount, forKey: .usageCount)
+        try c.encode(laborCost, forKey: .laborCost); try c.encode(hasLaborCost, forKey: .hasLaborCost)
     }
 }
 
@@ -499,10 +633,14 @@ final class OtherItem: Identifiable, Codable {
 
 final class WishlistItem: Identifiable, Codable {
     var id: UUID; var name: String; var imageFileNames: [String]; var note: String; var createdAt: Date
-    init(id: UUID = UUID(), name: String = "", imageFileNames: [String] = [], note: String = "", createdAt: Date = Date()) {
+    // V8 新增：预估价（转入库时带入布料总价）
+    var estimatedPrice: Double; var hasEstimatedPrice: Bool
+    init(id: UUID = UUID(), name: String = "", imageFileNames: [String] = [], note: String = "", createdAt: Date = Date(),
+         estimatedPrice: Double = 0, hasEstimatedPrice: Bool = false) {
         self.id = id; self.name = name; self.imageFileNames = imageFileNames; self.note = note; self.createdAt = createdAt
+        self.estimatedPrice = estimatedPrice; self.hasEstimatedPrice = hasEstimatedPrice
     }
-    private enum CodingKeys: String, CodingKey { case id, name, imageFileNames, note, createdAt }
+    private enum CodingKeys: String, CodingKey { case id, name, imageFileNames, note, createdAt, estimatedPrice, hasEstimatedPrice }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -510,12 +648,15 @@ final class WishlistItem: Identifiable, Codable {
         imageFileNames = try c.decodeIfPresent([String].self, forKey: .imageFileNames) ?? []
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        estimatedPrice = try c.decodeIfPresent(Double.self, forKey: .estimatedPrice) ?? 0
+        hasEstimatedPrice = try c.decodeIfPresent(Bool.self, forKey: .hasEstimatedPrice) ?? (estimatedPrice > 0)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id); try c.encode(name, forKey: .name)
         try c.encode(imageFileNames, forKey: .imageFileNames); try c.encode(note, forKey: .note)
         try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(estimatedPrice, forKey: .estimatedPrice); try c.encode(hasEstimatedPrice, forKey: .hasEstimatedPrice)
     }
 }
 
@@ -533,13 +674,17 @@ struct StoreData: Codable {
     var saleRecords: [SaleRecord] = []
     var otherItems: [OtherItem] = []
     var wishlistItems: [WishlistItem] = []
+    var brainstorms: [Brainstorm] = []
     var materialOptions: [String] = []
     var otherCategories: [String] = []
     var lengthUnit: String = "米"
     var hideAmounts: Bool = false
     var codePrefix: String = ""
     var channelOptions: [String] = []
+    // patternOptions：Build #12 的旧纹样选项，V8 起编号体系改用 codeLevels，
+    // 该字段仅为数据兼容保留，UI 不再展示。
     var patternOptions: [String] = []
+    var codeLevels: [CodeLevel] = []
     var visibleTabs: [String] = []
     var themeName: String = "深蓝"
 }
@@ -557,13 +702,16 @@ final class Store: ObservableObject {
     @Published var saleRecords: [SaleRecord] = []
     @Published var otherItems: [OtherItem] = []
     @Published var wishlistItems: [WishlistItem] = []
+    @Published var brainstorms: [Brainstorm] = []
     @Published var materialOptions: [String] = []
     @Published var otherCategories: [String] = []
     @Published var lengthUnit: String = "米"
     @Published var hideAmounts: Bool = false
     @Published var codePrefix: String = ""
     @Published var channelOptions: [String] = []
+    // patternOptions 仅数据兼容保留，V8 UI 不再使用（改用 codeLevels）。
     @Published var patternOptions: [String] = []
+    @Published var codeLevels: [CodeLevel] = []
     @Published var visibleTabs: [String] = []
     @Published var themeName: String = "深蓝"
 
@@ -571,7 +719,37 @@ final class Store: ObservableObject {
     static let defaultOtherCategories = ["其他"]
     static let defaultChannelOptions = ["淘宝", "闲鱼", "小红书"]
     static let defaultPatternOptions = ["素色", "提花", "印花", "格纹", "条纹", "碎花", "暗花", "缎面"]
-    static let allTabKeys = ["fabric", "work", "other", "wishlist"]
+    static let allTabKeys = ["fabric", "work", "brainstorm", "other", "wishlist"]
+    static let defaultVisibleTabs = ["fabric", "work", "brainstorm", "wishlist"]
+    // V8 状态胶囊：7 级。派生优先级见 status(for:)：
+    // 已出售（售出且剩余 0）＞ 部分出售（售出且剩余 >0）＞ 已用完 ＞ 使用中 ＞ 未使用。
+    // 说明文档原表把“使用中”排在“已用完”前会使已用完永远不可达，此处按可达的合理
+    // 口径实现（剩余为 0 且有用过 → 已用完，否则有用过 → 使用中）。
+    static let statusCapsules = ["全部", "收藏", "未使用", "使用中", "已用完", "部分出售", "已出售"]
+    // 旧颜色名 → 新色系表名（V8 编号体系的色系级）。不在映射里且不在色系表里的
+    // 名字保留原样，code 查不到（显示时只显示名字）。
+    static let oldColorNameMap = ["棕": "茶", "米": "茶", "多彩": "多"]
+
+    static func defaultCodeLevels() -> [CodeLevel] {
+        let colorItems = [
+            ("白", "W", "⚪"), ("黑", "B", "⚫"), ("红", "R", "🔴"), ("粉", "P", "🌸"),
+            ("橙", "O", "🟠"), ("黄", "Y", "🟡"), ("绿", "G", "🟢"), ("蓝", "L", "🔵"),
+            ("紫", "Z", "🟣"), ("灰", "H", "🔘"), ("茶", "T", "🟤"), ("多", "M", "🌈"),
+        ].map { CodeItem(name: $0.0, code: $0.1, icon: $0.2) }
+        let patternItems = [
+            ("无地", "1"), ("小纹", "2"), ("付下", "3"),
+            ("绞染/絣", "4"), ("刺绣", "5"), ("段染/霞染", "6"),
+        ].map { CodeItem(name: $0.0, code: $0.1) }
+        let widthItems = [
+            ("大身", "D"), ("半幅", "B"), ("卷布", "J"),
+        ].map { CodeItem(name: $0.0, code: $0.1) }
+        return [
+            CodeLevel(name: "色系", kind: "color", separatorBefore: "", items: colorItems),
+            CodeLevel(name: "纹样", kind: "pattern", separatorBefore: "", items: patternItems),
+            CodeLevel(name: "序号", kind: "sequence", separatorBefore: "-", digits: 2),
+            CodeLevel(name: "幅宽", kind: "width", separatorBefore: "", items: widthItems),
+        ]
+    }
 
     init() { load() }
 
@@ -593,13 +771,21 @@ final class Store: ObservableObject {
         works = decoded.works; patterns = decoded.patterns; items = decoded.items
         saleRecords = decoded.saleRecords; otherItems = decoded.otherItems
         wishlistItems = decoded.wishlistItems
+        brainstorms = decoded.brainstorms
         materialOptions = decoded.materialOptions.isEmpty ? Self.defaultMaterialOptions : decoded.materialOptions
         otherCategories = decoded.otherCategories.isEmpty ? Self.defaultOtherCategories : decoded.otherCategories
         lengthUnit = ["米", "厘米", "码"].contains(decoded.lengthUnit) ? decoded.lengthUnit : "米"
         hideAmounts = decoded.hideAmounts; codePrefix = decoded.codePrefix
         channelOptions = decoded.channelOptions.isEmpty ? Self.defaultChannelOptions : decoded.channelOptions
         patternOptions = decoded.patternOptions.isEmpty ? Self.defaultPatternOptions : decoded.patternOptions
-        visibleTabs = decoded.visibleTabs.isEmpty ? Self.allTabKeys : decoded.visibleTabs.filter { Self.allTabKeys.contains($0) }
+        codeLevels = decoded.codeLevels.isEmpty ? Self.defaultCodeLevels() : decoded.codeLevels
+        if decoded.visibleTabs.isEmpty {
+            visibleTabs = Self.defaultVisibleTabs
+        } else {
+            // 老用户迁移：补上 V8 新增的 brainstrom tab，保证能看到新 Tab。
+            visibleTabs = decoded.visibleTabs.filter { Self.allTabKeys.contains($0) }
+            if !visibleTabs.contains("brainstorm") { visibleTabs.append("brainstorm") }
+        }
         if !visibleTabs.contains("fabric") { visibleTabs.insert("fabric", at: 0) }
         themeName = decoded.themeName.isEmpty ? "深蓝" : decoded.themeName
         normalizeLegacyFabrics()
@@ -625,12 +811,148 @@ final class Store: ObservableObject {
         for fabric in fabrics where !fabric.materialName.isEmpty && !materialOptions.contains(fabric.materialName) {
             materialOptions.append(fabric.materialName)
         }
-        for name in channels.map({ $0.name }) where !name.isEmpty && !channelOptions.contains(name) {
-            channelOptions.append(name)
-        }
-        for fabric in fabrics where !fabric.channelName.isEmpty && !channelOptions.contains(fabric.channelName) {
+            for fabric in fabrics where !fabric.channelName.isEmpty && !channelOptions.contains(fabric.channelName) {
             channelOptions.append(fabric.channelName)
         }
+        // V8 颜色迁移：旧颜色名按 oldColorNameMap 映射到新色系表（棕/米→茶，多彩→多），
+        // 其余旧名原样保留；色系表里查不到 code 的显示时只显示名字。
+        for fabric in fabrics {
+            if let mapped = Self.oldColorNameMap[fabric.colorName] {
+                fabric.colorName = mapped
+            }
+        }
+    }
+
+    // MARK: - 编号体系（V8）
+
+    /// 启用的层级（按数组顺序）。
+    func levelOrder() -> [CodeLevel] { codeLevels.filter { $0.enabled } }
+
+    /// 按颜色名查色系条目（含旧名映射），找不到返回 nil。
+    func colorItem(forName name: String) -> CodeItem? {
+        let mapped = Self.oldColorNameMap[name] ?? name
+        return codeLevels.first { $0.kind == "color" }?.items.first { $0.enabled && $0.name == mapped }
+    }
+    func colorCode(forName name: String) -> String? { colorItem(forName: name)?.code }
+
+    /// 布料各段：优先用生成时存的 codeSegments，否则尽力解析旧编号。
+    func segments(of fabric: Fabric) -> [String] {
+        if !fabric.codeSegments.isEmpty { return fabric.codeSegments }
+        return parseSegments(code: fabric.code)
+    }
+
+    /// 尽力解析：按 -/_/空格拆分，与各级条目的 code/name 贪心匹配。
+    func parseSegments(code: String) -> [String] {
+        let levels = levelOrder()
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let parts = trimmed.split { $0 == "-" || $0 == "_" || $0 == " " }.map(String.init)
+        var segs = Array(repeating: "", count: levels.count)
+        var used = Set<Int>()
+        for (li, level) in levels.enumerated() {
+            if level.kind == "sequence" {
+                if let i = parts.indices.first(where: { !used.contains($0) && Int(parts[$0]) != nil }) {
+                    segs[li] = parts[i]; used.insert(i)
+                }
+            } else if level.kind == "note" {
+                if let i = parts.indices.last(where: { !used.contains($0) }) {
+                    segs[li] = parts[i]; used.insert(i)
+                }
+            } else if let i = parts.indices.first(where: { !used.contains($0) && level.items.contains(where: { $0.code == parts[$0] || $0.name == parts[$0] }) }) {
+                segs[li] = parts[i]; used.insert(i)
+            }
+        }
+        return segs
+    }
+
+    /// 按 kind 取某段（找不到返回 ""）。
+    func segmentForKind(_ fabric: Fabric, kind: String) -> String {
+        let levels = levelOrder()
+        let segs = segments(of: fabric)
+        guard let idx = levels.firstIndex(where: { $0.kind == kind }), idx < segs.count else { return "" }
+        return segs[idx]
+    }
+
+    /// 某 色系+纹样+幅宽 范围下已占用的序号（不回收删除产生的空号）。
+    func occupiedSequences(colorCode: String, patternCode: String, widthCode: String) -> Set<Int> {
+        var set = Set<Int>()
+        for f in fabrics {
+            if segmentForKind(f, kind: "color") == colorCode,
+               segmentForKind(f, kind: "pattern") == patternCode,
+               segmentForKind(f, kind: "width") == widthCode,
+               let n = Int(segmentForKind(f, kind: "sequence")) {
+                set.insert(n)
+            }
+        }
+        return set
+    }
+    /// 该范围内下一个可用序号。
+    func nextSequenceNumber(colorCode: String, patternCode: String, widthCode: String) -> Int {
+        let occ = occupiedSequences(colorCode: colorCode, patternCode: patternCode, widthCode: widthCode)
+        var n = 1
+        while occ.contains(n) { n += 1 }
+        return n
+    }
+
+    /// 生成编号：values 按 level.id 存每级选中的段值（sequence 存数字字符串）。
+    /// 返回 (编号, 各段)。首段直接拼，后续段用本级的 separatorBefore 连接。
+    func generateCode(values: [UUID: String]) -> (code: String, segments: [String]) {
+        let levels = levelOrder()
+        var segments: [String] = []
+        var code = ""
+        for (idx, level) in levels.enumerated() {
+            let v = values[level.id] ?? ""
+            segments.append(v)
+            if idx == 0 { code = v } else { code += level.separatorBefore + v }
+        }
+        return (code, segments)
+    }
+
+    /// 子编号自动延续：主编号 + "-1"、"-2"……（全局唯一）。
+    func nextSubCode(for fabric: Fabric) -> String {
+        let base = fabric.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return "" }
+        var n = 1
+        while codeConflict(code: "\(base)-\(n)", excluding: fabric.id) != nil { n += 1 }
+        return "\(base)-\(n)"
+    }
+
+    /// 编号层级排序：按层级顺序逐段比。sequence 按数字；note 按字符串；
+    /// 其余级按该段在条目表里的顺序；未知/缺失的段排最后；最后回退字符串比较。
+    func hierarchicalCompare(_ a: Fabric, _ b: Fabric) -> ComparisonResult {
+        let levels = levelOrder()
+        let sa = segments(of: a), sb = segments(of: b)
+        for (idx, level) in levels.enumerated() {
+            let x = idx < sa.count ? sa[idx] : "", y = idx < sb.count ? sb[idx] : ""
+            if x == y { continue }
+            switch level.kind {
+            case "sequence":
+                let nx = Int(x), ny = Int(y)
+                if let nx, let ny {
+                    if nx != ny { return nx < ny ? .orderedAscending : .orderedDescending }
+                } else if nx != nil { return .orderedAscending }
+                else if ny != nil { return .orderedDescending }
+                else {
+                    let r = x.localizedCompare(y)
+                    if r != .orderedSame { return r }
+                }
+            case "note":
+                let r = x.localizedCompare(y)
+                if r != .orderedSame { return r }
+            default:
+                let ix = level.items.firstIndex(where: { $0.code == x || $0.name == x })
+                let iy = level.items.firstIndex(where: { $0.code == y || $0.name == y })
+                if let ix, let iy {
+                    if ix != iy { return ix < iy ? .orderedAscending : .orderedDescending }
+                } else if ix != nil { return .orderedAscending }
+                else if iy != nil { return .orderedDescending }
+                else {
+                    let r = x.localizedCompare(y)
+                    if r != .orderedSame { return r }
+                }
+            }
+        }
+        return a.code.localizedCompare(b.code)
     }
 
     func save() {
@@ -641,9 +963,10 @@ final class Store: ObservableObject {
             fabrics: fabrics, usageRecords: usageRecords,
             works: works, patterns: patterns, items: items,
             saleRecords: saleRecords, otherItems: otherItems, wishlistItems: wishlistItems,
+            brainstorms: brainstorms,
             materialOptions: materialOptions, otherCategories: otherCategories,
             lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix,
-            channelOptions: channelOptions, patternOptions: patternOptions,
+            channelOptions: channelOptions, patternOptions: patternOptions, codeLevels: codeLevels,
             visibleTabs: visibleTabs, themeName: themeName
         )
         if let encoded = try? JSONEncoder().encode(data) {
@@ -668,9 +991,12 @@ final class Store: ObservableObject {
         return max(0, fabric.length - fabric.usedLength - soldLength(for: fabric.id))
     }
     func status(for fabric: Fabric) -> String {
+        // V8 七级：已出售（售出且剩余 0）＞ 部分出售（售出且剩余 >0）＞
+        // 已用完（剩余 0 且有用过）＞ 使用中（有用过）＞ 未使用。
         let sold = soldLength(for: fabric.id)
         let rem = remaining(for: fabric)
         if sold > 0 && fabric.hasPurchaseLength && rem == 0 { return "已出售" }
+        if sold > 0 { return "部分出售" }
         if fabric.hasPurchaseLength && rem == 0 && fabric.usedLength > 0 { return "已用完" }
         if fabric.usedLength > 0 { return "使用中" }
         return "未使用"
@@ -689,6 +1015,11 @@ final class Store: ObservableObject {
             }
         }
         return (total, missing)
+    }
+    /// V8：成品总成本 = 用料成本合计 + 工费（工费未填则不计入）。
+    func workTotalCost(for work: Work) -> Double {
+        let (mat, _) = workCost(for: work)
+        return mat + (work.hasLaborCost ? work.laborCost : 0)
     }
     var totalValue: Double { fabrics.filter { $0.hasTotalPrice }.reduce(0) { $0 + $1.purchasePrice } }
     var totalMeters: Double { fabrics.filter { $0.hasPurchaseLength }.reduce(0) { $0 + $1.length } }
@@ -733,6 +1064,24 @@ final class Store: ObservableObject {
     func addItem(_ item: Item) { items.append(item); save() }
     func addOtherItem(_ item: OtherItem) { otherItems.append(item); save() }
     func addWishlistItem(_ item: WishlistItem) { wishlistItems.append(item); save() }
+    func addBrainstorm(_ b: Brainstorm) { brainstorms.append(b); save() }
+
+    func brainstorms(forFabric id: UUID) -> [Brainstorm] {
+        brainstorms.filter { $0.linkedFabricIds.contains(id) }.sorted { $0.createdAt > $1.createdAt }
+    }
+    func brainstorms(forWork id: UUID) -> [Brainstorm] {
+        brainstorms.filter { $0.linkedWorkIds.contains(id) }.sorted { $0.createdAt > $1.createdAt }
+    }
+    func brainstorms(forOther id: UUID) -> [Brainstorm] {
+        brainstorms.filter { $0.linkedOtherIds.contains(id) }.sorted { $0.createdAt > $1.createdAt }
+    }
+    func deleteBrainstorm(_ b: Brainstorm) {
+        if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("bucang-images") {
+            for name in b.imageFileNames { try? FileManager.default.removeItem(at: dir.appendingPathComponent(name)) }
+        }
+        brainstorms.removeAll { $0.id == b.id }; save()
+    }
 
     func deleteTag(_ tag: Tag) {
         tags.removeAll { $0.id == tag.id }
@@ -758,30 +1107,8 @@ final class Store: ObservableObject {
         }
         return nil
     }
-    // 多级编号：[前缀-]颜色-纹样-001[-自定义备注]，序号按颜色+纹样组合独立递增。
-    func nextCode(color: String, pattern: String, customSuffix: String) -> String {
-        let prefix = codePrefix.trimmingCharacters(in: .whitespacesAndNewlines)
-        var maxSeq = 0
-        let allCodes = fabrics.flatMap { [$0.code] + $0.subCodes }
-        for code in allCodes {
-            let parts = code.split(separator: "-").map(String.init)
-            let seqIndex: Int?
-            if !prefix.isEmpty && parts.count >= 4 && parts[0] == prefix && parts[1] == color && parts[2] == pattern {
-                seqIndex = 3
-            } else if prefix.isEmpty && parts.count >= 3 && parts[0] == color && parts[1] == pattern {
-                seqIndex = 2
-            } else { seqIndex = nil }
-            if let idx = seqIndex, let n = Int(parts[idx]) { maxSeq = max(maxSeq, n) }
-        }
-        var seq = maxSeq + 1
-        while true {
-            let base = prefix.isEmpty ? "\(color)-\(pattern)-\(String(format: "%03d", seq))" : "\(prefix)-\(color)-\(pattern)-\(String(format: "%03d", seq))"
-            let suffix = customSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
-            let candidate = suffix.isEmpty ? base : "\(base)-\(suffix)"
-            if codeConflict(code: candidate, excluding: UUID()) == nil { return candidate }
-            seq += 1
-        }
-    }
+    // 旧 nextCode（Build #12 颜色+纹样生成器）已被 V8 编号体系取代，
+    // 生成逻辑见本文件 MARK: - 编号体系（V8）与 FabricViews 的新生成表。
     func deleteFabric(_ fabric: Fabric) {
         if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
             .appendingPathComponent("bucang-images") {

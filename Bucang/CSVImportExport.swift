@@ -295,6 +295,13 @@ enum CSVImporter {
                 let v3Color = (row["color"] ?? "").trimmingCharacters(in: .whitespaces)
                 let v3UsageNotes = (row["usageNotes"] ?? "").trimmingCharacters(in: .whitespaces)
                 let v3Channel = (row["channel"] ?? "").trimmingCharacters(in: .whitespaces)
+                // V8 新列：subCodes（用 | 分隔，编号里不含 |）/ merchant（→ merchantName）；
+                // 缺列时保持原值，不编造。
+                let v3SubCodes = (row["subCodes"] ?? "")
+                    .split(separator: "|")
+                    .map { String($0).trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+                let v3Merchant = (row["merchant"] ?? "").trimmingCharacters(in: .whitespaces)
                 let widthCmText = (row["widthCm"] ?? "").trimmingCharacters(in: .whitespaces)
                 let widthValue: Double = !widthCmText.isEmpty ? CSVValues.double(widthCmText) / 100 : CSVValues.double(row["width"] ?? "")
                 // tagNames：按名称匹配已有标签，缺失则新建（模板批量导入用）。
@@ -330,6 +337,8 @@ enum CSVImporter {
                     if !v3Color.isEmpty { existing.colorName = v3Color }
                     if !v3UsageNotes.isEmpty { existing.usageNotes = v3UsageNotes }
                     if !v3Channel.isEmpty { existing.channelName = v3Channel }
+                    if !v3SubCodes.isEmpty { existing.subCodes = v3SubCodes }
+                    if !v3Merchant.isEmpty { existing.merchantName = v3Merchant }
                     existing.hasPurchaseLength = existing.length > 0
                     existing.hasTotalPrice = existing.purchasePrice > 0
                     summary.fabricsUpdated += 1
@@ -352,7 +361,8 @@ enum CSVImporter {
                         channelId: channelId,
                         tagIds: tagIDsAll,
                         code: v3Code, materialName: v3Material, composition: v3Composition,
-                        colorName: v3Color, usageNotes: v3UsageNotes, channelName: v3Channel
+                        colorName: v3Color, usageNotes: v3UsageNotes, channelName: v3Channel,
+                        merchantName: v3Merchant, subCodes: v3SubCodes
                     )
                     fabric.hasPurchaseLength = fabric.length > 0
                     fabric.hasTotalPrice = fabric.purchasePrice > 0
@@ -445,7 +455,7 @@ enum CSVExporter {
         for c in channels { channelsCSV += [c.id.uuidString, c.name, String(c.sortOrder)].map(CSVParser.escape).joined(separator: ",") + "\n" }
         files.append(("channels.csv", channelsCSV))
 
-        var fabricsCSV = "id,name,length,width,purchasePrice,purchasePricePerMeter,purchaseDate,usedLength,isFavorite,createdAt,modifiedAt,status,note,materialId,purchaseChannelId,tagIds\n"
+        var fabricsCSV = "id,name,length,width,purchasePrice,purchasePricePerMeter,purchaseDate,usedLength,isFavorite,createdAt,modifiedAt,status,note,materialId,purchaseChannelId,tagIds,subCodes,merchant\n"
         for f in fabrics {
             let values = [
                 f.id.uuidString, f.name, String(f.length), String(f.width),
@@ -455,7 +465,8 @@ enum CSVExporter {
                 CSVValues.dateString(f.createdAt), CSVValues.dateString(f.updatedAt),
                 String(f.status), f.note,
                 f.materialId?.uuidString ?? "", f.channelId?.uuidString ?? "",
-                f.tagIds.map { $0.uuidString }.joined(separator: ";")
+                f.tagIds.map { $0.uuidString }.joined(separator: ";"),
+                f.subCodes.joined(separator: "|"), f.merchantName
             ]
             fabricsCSV += values.map(CSVParser.escape).joined(separator: ",") + "\n"
         }
@@ -505,7 +516,7 @@ enum CSVExporter {
     /// V3 全字段空模板：只含表头，填完回传可批量导入（走同一 CSVImporter）。
     static func exportTemplateFiles() -> [URL] {
         let files: [(String, String)] = [
-            ("fabrics_template.csv", "id,code,name,material,composition,color,widthCm,length,purchasePrice,purchaseDate,isFavorite,note,usageNotes,channel,tagNames\n"),
+            ("fabrics_template.csv", "id,code,name,material,composition,color,widthCm,length,purchasePrice,purchaseDate,isFavorite,note,usageNotes,channel,tagNames,subCodes,merchant\n"),
             ("usage_records_template.csv", "id,fabricId,length,date,note\n"),
             ("sale_records_template.csv", "id,fabricId,length,channel,price,date\n"),
             ("works_template.csv", "id,name,startDate,finishDate,note\n"),

@@ -218,9 +218,10 @@ final class WebDAVManager: ObservableObject {
             fabrics: store.fabrics, usageRecords: store.usageRecords,
             works: store.works, patterns: store.patterns, items: store.items,
             saleRecords: store.saleRecords, otherItems: store.otherItems, wishlistItems: store.wishlistItems,
+            brainstorms: store.brainstorms,
             materialOptions: store.materialOptions, otherCategories: store.otherCategories,
             lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix,
-            channelOptions: store.channelOptions, patternOptions: store.patternOptions,
+            channelOptions: store.channelOptions, patternOptions: store.patternOptions, codeLevels: store.codeLevels,
             visibleTabs: store.visibleTabs, themeName: store.themeName
         )
         guard let json = try? JSONEncoder().encode(data) else {
@@ -247,7 +248,7 @@ final class WebDAVManager: ObservableObject {
 
         // 图片：先尝试建 bucang-images 目录（已存在会返回 405 之类，忽略），再逐张 PUT。
         // 出售记录图片也在同一目录，同样备份。
-        let imageNames = Array(Set(store.fabrics.flatMap { $0.imageFileNames } + store.saleRecords.flatMap { $0.imageFileNames })).sorted()
+        let imageNames = Array(Set(store.fabrics.flatMap { $0.imageFileNames } + store.saleRecords.flatMap { $0.imageFileNames } + store.works.flatMap { $0.imageFileNames } + store.otherItems.flatMap { $0.imageFileNames } + store.wishlistItems.flatMap { $0.imageFileNames } + store.brainstorms.flatMap { $0.imageFileNames })).sorted()
         var failedImages: [String] = []
         if !imageNames.isEmpty, let imagesBase = imagesBaseURL() {
             // MKCOL 建目录，失败也继续（目录可能已存在）。
@@ -319,7 +320,7 @@ final class WebDAVManager: ObservableObject {
         // 校验通过后才替换。
         store.apply(decoded)
 
-        let imageNames = Array(Set(store.fabrics.flatMap { $0.imageFileNames } + store.saleRecords.flatMap { $0.imageFileNames })).sorted()
+        let imageNames = Array(Set(store.fabrics.flatMap { $0.imageFileNames } + store.saleRecords.flatMap { $0.imageFileNames } + store.works.flatMap { $0.imageFileNames } + store.otherItems.flatMap { $0.imageFileNames } + store.wishlistItems.flatMap { $0.imageFileNames } + store.brainstorms.flatMap { $0.imageFileNames })).sorted()
         var missingImages: [String] = []
         for name in imageNames {
             guard let imgURL = imageURL(for: name) else {

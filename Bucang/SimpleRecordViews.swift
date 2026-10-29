@@ -23,6 +23,8 @@ struct WorkEditView: View {
     @State private var saleChannel: String
     @State private var isUsed: Bool
     @State private var usageCount: Int
+    @State private var laborCostText: String
+    @State private var hasLaborCost: Bool
     private let originalImageNames: [String]
 
     init(work: Work?) {
@@ -43,9 +45,13 @@ struct WorkEditView: View {
         _saleChannel = State(initialValue: work?.saleChannel ?? "")
         _isUsed = State(initialValue: work?.isUsed ?? false)
         _usageCount = State(initialValue: work?.usageCount ?? 0)
+        _laborCostText = State(initialValue: work == nil || !work!.hasLaborCost ? "" : String(work!.laborCost))
+        _hasLaborCost = State(initialValue: work?.hasLaborCost ?? false)
     }
 
     private func save() {
+        let labor = Double(laborCostText) ?? 0
+        let laborFilled = hasLaborCost && !laborCostText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if let existing = work {
             existing.name = name
             existing.startedAt = hasStartDate ? startDate : nil
@@ -58,6 +64,8 @@ struct WorkEditView: View {
             existing.saleChannel = saleChannel
             existing.isUsed = isUsed
             existing.usageCount = usageCount
+            existing.laborCost = labor
+            existing.hasLaborCost = laborFilled
             for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
             existing.imageFileNames = imageNames
             store.save()
@@ -70,7 +78,8 @@ struct WorkEditView: View {
                 isSold: isSold, salePrice: Double(salePriceText) ?? 0,
                 hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 saleDate: (isSold && hasSaleDate) ? saleDate : nil,
-                saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount
+                saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
+                laborCost: labor, hasLaborCost: laborFilled
             )
             store.addWork(newWork)
         }
@@ -79,6 +88,24 @@ struct WorkEditView: View {
 
     var body: some View {
         Form {
+            // 成品页没有独立的详情页（列表直达编辑），只读的关联脑洞放编辑页最上方。
+            if let work {
+                Section("关联脑洞") {
+                    let links = store.brainstorms(forWork: work.id)
+                    if links.isEmpty {
+                        Text("暂无关联脑洞").foregroundColor(.secondary)
+                    } else {
+                        ForEach(links) { brainstorm in
+                            NavigationLink(destination: BrainstormDetailView(brainstorm: brainstorm)) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(brainstorm.title.isEmpty ? "未命名脑洞" : brainstorm.title).lineLimit(1)
+                                    Text(brainstorm.status).font(.caption).foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Section("成品（全部可留空）") {
                 TextField("成品名称", text: $name)
                 Toggle("填写开始创作时间", isOn: $hasStartDate)
@@ -100,6 +127,12 @@ struct WorkEditView: View {
                 }
                 Toggle("是否使用", isOn: $isUsed)
                 Stepper("使用次数：\(usageCount)", value: $usageCount, in: 0...9999)
+            }
+            Section("工费") {
+                Toggle("填写工费", isOn: $hasLaborCost)
+                if hasLaborCost {
+                    TextField("工费（元，留空=未填）", text: $laborCostText).keyboardType(.decimalPad)
+                }
             }
             Section("成品照片") {
                 FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
@@ -127,6 +160,16 @@ struct WorkEditView: View {
                     let cost = store.workCost(for: work)
                     Text("用料成本合计：¥\(String(format: "%.2f", cost.total))\(cost.hasMissingPrice ? "（部分布料无单价，未计入）" : "")")
                         .font(.subheadline)
+                    if work.hasLaborCost {
+                        Text("工费：¥\(String(format: "%.2f", work.laborCost))")
+                            .font(.subheadline)
+                    }
+                    HStack {
+                        Text("总成本").font(.subheadline)
+                        Spacer()
+                        Text("¥\(String(format: "%.2f", store.workTotalCost(for: work)))")
+                            .font(.subheadline).fontWeight(.semibold).foregroundColor(Design.priceAccent)
+                    }
                 }
                 Section {
                     Button("删除这个成品", role: .destructive) {
@@ -300,6 +343,8 @@ struct WishlistEditView: View {
     @State private var name: String
     @State private var note: String
     @State private var imageNames: [String]
+    @State private var estimatedPriceText: String
+    @State private var hasEstimatedPrice: Bool
     private let originalImageNames: [String]
 
     init(item: WishlistItem?, presetName: String) {
@@ -309,6 +354,14 @@ struct WishlistEditView: View {
         _name = State(initialValue: item?.name ?? presetName)
         _note = State(initialValue: item?.note ?? "")
         _imageNames = State(initialValue: item?.imageFileNames ?? [])
+        _estimatedPriceText = State(initialValue: item == nil || !item!.hasEstimatedPrice ? "" : String(item!.estimatedPrice))
+        _hasEstimatedPrice = State(initialValue: item?.hasEstimatedPrice ?? false)
+    }
+
+    private func saveValues() -> (price: Double, filled: Bool) {
+        let price = Double(estimatedPriceText) ?? 0
+        let filled = hasEstimatedPrice && !estimatedPriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return (price, filled)
     }
 
     var body: some View {
@@ -316,6 +369,12 @@ struct WishlistEditView: View {
             Section("心愿单（只当备忘）") {
                 TextField("名称", text: $name)
                 TextField("想法备注", text: $note, axis: .vertical)
+            }
+            Section("预估价（转入库时带入布料总价）") {
+                Toggle("填写预估价", isOn: $hasEstimatedPrice)
+                if hasEstimatedPrice {
+                    TextField("预估价（元，留空=未填）", text: $estimatedPriceText).keyboardType(.decimalPad)
+                }
             }
             Section("照片") {
                 FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
@@ -336,13 +395,16 @@ struct WishlistEditView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
+                    let (estPrice, estFilled) = saveValues()
                     if let existing = item {
                         existing.name = name; existing.note = note
+                        existing.estimatedPrice = estPrice; existing.hasEstimatedPrice = estFilled
                         for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
                         existing.imageFileNames = imageNames
                         store.save()
                     } else {
-                        store.addWishlistItem(WishlistItem(name: name, imageFileNames: imageNames, note: note))
+                        store.addWishlistItem(WishlistItem(name: name, imageFileNames: imageNames, note: note,
+                                                           estimatedPrice: estPrice, hasEstimatedPrice: estFilled))
                     }
                     dismiss()
                 }

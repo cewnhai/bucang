@@ -14,9 +14,10 @@ enum Design {
     static let background = Color(UIColor.systemGroupedBackground)
     // 系统二级分组背景：浅色纯白，深色深灰，和 background 有明确分层。
     static let card = Color(UIColor.secondarySystemGroupedBackground)
-    // V3 原型主色：深蓝 #1E6FE0 左右（浅深色下都用同一深蓝，
-    // 白字配深蓝在暗黑下也可读）。旧珊瑚色已替换。
-    static let accent = Color(red: 0.12, green: 0.44, blue: 0.88)
+    // V8 默认主色：#3A6DCC（V1 说明指定）。
+    static let accent = Color(red: 0.23, green: 0.43, blue: 0.80)
+    // 赭橙：价格与售出金额的强调色（V8）。暗黑下仍可读。
+    static let priceAccent = Color(red: 0.77, green: 0.42, blue: 0.17)
     // 自适应柔和主色底：浅色浅蓝，深色深蓝底。
     static let accentSoft = Color(UIColor { trait in
         if trait.userInterfaceStyle == .dark {
@@ -42,7 +43,7 @@ enum ThemeHelper {
         case "紫色": return Color(red: 0.55, green: 0.35, blue: 0.85)
         case "橙色": return Color(red: 0.95, green: 0.55, blue: 0.15)
         case "粉色": return Color(red: 0.90, green: 0.45, blue: 0.65)
-        default: return Color(red: 0.12, green: 0.44, blue: 0.88)
+        default: return Color(red: 0.23, green: 0.43, blue: 0.80) // V8 默认 #3A6DCC
         }
     }
     static func accentSoft(_ themeName: String) -> Color {
