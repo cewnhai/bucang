@@ -370,7 +370,15 @@ enum ZipBackup {
             summary.restoredItems = decoded.items.count
             // 图片：全部 images/ 条目都复制回本地（按 basename 覆盖同名），
             // 再报告其中未被任何布料引用的（已复制，但可能是旧图）。
-            let referenced = Set(decoded.fabrics.flatMap { $0.imageFileNames } + decoded.saleRecords.flatMap { $0.imageFileNames } + decoded.works.flatMap { $0.imageFileNames } + decoded.otherItems.flatMap { $0.imageFileNames } + decoded.wishlistItems.flatMap { $0.imageFileNames } + decoded.brainstorms.flatMap { $0.imageFileNames })
+            // 分段收集图片名，避免单行超长表达式导致编译器类型推导超时。
+            var allReferenced: [String] = []
+            allReferenced += decoded.fabrics.flatMap { $0.imageFileNames }
+            allReferenced += decoded.saleRecords.flatMap { $0.imageFileNames }
+            allReferenced += decoded.works.flatMap { $0.imageFileNames }
+            allReferenced += decoded.otherItems.flatMap { $0.imageFileNames }
+            allReferenced += decoded.wishlistItems.flatMap { $0.imageFileNames }
+            allReferenced += decoded.brainstorms.flatMap { $0.imageFileNames }
+            let referenced = Set(allReferenced)
             for entry in read.entries where isImageEntry(entry.path) {
                 let name = basename(entry.path)
                 if FabricImageStore.saveData(entry.data, named: name) {
