@@ -397,8 +397,8 @@ struct WishlistListView: View {
         }
         let fabric = Fabric(
             name: item.name,
-            note: item.note,
             purchasePrice: item.hasEstimatedPrice ? item.estimatedPrice : 0,
+            note: item.note,
             imageFileNames: copiedNames,
             hasTotalPrice: item.hasEstimatedPrice
         )
