@@ -934,12 +934,12 @@ struct FabricEditView: View {
             }
             // (2) 基础信息卡片
             Section("基础信息卡片（全部可留空，编号唯一）") {
-                TextField("布料编号（选填，重复会禁止保存）", text: $code)
+                LabeledTextField(label: "编号", placeholder: "选填", text: $code)
                 Button("生成编号") { codeGenTargetSubIndex = nil; showingCodeGenerator = true }
                 Text("编号体系：设置 > 编号体系里定颜色体系与纹样；生成时选颜色与纹样，序号按该组合递增。").font(.caption).foregroundColor(.secondary)
-                TextField("名称（非必输）", text: $name)
-                TextField("幅宽（厘米）", text: $widthCmText).keyboardType(.decimalPad)
-                TextField("长度（\(store.lengthUnit)，留空=未填）", text: $lengthText).keyboardType(.decimalPad)
+                LabeledTextField(label: "名称", placeholder: "选填", text: $name)
+                LabeledTextField(label: "幅宽", placeholder: "点击输入", text: $widthCmText, keyboardType: .decimalPad, unit: "厘米")
+                LabeledTextField(label: "长度", placeholder: "留空=未填", text: $lengthText, keyboardType: .decimalPad, unit: store.lengthUnit)
                 HStack {
                     Text("子编号").font(.subheadline)
                     Spacer()
@@ -954,7 +954,7 @@ struct FabricEditView: View {
                 } else {
                     ForEach(subCodes.indices, id: \.self) { idx in
                         HStack {
-                            TextField("子编号", text: $subCodes[idx])
+                            LabeledTextField(label: "子编号", placeholder: "选填", text: $subCodes[idx])
                             Button("生成") { codeGenTargetSubIndex = idx; showingCodeGenerator = true }
                             Button(action: { subCodes.remove(at: idx) }) { Image(systemName: "trash") }.foregroundColor(.red)
                         }
@@ -979,8 +979,8 @@ struct FabricEditView: View {
                     Text("未填").tag("")
                     ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
                 }
-                TextField("商家（渠道下二级自定义文本，可留空）", text: $merchantName)
-                TextField("总价（元，留空=不计入总价值）", text: $priceText).keyboardType(.decimalPad)
+                LabeledTextField(label: "商家", placeholder: "选填", text: $merchantName)
+                LabeledTextField(label: "总价", placeholder: "留空=不计入", text: $priceText, keyboardType: .decimalPad, unit: "元")
                 Toggle("填写购买日期", isOn: $fillPurchaseDate)
                 if fillPurchaseDate {
                     DatePicker("购入日期", selection: $purchaseDate, displayedComponents: .date)
@@ -994,8 +994,8 @@ struct FabricEditView: View {
                     Text("未填").tag("")
                     ForEach(store.materialOptions, id: \.self) { Text($0).tag($0) }
                 }
-                TextField("自定义材质（填了就用这个）", text: $customMaterial)
-                TextField("成分（如 棉80%/涤纶20%）", text: $composition)
+                LabeledTextField(label: "自定义材质", placeholder: "选填", text: $customMaterial)
+                LabeledTextField(label: "成分", placeholder: "如 棉80%/涤纶20%", text: $composition)
                 Text("颜色（单选，来自设置 > 编号体系 > 色系）").font(.caption).foregroundColor(.secondary)
                 let colorItems = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? []).filter { $0.enabled }
                 if colorItems.isEmpty {
@@ -1027,8 +1027,8 @@ struct FabricEditView: View {
                 if !colorName.isEmpty {
                     Button("清除颜色") { colorName = "" }
                 }
-                TextField("克重（g/m²，选填）", text: $weightText).keyboardType(.decimalPad)
-                TextField("缩水率（%，选填）", text: $shrinkageText).keyboardType(.decimalPad)
+                LabeledTextField(label: "克重", placeholder: "选填", text: $weightText, keyboardType: .decimalPad, unit: "g/m²")
+                LabeledTextField(label: "缩水率", placeholder: "选填", text: $shrinkageText, keyboardType: .decimalPad, unit: "%")
                 ForEach(washingOptions, id: \.self) { option in
                     Button(action: {
                         if washing.contains(option) { washing.remove(option) } else { washing.insert(option) }
@@ -1037,8 +1037,8 @@ struct FabricEditView: View {
                     }
                     .foregroundColor(.primary)
                 }
-                TextField("用途备注", text: $usageNotes, axis: .vertical)
-                TextField("备注", text: $note, axis: .vertical)
+                LabeledMultilineField(label: "用途备注", text: $usageNotes)
+                LabeledMultilineField(label: "备注", text: $note)
                 Toggle(isOn: $isFavorite) {
                     Label("收藏", systemImage: isFavorite ? "star.fill" : "star")
                 }
@@ -1306,12 +1306,12 @@ struct CodeGeneratorSheet: View {
             case "width":
                 itemGrid(level: lv, showIcon: false, isColor: false)
             case "note":
-                TextField("备注文字（选填）", text: Binding(
+                LabeledTextField(label: "备注文字", placeholder: "选填", text: Binding(
                     get: { values[lv.id] ?? "" },
                     set: { values[lv.id] = $0; errorMessage = nil }
                 ))
             default:
-                TextField("输入该段", text: Binding(
+                LabeledTextField(label: lv.name.isEmpty ? "该段" : lv.name, placeholder: "点击输入", text: Binding(
                     get: { values[lv.id] ?? "" },
                     set: { values[lv.id] = $0; errorMessage = nil }
                 ))
@@ -1382,8 +1382,7 @@ struct CodeGeneratorSheet: View {
                     Text("01–99 已全被占用，可手动输入 ≥1 的序号。")
                         .font(.caption).foregroundColor(.secondary)
                     HStack {
-                        TextField("手动序号（≥1）", text: $manualSequenceText)
-                            .keyboardType(.numberPad)
+                        LabeledTextField(label: "手动序号", placeholder: "≥1", text: $manualSequenceText, keyboardType: .numberPad)
                         Button("使用") {
                             if let n = Int(manualSequenceText.trimmingCharacters(in: .whitespaces)), n >= 1 {
                                 pickManualSequence(n)
@@ -1454,9 +1453,9 @@ struct UsageFormView: View {
                 if record != nil { Text("编辑已有记录：保存会按新长度重新扣减（先回补旧长度再扣新长度）。").font(.caption).foregroundColor(.secondary) }
             }
             Section("填写使用记录") {
-                TextField("使用长度（\(store.lengthUnit)）", text: $lengthText).keyboardType(.decimalPad)
+                LabeledTextField(label: "使用长度", placeholder: "点击输入", text: $lengthText, keyboardType: .decimalPad, unit: store.lengthUnit)
                 DatePicker("使用时间", selection: $date, displayedComponents: .date)
-                TextField("用途备注", text: $note, axis: .vertical)
+                LabeledMultilineField(label: "用途备注", text: $note)
             }
             Section("关联成品（可多选）") {
                 if store.works.isEmpty { Text("还没有成品").foregroundColor(.secondary) }
@@ -1558,18 +1557,18 @@ struct SaleFormView: View {
                     Text("份").tag(true)
                 }.pickerStyle(.segmented)
                 if isPieces {
-                    TextField("份数（件数，>0）", text: $piecesText).keyboardType(.numberPad)
+                    LabeledTextField(label: "份数", placeholder: ">0", text: $piecesText, keyboardType: .numberPad, unit: "件")
                 } else {
-                    TextField("售出长度（\(store.lengthUnit)）", text: $lengthText).keyboardType(.decimalPad)
+                    LabeledTextField(label: "售出长度", placeholder: "点击输入", text: $lengthText, keyboardType: .decimalPad, unit: store.lengthUnit)
                 }
                 Picker("售出渠道", selection: $channel) {
                     Text("未填").tag("")
                     ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
                 }
-                TextField("商家（渠道下二级自定义文本，可留空）", text: $merchant)
-                TextField("售出价格（元）", text: $priceText).keyboardType(.decimalPad)
+                LabeledTextField(label: "商家", placeholder: "选填", text: $merchant)
+                LabeledTextField(label: "售出价格", placeholder: "点击输入", text: $priceText, keyboardType: .decimalPad, unit: "元")
                 DatePicker("售出日期", selection: $date, displayedComponents: .date)
-                TextField("备注", text: $note, axis: .vertical)
+                LabeledMultilineField(label: "备注", text: $note)
             }
             Section("图片") {
                 FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})

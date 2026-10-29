@@ -107,17 +107,17 @@ struct WorkEditView: View {
                 }
             }
             Section("成品（全部可留空）") {
-                TextField("成品名称", text: $name)
+                LabeledTextField(label: "成品名称", placeholder: "选填", text: $name)
                 Toggle("填写开始创作时间", isOn: $hasStartDate)
                 if hasStartDate { DatePicker("开始创作时间", selection: Binding(get: { startDate ?? Date() }, set: { startDate = $0 }), displayedComponents: .date) }
                 Toggle("填写完成时间（填了即视为已完成）", isOn: $hasFinishDate)
                 if hasFinishDate { DatePicker("完成时间", selection: Binding(get: { finishDate ?? Date() }, set: { finishDate = $0 }), displayedComponents: .date) }
-                TextField("备注", text: $note, axis: .vertical)
+                LabeledMultilineField(label: "备注", text: $note)
             }
             Section("出售 / 使用") {
                 Toggle("是否出售", isOn: $isSold)
                 if isSold {
-                    TextField("出售价格（元，留空=未填）", text: $salePriceText).keyboardType(.decimalPad)
+                    LabeledTextField(label: "出售价格", placeholder: "留空=未填", text: $salePriceText, keyboardType: .decimalPad, unit: "元")
                     Toggle("填写出售时间", isOn: $hasSaleDate)
                     if hasSaleDate { DatePicker("出售时间", selection: $saleDate, displayedComponents: .date) }
                     Picker("出售渠道", selection: $saleChannel) {
@@ -131,7 +131,7 @@ struct WorkEditView: View {
             Section("工费") {
                 Toggle("填写工费", isOn: $hasLaborCost)
                 if hasLaborCost {
-                    TextField("工费（元，留空=未填）", text: $laborCostText).keyboardType(.decimalPad)
+                    LabeledTextField(label: "工费", placeholder: "留空=未填", text: $laborCostText, keyboardType: .decimalPad, unit: "元")
                 }
             }
             Section("成品照片") {
@@ -223,7 +223,7 @@ struct WorkMaterialAddView: View {
                 }
             }
             Section {
-                TextField("用量（\(store.lengthUnit)）", text: $amountText).keyboardType(.decimalPad)
+                LabeledTextField(label: "用量", placeholder: "点击输入", text: $amountText, keyboardType: .decimalPad, unit: store.lengthUnit)
             }
             if let errorMessage { Text(errorMessage).foregroundColor(.red) }
         }
@@ -306,12 +306,12 @@ struct OtherEditView: View {
                     Text("未分类").tag("")
                     ForEach(store.otherCategories, id: \.self) { Text($0).tag($0) }
                 }
-                TextField("自定义分类（填了就用这个）", text: $customCategory)
-                TextField("名称", text: $name)
-                TextField("数量或长度", text: $quantityText)
-                TextField("价格（元）", text: $priceText).keyboardType(.decimalPad)
-                TextField("渠道", text: $channel)
-                TextField("备注", text: $note, axis: .vertical)
+                LabeledTextField(label: "自定义分类", placeholder: "填了就用这个", text: $customCategory)
+                LabeledTextField(label: "名称", placeholder: "选填", text: $name)
+                LabeledTextField(label: "数量或长度", placeholder: "选填", text: $quantityText)
+                LabeledTextField(label: "价格", placeholder: "点击输入", text: $priceText, keyboardType: .decimalPad, unit: "元")
+                LabeledTextField(label: "渠道", placeholder: "选填", text: $channel)
+                LabeledMultilineField(label: "备注", text: $note)
             }
             Section("照片") {
                 FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
@@ -367,13 +367,13 @@ struct WishlistEditView: View {
     var body: some View {
         Form {
             Section("心愿单（只当备忘）") {
-                TextField("名称", text: $name)
-                TextField("想法备注", text: $note, axis: .vertical)
+                LabeledTextField(label: "名称", placeholder: "选填", text: $name)
+                LabeledMultilineField(label: "想法备注", text: $note)
             }
             Section("预估价（转入库时带入布料总价）") {
                 Toggle("填写预估价", isOn: $hasEstimatedPrice)
                 if hasEstimatedPrice {
-                    TextField("预估价（元，留空=未填）", text: $estimatedPriceText).keyboardType(.decimalPad)
+                    LabeledTextField(label: "预估价", placeholder: "留空=未填", text: $estimatedPriceText, keyboardType: .decimalPad, unit: "元")
                 }
             }
             Section("照片") {

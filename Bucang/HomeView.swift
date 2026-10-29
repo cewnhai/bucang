@@ -1239,7 +1239,7 @@ struct BrainstormFormView: View {
     var body: some View {
         Form {
             Section("标题") {
-                TextField("给这个想法起个标题", text: $title)
+                LabeledTextField(label: "标题", placeholder: "给这个想法起个标题", text: $title)
             }
             Section("灵感内容") {
                 TextEditor(text: $content)

@@ -292,3 +292,58 @@ struct SectionHeaderView: View {
         }
     }
 }
+
+// MARK: - 表单左右结构输入行
+// 解决 placeholder 覆盖式输入框"填完看不出是哪一项"的问题：
+// 左侧永远显示项目名（+ 必填红星），右侧是输入框（右对齐 + 短提示），
+// 可选单位后缀（如 米 / 厘米 / 元 / g/m² / %）。全部用系统自适应色，暗黑可读。
+struct LabeledTextField: View {
+    var label: String
+    var placeholder: String
+    var text: Binding<String>
+    var keyboardType: UIKeyboardType = .default
+    var unit: String? = nil
+    var required: Bool = false
+    var body: some View {
+        HStack {
+            HStack(spacing: 2) {
+                Text(label)
+                    .foregroundColor(.primary)
+                if required {
+                    Text("*").foregroundColor(.red)
+                }
+            }
+            .frame(minWidth: 70, alignment: .leading)
+            .layoutPriority(1)
+            TextField(placeholder, text: text)
+                .keyboardType(keyboardType)
+                .multilineTextAlignment(.trailing)
+            if let unit {
+                Text(unit)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .font(.subheadline)
+    }
+}
+
+// 多行输入：项目名放上面（小标题样式），下面是输入区。
+// 对应原版 App 备注区的样式，填完内容项目名也不会消失。
+struct LabeledMultilineField: View {
+    var label: String
+    var placeholder: String = "选填"
+    var text: Binding<String>
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+            TextField(placeholder, text: text, axis: .vertical)
+                .lineLimit(3...)
+                .padding(8)
+                .background(Color(UIColor.tertiarySystemGroupedBackground))
+                .cornerRadius(8)
+        }
+        .padding(.vertical, 4)
+    }
+}
