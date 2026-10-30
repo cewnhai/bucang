@@ -181,7 +181,7 @@ struct BucangView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $fabricPath) {
             VStack(spacing: 0) {
                 // 顶栏一级 Tab：固定在顶部，不随列表滚动（只显示设置里开启的，布料始终显示）。
                 tabBar
@@ -375,19 +375,24 @@ struct BucangView: View {
     // MARK: - 布料 Tab：统计卡吸顶 + 内容滚动
 
     private var fabricTabView: some View {
-        ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    fabricToolbar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 10)
-                    statusCapsuleRow
-                    if hasActiveFilter {
-                        activeFilterRow
-                            .padding(.bottom, 4)
-                    }
-                    fabricCards
-                } header: {
+        // 工具栏放固定区（不进 LazyVStack）：iOS 16 上懒加载 section 重建后按钮触摸会失效，
+        // 固定住可根治"切换视图后筛选/排序点不动"的问题，顺手让工具栏常驻。
+        VStack(spacing: 0) {
+            fabricToolbar
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 2)
+                .background(Design.background)
+            ScrollView {
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        statusCapsuleRow
+                        if hasActiveFilter {
+                            activeFilterRow
+                                .padding(.bottom, 4)
+                        }
+                        fabricCards
+                    } header: {
                     // 统计卡吸顶：固定在 Tab 栏正下方，内容从卡片下面滚过。
                     fabricStatsCard
                         .padding(.horizontal, 16)
@@ -395,6 +400,7 @@ struct BucangView: View {
                         .padding(.bottom, 6)
                         .background(Design.background)
                 }
+            }
             }
         }
     }

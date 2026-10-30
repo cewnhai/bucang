@@ -263,8 +263,9 @@ struct FabricCardView: View {
         .disabled(isSoldOut)
         .accessibilityLabel("记录使用或出售")
         .confirmationDialog("记录", isPresented: $showingAddSheet, titleVisibility: .hidden) {
-            Button("记一次使用") { onAddUsage() }
-            Button("登记出售") { onAddSale() }
+            // iOS 16 上从 action sheet 里直接 present 另一个 sheet 会撞车白屏，等 dialog 收起再弹。
+            Button("记一次使用") { DispatchQueue.main.async { onAddUsage() } }
+            Button("登记出售") { DispatchQueue.main.async { onAddSale() } }
             Button("取消", role: .cancel) {}
         }
     }
