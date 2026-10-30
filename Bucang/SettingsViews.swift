@@ -183,6 +183,30 @@ struct SettingsView: View {
 
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "卡片显示信息", subtitle: "布料卡片上显示哪些字段，顺序固定")
+                            ForEach(Store.cardFieldOptions, id: \.key) { option in
+                                Toggle(option.title, isOn: Binding(
+                                    get: { store.cardDisplayFields.contains(option.key) },
+                                    set: { on in
+                                        var keys = store.cardDisplayFields
+                                        if on {
+                                            if !keys.contains(option.key) { keys.append(option.key) }
+                                        } else {
+                                            keys.removeAll { $0 == option.key }
+                                        }
+                                        // 始终按规范顺序排列，保持卡片展示一致。
+                                        store.cardDisplayFields = Store.cardFieldOptions.map { $0.key }.filter { keys.contains($0) }
+                                        store.save()
+                                    }
+                                ))
+                            }
+                            Text("全不选时卡片不显示附加信息；下次打开设置页会恢复默认 5 项。")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
                             SectionHeaderView(title: "渠道", subtitle: "布料渠道与出售渠道的选项；商家是渠道下二级自定义文本，在布料/出售表单里填")
                             HStack {
                                 TextField("新增渠道", text: $newChannel)
@@ -336,10 +360,6 @@ struct SettingsView: View {
                     }
 
                     CardView {
-                        WebDAVBackupView()
-                    }
-
-                    CardView {
                         VStack(alignment: .leading, spacing: 12) {
                             SectionHeaderView(title: "数据管理", subtitle: "CSV 是原数据格式，导入按原 UUID 更新不重复建")
                             Button("导入原数据（选多个 CSV）") { importKind = .csv; showingImporter = true }
@@ -395,6 +415,10 @@ struct SettingsView: View {
                                 }
                             }
                         }
+                    }
+
+                    CardView {
+                        WebDAVBackupView()
                     }
 
                     CardView {
@@ -779,9 +803,27 @@ struct CodeLevelsEditorView: View {
 
             Section("添加层级") {
                 TextField("层级名称（如 色系）", text: $newLevelName)
-                Picker("种类", selection: $newLevelKind) {
-                    ForEach(CodeKindLabel.all, id: \.key) { kind in
-                        Text(kind.title).tag(kind.key)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("编号类别").font(.subheadline).foregroundColor(.secondary)
+                    // 点右侧类别自动填入层级名称（之后仍可点名称框改成自定义文本）。
+                    HStack(spacing: 8) {
+                        ForEach(CodeKindLabel.all, id: \.key) { kind in
+                            Button(action: {
+                                newLevelKind = kind.key
+                                newLevelName = kind.title
+                            }) {
+                                Text(kind.title)
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .background(newLevelKind == kind.key
+                                        ? Design.accentSoft
+                                        : Color(UIColor.secondarySystemBackground))
+                                    .foregroundColor(newLevelKind == kind.key ? Design.accent : .primary)
+                                    .cornerRadius(9)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Spacer(minLength: 0)
                     }
                 }
                 if newLevelKind == "sequence",
@@ -789,8 +831,22 @@ struct CodeLevelsEditorView: View {
                     Text("已有序号层级，再添加一个可能让编号生成混乱（仍可继续）。")
                         .font(.caption).foregroundColor(.orange)
                 }
-                Button("添加层级", action: addLevel)
-                    .disabled(newLevelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            // 添加按钮独占一行、居中：主题色淡底 + 主色字。
+            Section {
+                HStack {
+                    Spacer()
+                    Button("添加层级", action: addLevel)
+                        .font(.headline)
+                        .padding(.horizontal, 40).padding(.vertical, 10)
+                        .background(Design.accentSoft)
+                        .foregroundColor(Design.accent)
+                        .cornerRadius(12)
+                        .opacity(newLevelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                        .disabled(newLevelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Spacer()
+                }
             }
         }
         .navigationTitle("编号体系层级")
@@ -843,7 +899,7 @@ struct CodeLevelEditView: View {
                     set: { level.name = $0; store.save() }
                 ))
                 HStack {
-                    Text("种类")
+                    Text("编号类别")
                     Spacer()
                     Text(CodeKindLabel.label(level.kind)).foregroundColor(.secondary)
                 }
@@ -965,22 +1021,178 @@ struct CodeItemEditSheet: View {
     }
 }
 
-// 设置 > 编号体系 > 颜色选项：直接编辑色系层级的条目。
+// 设置 > 编号体系 > 颜色选项：直接编辑色系层级的颜色条目。
+// 无"色系"标题、无"基本信息"区；与编号生成器、布料表单共用同一色系层级
+//（改 store.codeLevels 并 save）。
 struct ColorItemsSettingsView: View {
     @EnvironmentObject private var store: Store
+    @State private var editingItemId: UUID?
+    @State private var deletingItem: CodeItem?
+    @State private var pickedColor = Color.red
+    @State private var suppressPickerChange = false
+    @State private var pickerCapHint = false
+
+    static let maxColors = 12
 
     private var colorLevel: CodeLevel? {
         store.codeLevels.first { $0.kind == "color" }
     }
+    private var items: [CodeItem] { colorLevel?.items ?? [] }
+    private var isFull: Bool { items.count >= Self.maxColors }
+
+    // 行显示：有代码 → "名/码"（如 红/R），无代码 → 只有名。
+    private func displayText(_ item: CodeItem) -> String {
+        let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = item.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = name.isEmpty ? "未命名" : name
+        return code.isEmpty ? base : "\(base)/\(code)"
+    }
+
+    private func addBlank() {
+        guard let level = colorLevel, !isFull else { return }
+        let item = CodeItem(name: "", code: "", icon: "")
+        level.items.append(item)
+        store.save()
+        editingItemId = item.id   // 新行直接展开行内编辑
+    }
+
+    private func addFromPicker() {
+        guard let level = colorLevel else { return }
+        guard !isFull else {
+            pickerCapHint = true
+            return
+        }
+        pickerCapHint = false
+        var n = 1
+        let existing = Set(level.items.map { $0.name })
+        while existing.contains("自定义\(n)") { n += 1 }
+        level.items.append(CodeItem(name: "自定义\(n)", code: "", icon: ""))
+        store.save()
+        // 复位选色器：保证下次选相同颜色也能触发 onChange。
+        suppressPickerChange = true
+        pickedColor = Color(hue: Double.random(in: 0...1), saturation: 0.6, brightness: 0.9)
+    }
+
+    private func confirmDelete(_ item: CodeItem) {
+        colorLevel?.items.removeAll { $0.id == item.id }
+        if editingItemId == item.id { editingItemId = nil }
+        store.save()
+    }
+
+    private func moveItem(from source: IndexSet, to destination: Int) {
+        colorLevel?.items.move(fromOffsets: source, toOffset: destination)
+        store.save()
+    }
+
+    // 行内编辑器：名称 + 代码。
+    @ViewBuilder
+    private func editRow(_ item: CodeItem) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                CodeItemIconView(icon: item.icon, size: 28)
+                TextField("颜色名（如 红）", text: Binding(
+                    get: { item.name },
+                    set: { item.name = $0; store.save() }
+                ))
+                .textFieldStyle(.roundedBorder)
+            }
+            HStack(spacing: 10) {
+                TextField("代码（如 R，可空）", text: Binding(
+                    get: { item.code },
+                    set: { item.code = $0; store.save() }
+                ))
+                .textFieldStyle(.roundedBorder)
+                Spacer()
+                Button("完成") { editingItemId = nil }
+                    .buttonStyle(.borderedProminent).tint(Design.accent)
+            }
+        }
+        .padding(.vertical, 4)
+    }
 
     var body: some View {
         Group {
-            if let level = colorLevel {
-                CodeLevelEditView(level: level)
+            if colorLevel != nil {
+                List {
+                    Section {
+                        ForEach(items) { item in
+                            if editingItemId == item.id {
+                                editRow(item)
+                            } else {
+                                HStack(spacing: 10) {
+                                    Button(action: { editingItemId = item.id }) {
+                                        HStack(spacing: 10) {
+                                            // icon=="wheel" 的"其他"项走色轮图标，可照常排序/删除。
+                                            CodeItemIconView(icon: item.icon, size: 28)
+                                            Text(displayText(item))
+                                                .foregroundColor(.primary)
+                                            Spacer()
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    Button(role: .destructive, action: { deletingItem = item }) {
+                                        Image(systemName: "trash")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .foregroundColor(.red)
+                                }
+                            }
+                        }
+                        .onDelete { offsets in
+                            let snapshot = items   // 先快照：按 id 删除，多选删除时下标不会错位
+                            for i in offsets { confirmDelete(snapshot[i]) }
+                        }
+                        .onMove(perform: moveItem)
+                    } header: {
+                        Text("颜色列表（\(items.count)/\(Self.maxColors)）")
+                    } footer: {
+                        Text("点一行改名与代码；拖动排序后，编号生成器与布料表单里的颜色顺序同步变化。")
+                    }
+
+                    Section {
+                        Button("添加颜色", action: addBlank)
+                            .disabled(isFull)
+                        if isFull {
+                            Text("颜色已满 \(Self.maxColors) 条，删除一条后再添加。")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    } footer: {
+                        Text("最多 \(Self.maxColors) 条。")
+                    }
+
+                    Section {
+                        ColorPicker("选色器", selection: $pickedColor)
+                            .onChange(of: pickedColor) { _ in
+                                if suppressPickerChange { suppressPickerChange = false; return }
+                                addFromPicker()
+                            }
+                        Text("从系统选色器取色加入列表，名称默认为“自定义1、自定义2…”，点行可改；同样受 \(Self.maxColors) 条上限限制。")
+                            .font(.caption).foregroundColor(.secondary)
+                        if pickerCapHint {
+                            Text("颜色已满 \(Self.maxColors) 条，删除一条后再用选色器添加。")
+                                .font(.caption).foregroundColor(.orange)
+                        }
+                    }
+                }
+                .navigationTitle("颜色选项")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { EditButton() }
+                .alert("删除颜色", isPresented: Binding(
+                    get: { deletingItem != nil },
+                    set: { if !$0 { deletingItem = nil } }
+                )) {
+                    Button("删除", role: .destructive) {
+                        if let item = deletingItem { confirmDelete(item) }
+                        deletingItem = nil
+                    }
+                    Button("取消", role: .cancel) { deletingItem = nil }
+                } message: {
+                    Text("删除后该颜色不再参与新编号生成与布料表单，历史编号保留、不受影响。")
+                }
             } else {
                 VStack(spacing: 12) {
                     Text("未找到色系层级").font(.headline)
-                    Text("请先在编号体系层级设置里添加一个种类为“色系”的层级。")
+                    Text("请先在编号体系层级设置里添加一个编号类别为“色系”的层级。")
                         .font(.caption).foregroundColor(.secondary)
                 }
                 .padding()

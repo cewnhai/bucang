@@ -687,6 +687,9 @@ struct StoreData: Codable {
     var codeLevels: [CodeLevel] = []
     var visibleTabs: [String] = []
     var themeName: String = "深蓝"
+    // V9：布料卡片显示字段（key 见 Store.cardFieldOptions）。旧 JSON 没有该键时
+    // 解码为 []，Store.apply 里按默认 5 项补齐，走 visibleTabs/codeLevels 的迁移口径。
+    var cardDisplayFields: [String] = []
 }
 
 @MainActor
@@ -714,6 +717,7 @@ final class Store: ObservableObject {
     @Published var codeLevels: [CodeLevel] = []
     @Published var visibleTabs: [String] = []
     @Published var themeName: String = "深蓝"
+    @Published var cardDisplayFields: [String] = []
 
     static let defaultMaterialOptions = ["棉", "麻", "丝", "毛", "化纤", "混纺", "针织", "其他"]
     static let defaultOtherCategories = ["其他"]
@@ -721,6 +725,19 @@ final class Store: ObservableObject {
     static let defaultPatternOptions = ["素色", "提花", "印花", "格纹", "条纹", "碎花", "暗花", "缎面"]
     static let allTabKeys = ["fabric", "work", "brainstorm", "other", "wishlist"]
     static let defaultVisibleTabs = ["fabric", "work", "brainstorm", "wishlist"]
+    // V9 卡片显示字段：9 个可用 key 与中文名，数组顺序即设置页与卡片的展示顺序。
+    static let cardFieldOptions: [(key: String, title: String)] = [
+        ("material", "材质"),
+        ("width", "宽幅"),
+        ("length", "米数"),
+        ("unitPrice", "单价"),
+        ("remaining", "剩余数"),
+        ("totalPrice", "总价"),
+        ("color", "颜色"),
+        ("channel", "渠道"),
+        ("tags", "标签"),
+    ]
+    static let defaultCardDisplayFields = ["material", "width", "length", "unitPrice", "remaining"]
     // V8 状态胶囊：7 级。派生优先级见 status(for:)：
     // 已出售（售出且剩余 0）＞ 部分出售（售出且剩余 >0）＞ 已用完 ＞ 使用中 ＞ 未使用。
     // 说明文档原表把“使用中”排在“已用完”前会使已用完永远不可达，此处按可达的合理
@@ -790,6 +807,8 @@ final class Store: ObservableObject {
         }
         if !visibleTabs.contains("fabric") { visibleTabs.insert("fabric", at: 0) }
         themeName = decoded.themeName.isEmpty ? "深蓝" : decoded.themeName
+        // cardDisplayFields 迁移口径与 codeLevels/visibleTabs 一致：空视为未设置，用默认 5 项。
+        cardDisplayFields = decoded.cardDisplayFields.isEmpty ? Self.defaultCardDisplayFields : decoded.cardDisplayFields
         normalizeLegacyFabrics()
     }
 
@@ -989,6 +1008,53 @@ final class Store: ObservableObject {
         return a.code.localizedCompare(b.code)
     }
 
+    // MARK: - 卡片显示信息（V9：布料卡片可配置显示字段）
+
+    /// 某字段在某块布料上的 (中文名, 显示值)；缺失值统一显示 "—"。
+    /// 这是 canonical 口径：FabricViews 卡片里的内联排版是展示层写法，
+    /// 取值语义以这里为准（key 不在 9 个可用字段里时返回 ("", "—")）。
+    func cardField(key: String, for fabric: Fabric) -> (label: String, value: String) {
+        let label = Self.cardFieldOptions.first { $0.key == key }?.title ?? ""
+        switch key {
+        case "material":
+            let v = fabric.materialName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (label, v.isEmpty ? "—" : v)
+        case "width":
+            // 内部米 → 厘米，整数显示，如 "37厘米"。
+            let cm = fabric.widthCm
+            return (label, cm > 0 ? String(format: "%.0f厘米", cm) : "—")
+        case "length":
+            guard fabric.hasPurchaseLength, fabric.length > 0 else { return (label, "—") }
+            let unit = lengthUnit
+            return (label, LengthUnitHelper.format(fabric.length, unit: unit) + LengthUnitHelper.suffix(unit: unit))
+        case "unitPrice":
+            guard let u = fabric.unitPrice else { return (label, "—") }
+            return (label, "¥" + String(format: "%.2f", u))
+        case "remaining":
+            guard fabric.hasPurchaseLength else { return (label, "—") }
+            let unit = lengthUnit
+            return (label, LengthUnitHelper.format(remaining(for: fabric), unit: unit) + LengthUnitHelper.suffix(unit: unit))
+        case "totalPrice":
+            guard fabric.hasTotalPrice else { return (label, "—") }
+            return (label, "¥" + String(format: "%.2f", fabric.purchasePrice))
+        case "color":
+            let name = fabric.colorName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return (label, "—") }
+            if let code = colorCode(forName: name), !code.isEmpty {
+                return (label, "\(name)/\(code)")
+            }
+            return (label, name)
+        case "channel":
+            let v = fabric.channelName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (label, v.isEmpty ? "—" : v)
+        case "tags":
+            let names = tags(for: fabric).map { $0.name }.filter { !$0.isEmpty }
+            return (label, names.isEmpty ? "—" : names.joined(separator: "、"))
+        default:
+            return (label, "—")
+        }
+    }
+
     func save() {
         objectWillChange.send()
         guard let url = fileURL else { return }
@@ -1001,7 +1067,7 @@ final class Store: ObservableObject {
             materialOptions: materialOptions, otherCategories: otherCategories,
             lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix,
             channelOptions: channelOptions, patternOptions: patternOptions, codeLevels: codeLevels,
-            visibleTabs: visibleTabs, themeName: themeName
+            visibleTabs: visibleTabs, themeName: themeName, cardDisplayFields: cardDisplayFields
         )
         if let encoded = try? JSONEncoder().encode(data) {
             try? encoded.write(to: url, options: .atomic)

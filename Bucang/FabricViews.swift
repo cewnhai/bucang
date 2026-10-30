@@ -4,10 +4,17 @@ import UIKit
 import AVKit
 
 // MARK: - V3 布料卡片 / 详情 / 编辑 / 使用 / 出售 / 拍照找相似
-// 卡片按原型：照片 150px 高，左上爱心，右上状态，编号小字在标题上方，
-// 底部五列：材质 / 宽幅 / 米数 / 单价 / 剩余数，单价蓝色；
-// 最下剩余进度条（深蓝填充）+ 百分比 + 右侧蓝色方形 + 按钮填使用记录。
-// 剩余留空时不显示进度条；已出售且剩余为 0 时 + 按钮置灰禁用。
+// 卡片：无图时剪刀占位约占卡片一半高度；有图保持原高度。
+// 编号小字在照片下方（名称不再显示）；信息条为用户自选字段
+// （store.cardDisplayFields，见本文件 cardDisplayFields(of:) 的兼容读取），
+// 每个字段是淡底小盒（label 上 + value 下），列表模式流式换行、
+// 两列模式横向滚动；进度条为双色堆叠（已用主色 + 已售橙色，灰底为剩余）+
+// 百分比；右侧一个圆形 + 按钮，点开 action sheet 选"记一次使用 / 登记出售"。
+// 详情：基础信息去标题（只留收起钮）；照片头去左上星标；摘要卡收藏改星标、
+// 总价下加单价小字；编号行去 chevron；子编号自动续号 + 关联布料；
+// 颜色行改为色系图标单选（同步编号体系色系段）；图片板块仅展示；
+// 使用/出售只留入口卡，点击进专属记录页；脑洞与备注加"关联脑洞"多选；
+// 拍照找相似移到照片头正下方。
 
 @MainActor
 enum FabricStatusLabel {
@@ -20,12 +27,133 @@ enum FabricStatusLabel {
     }
 }
 
+// MARK: - 卡片 / 记录页共用小件
+
+/// 用户自选的卡片字段（`Store.cardDisplayFields`，@Published，持久化于 StoreData）。
+/// 为空时回落到默认 5 项（与 Store 端"空视为未设置"的迁移口径一致）。
+private func cardDisplayFields(of store: Store) -> [String] {
+    let v = store.cardDisplayFields
+    return v.isEmpty ? ["material", "width", "length", "unitPrice", "remaining"] : v
+}
+
+/// 简单流式布局（iOS 16 Layout）：子视图按行排列、行内居左，用于卡片信息条。
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    private struct Row {
+        var indices: [Int]
+        var width: CGFloat
+        var height: CGFloat
+    }
+
+    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> [Row] {
+        let maxWidth = proposal.width ?? .infinity
+        var rows: [Row] = []
+        var cur: [Int] = []
+        var curW: CGFloat = 0
+        var curH: CGFloat = 0
+        for (i, sv) in subviews.enumerated() {
+            let s = sv.sizeThatFits(.unspecified)
+            let w = cur.isEmpty ? s.width : curW + spacing + s.width
+            if !cur.isEmpty && w > maxWidth {
+                rows.append(Row(indices: cur, width: curW, height: curH))
+                cur = [i]; curW = s.width; curH = s.height
+            } else {
+                cur.append(i); curW = w; curH = max(curH, s.height)
+            }
+        }
+        if !cur.isEmpty { rows.append(Row(indices: cur, width: curW, height: curH)) }
+        return rows
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(proposal: proposal, subviews: subviews)
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = arrange(proposal: proposal, subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for idx in row.indices {
+                let size = subviews[idx].sizeThatFits(.unspecified)
+                subviews[idx].place(
+                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                    proposal: .unspecified
+                )
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+}
+
+/// 双色堆叠进度条：已用（主色）+ 已售（橙色），灰底代表剩余。
+/// fractions 按总长度归一化，内部 clamp 防越界；份数出售不进 sold（store.soldLength 已只计长度）。
+struct DualProgressBarView: View {
+    var usedFraction: Double
+    var soldFraction: Double
+    var height: CGFloat = 8
+    var usedColor: Color = Design.accent
+    var soldColor: Color = Design.priceAccent
+
+    private func clamp01(_ v: Double) -> CGFloat { max(0, min(1, v)) }
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: height / 2)
+                    .fill(Color.gray.opacity(0.15))
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: height / 2)
+                        .fill(usedColor)
+                        .frame(width: geo.size.width * clamp01(usedFraction))
+                    RoundedRectangle(cornerRadius: height / 2)
+                        .fill(soldColor)
+                        .frame(width: geo.size.width * clamp01(soldFraction))
+                    Spacer(minLength: 0)
+                }
+            }
+            .clipped() // 数据异常（已用+已售>总长）时不溢出轨道
+        }
+        .frame(height: height)
+    }
+}
+
+/// 记录类表单 / 记录页的图标盒：44pt 圆角正方形淡主色底 + 主色 SF 图标。
+struct RecordIconBox: View {
+    var icon: String
+    var accent: Color = Design.accent
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(accent.opacity(0.12))
+                .frame(width: 44, height: 44)
+            Image(systemName: icon)
+                .foregroundColor(accent)
+                .font(.headline)
+        }
+    }
+}
+
+/// 显示用数字：去多余小数点后 0（"2.00"→"2"，"1.50"→"1.5"）。
+private func displayNum(_ v: Double) -> String {
+    if v.truncatingRemainder(dividingBy: 1) == 0 { return String(format: "%.0f", v) }
+    var s = String(format: "%.2f", v)
+    while s.hasSuffix("0") { s.removeLast() }
+    if s.hasSuffix(".") { s.removeLast() }
+    return s
+}
+
 struct FabricCardView: View {
     @EnvironmentObject private var store: Store
     var fabric: Fabric
     var onAddUsage: () -> Void
     var onAddSale: () -> Void = {}
     var compact: Bool = false
+    @State private var showingAddSheet = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var sold: Double { store.soldLength(for: fabric.id) }
@@ -44,10 +172,12 @@ struct FabricCardView: View {
                         .frame(height: compact ? 110 : 150)
                         .clipped()
                 } else {
+                    // 无图占位：剪刀图标，占位高度大于照片高度（列表约 220 / 两列约 140），
+                    // 让无图卡片在视觉上占卡片高度的一半以上。
                     Rectangle()
                         .fill(Design.accentSoft)
-                        .frame(height: compact ? 110 : 150)
-                        .overlay(Image(systemName: "scissors").foregroundColor(Design.accent).font(.title2))
+                        .frame(height: compact ? 140 : 220)
+                        .overlay(Image(systemName: "scissors").foregroundColor(Design.accent).font(.title))
                 }
                 Button(action: {
                     fabric.isFavorite.toggle()
@@ -75,49 +205,37 @@ struct FabricCardView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 8) {
+                // 名称不再显示；编号小字在照片下方左对齐。
                 if !fabric.code.isEmpty {
                     Text(fabric.code)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                Text(fabric.displayName)
-                    .font(.headline)
-                    .lineLimit(1)
-                // 两列模式卡片窄，五列信息带改横向滚动，左右滑看全数值，不再截断；
-                // 整宽模式保持原来的固定五列。
+                // 用户自选字段：两列模式卡片窄，信息盒横向滚动；
+                // 列表模式用流式布局换行（每行 2–3 个）。
                 if compact {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        infoStrip
+                        HStack(spacing: 8) { infoBoxes }
                     }
                 } else {
-                    infoStrip
+                    FlowLayout(spacing: 8) { infoBoxes }
                 }
                 if fabric.hasPurchaseLength && fabric.length > 0 {
-                    if compact {
-                        // 两列卡片窄：进度行与按钮行上下排，避免进度条被挤没。
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                ProgressBarView(fraction: remaining / fabric.length, height: 8, accent: themeAccent)
-                                Text("\(Int(remaining / fabric.length * 100))%")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            HStack { Spacer(); usageSaleButtons }
-                        }
-                    } else {
-                        HStack(spacing: 8) {
-                            ProgressBarView(fraction: remaining / fabric.length, height: 8, accent: themeAccent)
-                            Text("\(Int(remaining / fabric.length * 100))%")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            usageSaleButtons
-                        }
+                    // 双色堆叠进度条（已用主色 + 已售橙色）+ 剩余百分比 + 右侧圆形 + 按钮。
+                    let usedFrac = fabric.usedLength / fabric.length
+                    let soldFrac = sold / fabric.length
+                    HStack(spacing: 8) {
+                        DualProgressBarView(usedFraction: usedFrac, soldFraction: soldFrac, height: 8, usedColor: themeAccent)
+                        Text("\(Int(remaining / fabric.length * 100))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        addRecordButton
                     }
                 } else if !fabric.hasPurchaseLength {
-                    // 买入长度留空时仍可记使用/出售（长度留空不显示进度条，但入口保留）。
+                    // 买入长度留空时仍可记使用/出售（不显示进度条，但入口保留）。
                     HStack {
                         Spacer()
-                        usageSaleButtons
+                        addRecordButton
                     }
                 }
             }
@@ -128,68 +246,120 @@ struct FabricCardView: View {
         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
     }
 
-    // 卡片右下直接双入口：使用 / 出售胶囊按钮（代替原来的 Menu，避免 Menu 嵌在
-    // NavigationLink 里的点按误触风险）。已售出时置灰不可点。
-    private var usageSaleButtons: some View {
-        HStack(spacing: 8) {
-            Button("使用", action: onAddUsage)
-                .buttonStyle(.plain)
-                .font(.caption).fontWeight(.semibold)
+    // 卡片右下单一入口：圆形 + 按钮，点开 action sheet 选"记一次使用 / 登记出售"。
+    // 已售出（剩余 0 且有售出）时置灰不可点。两种卡片分支（有/无买入长度）共用。
+    private var addRecordButton: some View {
+        Button(action: { showingAddSheet = true }) {
+            Image(systemName: "plus")
+                .font(.subheadline)
+                .fontWeight(.semibold)
                 .foregroundColor(.white)
-                .padding(.horizontal, 12).padding(.vertical, 6)
+                .frame(width: 28, height: 28)
                 .background(isSoldOut ? Color.gray : themeAccent)
-                .cornerRadius(12)
-            Button("出售", action: onAddSale)
-                .buttonStyle(.plain)
-                .font(.caption).fontWeight(.semibold)
-                .foregroundColor(.white)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(isSoldOut ? Color.gray : themeAccent)
-                .cornerRadius(12)
+                .clipShape(Circle())
         }
+        .buttonStyle(.plain)
         .disabled(isSoldOut)
-    }
-
-    private var infoStrip: some View {
-        HStack(alignment: .top, spacing: 0) {
-            cardColumn(label: "材质", value: fabric.materialName.isEmpty ? "—" : fabric.materialName)
-            cardColumn(label: "宽幅", value: fabric.width > 0 ? "\(String(format: "%.0f", fabric.widthCm))cm" : "—")
-            cardColumn(label: "米数", value: fabric.hasPurchaseLength ? "\(LengthUnitHelper.format(fabric.length, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))" : "—")
-            cardColumn(label: "单价", value: fabric.unitPrice.map { "¥\(String(format: "%.2f", $0))" } ?? "—", accent: Design.priceAccent)
-            cardColumn(label: "剩余数", value: fabric.hasPurchaseLength ? "\(LengthUnitHelper.format(remaining, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))" : "—")
+        .accessibilityLabel("记录使用或出售")
+        .confirmationDialog("记录", isPresented: $showingAddSheet, titleVisibility: .hidden) {
+            Button("记一次使用") { onAddUsage() }
+            Button("登记出售") { onAddSale() }
+            Button("取消", role: .cancel) {}
         }
     }
 
-    private func cardColumn(label: String, value: String, accent: Color? = nil) -> some View {
+    /// 用户自选字段的信息盒（与设置页 `Store.cardDisplayFields` 共用同一份 key→label/value 约定）。
+    /// key 去重，避免 ForEach(id: \.self) 遇到重复 key。
+    @ViewBuilder
+    private var infoBoxes: some View {
+        ForEach(uniqueCardFields, id: \.self) { key in
+            if let field = cardFieldValue(key: key) {
+                infoBox(label: field.label, value: field.value, accent: key == "unitPrice" ? Design.priceAccent : nil)
+            }
+        }
+    }
+
+    private var uniqueCardFields: [String] {
+        var seen = Set<String>()
+        return cardDisplayFields(of: store).filter { seen.insert($0).inserted }
+    }
+
+    /// key → (label, value)，value 格式与设置页约定完全一致。
+    private func cardFieldValue(key: String) -> (label: String, value: String)? {
+        switch key {
+        case "material":
+            return ("材质", fabric.materialName.isEmpty ? "—" : fabric.materialName)
+        case "width":
+            return ("宽幅", fabric.width > 0 ? "\(String(format: "%.0f", fabric.widthCm))厘米" : "—")
+        case "length":
+            return ("米数", fabric.hasPurchaseLength
+                ? "\(LengthUnitHelper.format(fabric.length, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
+                : "—")
+        case "unitPrice":
+            return ("单价", fabric.unitPrice.map { "¥\(String(format: "%.2f", $0))" } ?? "—")
+        case "remaining":
+            return ("剩余数", fabric.hasPurchaseLength
+                ? "\(LengthUnitHelper.format(remaining, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
+                : "—")
+        case "totalPrice":
+            return ("总价", fabric.purchasePrice > 0 ? "¥\(String(format: "%.2f", fabric.purchasePrice))" : "—")
+        case "color":
+            if fabric.colorName.isEmpty { return ("颜色", "—") }
+            if let item = store.colorItem(forName: fabric.colorName), !item.code.isEmpty {
+                return ("颜色", "\(fabric.colorName)/\(item.code)")
+            }
+            return ("颜色", fabric.colorName)
+        case "channel":
+            return ("渠道", fabric.channelName.isEmpty ? "—" : fabric.channelName)
+        case "tags":
+            let names = store.tags(for: fabric).map { $0.name }
+            return ("标签", names.isEmpty ? "—" : names.joined(separator: "、"))
+        default:
+            return nil
+        }
+    }
+
+    private func infoBox(label: String, value: String, accent: Color? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundColor(.secondary)
-            Text(value).font(.subheadline).fontWeight(.semibold).foregroundColor(accent ?? .primary).lineLimit(1).minimumScaleFactor(0.8)
+            Text(label).font(.caption2).foregroundColor(.secondary)
+            Text(value)
+                .font(.subheadline).fontWeight(.semibold)
+                .foregroundColor(accent ?? .primary)
+                .lineLimit(1).minimumScaleFactor(0.75)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(8)
     }
 }
 
-// V8 布料详情（原版布局）：顶部照片头（4:3 全宽 Tab + 收藏星标 + 放大按钮 +
-// 多图页码）/ 视频条，摘要卡（编号 / 名称 / 收藏 / 状态胶囊 / 已用 / 可用大数字 /
-// 进度条 / 布长幅宽总价三列）轻微压住照片头；下方 7 个可折叠板块（图片 / 基础信息 /
+// V8 布料详情（原版布局）：顶部照片头（4:3 全宽 Tab + 放大按钮 +
+// 多图页码，无左上星标）/ 视频条 / 拍照找相似入口，摘要卡（编号 / 名称 /
+// 收藏星标 / 状态胶囊 / 已用 / 可用大数字 / 进度条 / 布长幅宽总价三列，
+// 总价下带单价小字）；下方 7 个可折叠板块（图片 / 基础信息 /
 // 布料信息 / 其他信息 / 消耗记录 / 出售记录 / 脑洞与备注），收起状态存在
-// fabric.collapsedSections。"基础信息"板块的标题行在照片头上方，内容即摘要卡。
+// fabric.collapsedSections。"基础信息"板块只留收起钮、不显示标题文字。
+// 图片板块为纯展示（增删改走右上 … → 编辑）；使用/出售板块只显示入口卡，
+// 点进专属记录页（UsageRecordsPageView / SaleRecordsPageView）；
+// 脑洞与备注保留备注 inline 编辑 + 关联脑洞多选。
 // 注意：Fabric.brainstorm 旧文本字段已从全部 UI 移除（模型字段保留），
 // 脑洞板块只展示关联的 Brainstorm 实体（经 BrainstormDetailView 进入）。
+// 本详情页不加任何悬浮 + 按钮（tab 的 FAB 由路径隐藏逻辑控制）。
 struct FabricDetailView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
     @State private var showingEdit = false
     @State private var showingDelete = false
-    @State private var showingUsage = false
-    @State private var showingSale = false
     @State private var showingSimilar = false
-    @State private var editingUsage: UsageRecord?
-    @State private var editingSale: SaleRecord?
-    @State private var showingUsageList = false
     @State private var showingLongImage = false
     @State private var longImage: UIImage?
+    // 子编号关联布料：linkingSubCode 为正在关联的子编号，sheet 里选布料。
+    @State private var showingSubCodePicker = false
+    @State private var linkingSubCode: String?
+    // 脑洞与备注：多选关联脑洞。
+    @State private var showingBrainstormPicker = false
     // 原版详情头：照片 Tab 索引 / 全屏预览图名 / 播放中的视频 / 备注 inline 编辑
     @State private var headerPhotoIndex = 0
     @State private var previewName: String?
@@ -226,10 +396,9 @@ struct FabricDetailView: View {
                 }
                 .padding(.bottom, 10)
 
-                // 基础信息：标题行（+ 圆形收起钮）在照片头上方；内容是照片头 + 视频条 + 摘要卡。
+                // 基础信息：只留收起钮（标题文字已去掉）；内容是照片头 + 视频条 +
+                // 拍照找相似入口 + 摘要卡。
                 HStack {
-                    Text("基础信息")
-                        .font(.headline)
                     Spacer()
                     collapseToggleButton(key: "basic")
                 }
@@ -239,41 +408,7 @@ struct FabricDetailView: View {
                     videoStrip
                         .padding(.top, 10)
                 }
-                if fabric.collapsedSections.contains("basic") {
-                    CardView {
-                        collapsedSummary(key: "basic")
-                    }
-                    .padding(.top, 10)
-                } else {
-                    // 摘要卡轻微压住照片头（有视频条时改为常规间距，避免盖住视频缩略图）。
-                    summaryCard
-                        .padding(.top, fabric.videoFileNames.isEmpty ? -16 : 10)
-                }
-
-                // 其余可折叠板块
-                VStack(alignment: .leading, spacing: 20) {
-                    collapsibleSection(key: "images", title: "图片") {
-                        VStack(alignment: .leading, spacing: 18) {
-                            FabricImageEditor(
-                                imageNames: Binding(get: { fabric.imageFileNames }, set: { fabric.imageFileNames = $0 }),
-                                deleteFilesImmediately: true,
-                                onNamesChanged: { store.save() }
-                            )
-                            FabricVideoEditor(
-                                videoNames: Binding(get: { fabric.videoFileNames }, set: { fabric.videoFileNames = $0 }),
-                                deleteFilesImmediately: true,
-                                onNamesChanged: { store.save() }
-                            )
-                        }
-                    }
-                    collapsibleSection(key: "fabric", title: "布料信息") { fabricInfoCard }
-                    collapsibleSection(key: "other", title: "其他信息") { otherInfoCard }
-                    collapsibleSection(key: "usage", title: "消耗记录") { usageCard }
-                    collapsibleSection(key: "sale", title: "出售记录") { saleCard }
-                    collapsibleSection(key: "brainstorm", title: "脑洞与备注") { brainstormCard }
-                }
-                .padding(.top, 20)
-
+                // 拍照找相似：紧贴照片头下方（原在页面最底部）。
                 Button(action: { showingSimilar = true }) {
                     HStack {
                         Spacer()
@@ -290,6 +425,61 @@ struct FabricDetailView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .padding(.top, 10)
+                if fabric.collapsedSections.contains("basic") {
+                    CardView {
+                        collapsedSummary(key: "basic")
+                    }
+                    .padding(.top, 10)
+                } else {
+                    summaryCard
+                        .padding(.top, 10)
+                }
+
+                // 其余可折叠板块
+                VStack(alignment: .leading, spacing: 20) {
+                    // 图片板块：纯展示（增删改走右上 … → 编辑里的图片板块）。
+                    // 缩略图点进全屏预览（复用 photoHeader 的 previewName 机制），
+                    // 视频点播放（复用 videoStrip）。
+                    collapsibleSection(key: "images", title: "图片") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if !fabric.imageFileNames.isEmpty {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
+                                    ForEach(fabric.imageFileNames, id: \.self) { name in
+                                        Button(action: { previewName = name }) {
+                                            Group {
+                                                if let uiImage = FabricImageStore.loadImage(named: name) {
+                                                    Image(uiImage: uiImage)
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                } else {
+                                                    Color.gray.opacity(0.15)
+                                                }
+                                            }
+                                            .frame(height: 100)
+                                            .clipped()
+                                            .cornerRadius(10)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("查看大图")
+                                    }
+                                }
+                            }
+                            if !fabric.videoFileNames.isEmpty {
+                                videoStrip
+                            }
+                            if fabric.imageFileNames.isEmpty && fabric.videoFileNames.isEmpty {
+                                Text("暂无图片").font(.subheadline).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    collapsibleSection(key: "fabric", title: "布料信息") { fabricInfoCard }
+                    collapsibleSection(key: "other", title: "其他信息") { otherInfoCard }
+                    collapsibleSection(key: "usage", title: "消耗记录") { usageCard }
+                    collapsibleSection(key: "sale", title: "出售记录") { saleCard }
+                    collapsibleSection(key: "brainstorm", title: "脑洞与备注") { brainstormCard }
+                }
+                .padding(.top, 20)
             }
             .padding()
         }
@@ -310,30 +500,12 @@ struct FabricDetailView: View {
             }
         }
         .sheet(isPresented: $showingEdit) { NavigationStack { FabricEditView(fabric: fabric) } }
-        .sheet(isPresented: $showingUsage) { NavigationStack { UsageFormView(fabric: fabric) } }
-        .sheet(isPresented: $showingSale) { NavigationStack { SaleFormView(fabric: fabric) } }
         .sheet(isPresented: $showingSimilar) { NavigationStack { SimilarSearchView() } }
-        .sheet(item: $editingUsage) { record in NavigationStack { UsageFormView(fabric: fabric, record: record) } }
-        .sheet(item: $editingSale) { record in NavigationStack { SaleFormView(fabric: fabric, record: record) } }
-        .sheet(isPresented: $showingUsageList) {
-            NavigationStack {
-                List {
-                    if usageRecords.isEmpty { Text("暂无使用记录").foregroundColor(.secondary) }
-                    else {
-                        ForEach(usageRecords) { record in
-                            Button(action: { showingUsageList = false; editingUsage = record }) {
-                                HStack {
-                                    Text(CSVValues.dateString(record.date))
-                                    Spacer()
-                                    Text("\(LengthUnitHelper.format(record.length, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                                }
-                            }.foregroundColor(.primary)
-                        }
-                    }
-                }
-                .navigationTitle("使用记录")
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showingUsageList = false } } }
-            }
+        .sheet(isPresented: $showingSubCodePicker) {
+            NavigationStack { SubCodeFabricPickerView(fabric: fabric, subCode: linkingSubCode ?? "") }
+        }
+        .sheet(isPresented: $showingBrainstormPicker) {
+            NavigationStack { BrainstormLinkPickerView(fabric: fabric) }
         }
         .sheet(isPresented: $showingLongImage) {
             if let longImage {
@@ -533,8 +705,8 @@ struct FabricDetailView: View {
         )
     }
 
-    /// 摘要卡底部三列：图标 + 灰 label + 加粗 value。
-    private func summaryStat(icon: String, label: String, value: String, valueColor: Color = .primary) -> some View {
+    /// 摘要卡底部三列：图标 + 灰 label + 加粗 value，可选 value 下方的小字 subtext。
+    private func summaryStat(icon: String, label: String, value: String, valueColor: Color = .primary, subtext: String? = nil) -> some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
                 .foregroundColor(.secondary)
@@ -548,6 +720,13 @@ struct FabricDetailView: View {
                 .foregroundColor(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+            if let subtext {
+                Text(subtext)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -560,7 +739,8 @@ struct FabricDetailView: View {
     // MARK: - 一、基础信息（原版头：照片头 + 视频条 + 摘要卡）
 
     /// 照片头：全宽 4:3，多图可横滑（TabView，不显示系统页码，右下角自绘 "N / M"），
-    /// 左上星标收藏，右上放大进全屏预览（点图片本身也进）；无图时剪刀占位。
+    /// 右上放大进全屏预览（点图片本身也进）；无图时剪刀占位。左上不再放收藏星标
+    ///（收藏只在摘要卡里用星标切换）。
     private var photoHeader: some View {
         ZStack(alignment: .topLeading) {
             if fabric.imageFileNames.isEmpty {
@@ -593,16 +773,6 @@ struct FabricDetailView: View {
                 .cornerRadius(16)
                 .clipped()
             }
-            // 左上：收藏星标
-            Button(action: toggleFavorite) {
-                Image(systemName: fabric.isFavorite ? "star.fill" : "star")
-                    .foregroundColor(fabric.isFavorite ? .yellow : .white)
-                    .padding(8)
-                    .background(Circle().fill(Color.black.opacity(0.35)))
-            }
-            .buttonStyle(.plain)
-            .padding(12)
-            .accessibilityLabel("收藏")
             // 右上：放大按钮（当前页进全屏预览）
             if !fabric.imageFileNames.isEmpty {
                 HStack {
@@ -669,8 +839,8 @@ struct FabricDetailView: View {
         }
     }
 
-    /// 摘要卡：编号 caption + 名称 / 右侧爱心 + 状态胶囊；已使用 X 米 · P% /
-    /// 右侧可用大数字；细进度条；布长 / 幅宽 / 总价三列。
+    /// 摘要卡：编号 caption + 名称 / 右侧星标收藏 + 状态胶囊；已使用 X 米 · P% /
+    /// 右侧可用大数字；细进度条；布长 / 幅宽 / 总价三列（总价下带单价小字）。
     private var summaryCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 8) {
@@ -687,10 +857,11 @@ struct FabricDetailView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 8) {
+                    // 收藏：星标（已收藏为黄色），与卡片左上星标一致。
                     Button(action: toggleFavorite) {
-                        Image(systemName: fabric.isFavorite ? "heart.fill" : "heart")
+                        Image(systemName: fabric.isFavorite ? "star.fill" : "star")
                             .font(.title3)
-                            .foregroundColor(fabric.isFavorite ? .red : .gray)
+                            .foregroundColor(fabric.isFavorite ? .yellow : .gray)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("收藏")
@@ -734,7 +905,8 @@ struct FabricDetailView: View {
                             value: fabric.width > 0 ? "\(String(format: "%.0f", fabric.widthCm))厘米" : "未填")
                 summaryStat(icon: "yensign", label: "总价",
                             value: fabric.hasTotalPrice ? "¥\(String(format: "%.2f", fabric.purchasePrice))" : "—",
-                            valueColor: Design.priceAccent)
+                            valueColor: Design.priceAccent,
+                            subtext: fabric.unitPrice.map { "单价 ¥\(String(format: "%.2f", $0))/米" })
             }
         }
         .padding(16)
@@ -754,13 +926,21 @@ struct FabricDetailView: View {
 
     // MARK: - 二、布料信息（图标盒卡）
 
+    /// 子编号↔布料的关联是派生的（模型没有专门的关联表）：
+    /// 关联操作 = 把该子编号追加到被选布料的 subCodes（去重）。
+    /// 这里展示除本布料外、subCodes 里含有该子编号的第一块布料名。
+    private func linkedFabricName(forSubCode sub: String) -> String? {
+        store.fabrics.first { $0.id != fabric.id && $0.subCodes.contains(sub) }?.displayName
+    }
+
     private var fabricInfoCard: some View {
         CardView {
             VStack(alignment: .leading, spacing: 0) {
                 iconInfoRow(icon: "barcode", label: "编号",
-                            value: fabric.code.isEmpty ? "未填" : fabric.code,
-                            showChevron: true)
-                // 子编号：编号行下的缩进块（原有新增 / 删除逻辑不变）
+                            value: fabric.code.isEmpty ? "未填" : fabric.code)
+                // 子编号：点"＋加子编号"直接自动续号（无输入框）；每行右侧
+                // "关联"按钮选一块布料，把该子编号追加到对方 subCodes（去重），
+                // 实现子编号↔布料的关联；已关联的布料名显示在子编号下方。
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("子编号").font(.subheadline).foregroundColor(.secondary)
@@ -779,8 +959,22 @@ struct FabricDetailView: View {
                     }
                     ForEach(fabric.subCodes, id: \.self) { sub in
                         HStack {
-                            Text(sub).font(.subheadline)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(sub).font(.subheadline)
+                                if let linkedName = linkedFabricName(forSubCode: sub) {
+                                    Text("已关联：\(linkedName)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                             Spacer()
+                            Button("关联") {
+                                linkingSubCode = sub
+                                showingSubCodePicker = true
+                            }
+                            .font(.caption)
+                            .foregroundColor(Design.accent)
+                            .buttonStyle(.plain)
                             Button(action: {
                                 fabric.subCodes.removeAll { $0 == sub }
                                 fabric.updatedAt = Date()
@@ -832,24 +1026,69 @@ struct FabricDetailView: View {
         }
     }
 
-    /// 颜色行：图标盒里放实际色块（白块描边防隐身），"其他"(M) 放小色轮，
-    /// 查不到的旧名放 tag 图标；名称文字在右侧。
+    /// 颜色行：图标盒 + 名称，下方是色系图标单选（与表单网格同渲染，
+    /// 含"其他"的色轮图标）；点选即写回 fabric.colorName，并同步
+    /// codeSegments 的色系级（与布料表单同逻辑）。
     private var colorRow: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(themeAccent.opacity(0.12))
-                    .frame(width: 44, height: 44)
-                colorSwatchView
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(themeAccent.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    colorSwatchView
+                }
+                Text("颜色").font(.subheadline).foregroundColor(.secondary)
+                Spacer()
+                Text(fabric.colorName.isEmpty ? "未填" : fabric.colorName)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(fabric.colorName.isEmpty ? .secondary : .primary)
             }
-            Text("颜色").font(.subheadline).foregroundColor(.secondary)
-            Spacer()
-            Text(fabric.colorName.isEmpty ? "未填" : fabric.colorName)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(fabric.colorName.isEmpty ? .secondary : .primary)
+            let items = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
+                .filter { $0.enabled }
+            if !items.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(items) { item in
+                            let selected = fabric.colorName == item.name
+                            Button(action: { applyColor(item) }) {
+                                VStack(spacing: 4) {
+                                    CodeItemIconView(icon: item.icon, size: 30)
+                                    Text(item.name)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(6)
+                                .background(selected ? themeAccent.opacity(0.12) : Color.clear)
+                                .cornerRadius(10)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(selected ? themeAccent : Color.gray.opacity(0.25), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("颜色 \(item.name)")
+                        }
+                    }
+                }
+            }
         }
         .padding(.vertical, 6)
+    }
+
+    /// 点选色系图标：写回颜色名，并把该色的 code 写进 codeSegments 的色系级
+    ///（与 FabricEditView 表单里"颜色单选联动编号体系"的逻辑一致）。
+    private func applyColor(_ item: CodeItem) {
+        fabric.colorName = item.name
+        if let idx = store.levelOrder().firstIndex(where: { $0.kind == "color" }) {
+            var segs = fabric.codeSegments.isEmpty ? store.parseSegments(code: fabric.code) : fabric.codeSegments
+            while segs.count <= idx { segs.append("") }
+            segs[idx] = item.code
+            fabric.codeSegments = segs
+        }
+        fabric.updatedAt = Date()
+        store.save()
     }
 
     @ViewBuilder
@@ -915,147 +1154,59 @@ struct FabricDetailView: View {
         }
     }
 
-    // MARK: - 四、消耗记录（点行进编辑表单；行尾垃圾桶删除；头部"记一笔 >"新建）
+    // MARK: - 四、消耗记录（入口卡：点整卡进专属记录页；明细行/编辑/删除都在记录页里）
 
     private var usageCard: some View {
         CardView {
-            VStack(alignment: .leading, spacing: 0) {
+            NavigationLink(destination: UsageRecordsPageView(fabric: fabric)) {
                 HStack(spacing: 12) {
-                    iconBox("doc.text")
+                    RecordIconBox(icon: "scissors", accent: themeAccent)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("使用记录").font(.headline)
+                        Text("使用记录").font(.headline).foregroundColor(.primary)
                         Text("共 \(usageRecords.count) 条记录")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     Spacer()
-                    Button(action: { showingUsage = true }) {
-                        HStack(spacing: 2) {
-                            Text("记一笔")
-                            Image(systemName: "chevron.right").font(.caption)
-                        }
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(themeAccent)
+                    HStack(spacing: 2) {
+                        Text("记一笔")
+                        Image(systemName: "chevron.right").font(.caption)
                     }
-                    .buttonStyle(.plain)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(themeAccent)
                 }
-                .padding(.bottom, 4)
-                if usageRecords.isEmpty {
-                    Text("暂无使用记录")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    ForEach(usageRecords) { record in
-                        HStack(alignment: .top, spacing: 8) {
-                            Button(action: { editingUsage = record }) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack {
-                                        Text(CSVValues.dateString(record.date)).font(.subheadline)
-                                        Spacer()
-                                        Text("\(LengthUnitHelper.format(record.length, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
-                                    }
-                                    if !record.note.isEmpty {
-                                        Text(record.note).font(.caption).foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            Button(action: { store.removeUsageAndRestore(record) }) {
-                                Image(systemName: "trash").foregroundColor(.red).font(.footnote)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 8)
-                        }
-                        .padding(.vertical, 8)
-                        Divider()
-                    }
-                }
+                .padding(.vertical, 4)
             }
+            .buttonStyle(.plain)
         }
     }
 
-    // MARK: - 五、出售记录（点行进编辑表单；行尾垃圾桶删除；头部"登记出售 >"新建）
+    // MARK: - 五、出售记录（入口卡：点整卡进专属记录页；明细行/编辑/删除都在记录页里）
 
     private var saleCard: some View {
         CardView {
-            VStack(alignment: .leading, spacing: 0) {
+            NavigationLink(destination: SaleRecordsPageView(fabric: fabric)) {
                 HStack(spacing: 12) {
-                    iconBox("doc.text")
+                    RecordIconBox(icon: "yensign", accent: themeAccent)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("出售记录").font(.headline)
+                        Text("出售记录").font(.headline).foregroundColor(.primary)
                         Text("共 \(saleRecords.count) 条记录")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     Spacer()
-                    Button(action: { showingSale = true }) {
-                        HStack(spacing: 2) {
-                            Text("登记出售")
-                            Image(systemName: "chevron.right").font(.caption)
-                        }
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(themeAccent)
+                    HStack(spacing: 2) {
+                        Text("登记出售")
+                        Image(systemName: "chevron.right").font(.caption)
                     }
-                    .buttonStyle(.plain)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(themeAccent)
                 }
-                .padding(.bottom, 4)
-                if saleRecords.isEmpty {
-                    Text("暂无出售记录")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    ForEach(saleRecords) { record in
-                        HStack(alignment: .top, spacing: 8) {
-                            Button(action: { editingSale = record }) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack {
-                                        Text(CSVValues.dateString(record.date)).font(.subheadline)
-                                        Spacer()
-                                        if record.isPieces {
-                                            Text("\(record.pieces) 份 · ¥\(String(format: "%.2f", record.price))")
-                                                .font(.subheadline).fontWeight(.semibold).foregroundColor(Design.priceAccent)
-                                        } else {
-                                            Text("\(LengthUnitHelper.format(record.length, unit: store.lengthUnit)) · ¥\(String(format: "%.2f", record.price))")
-                                                .font(.subheadline).fontWeight(.semibold).foregroundColor(Design.priceAccent)
-                                        }
-                                    }
-                                    if !record.channel.isEmpty {
-                                        Text(record.channel).font(.caption).foregroundColor(.secondary)
-                                    }
-                                    if !record.note.isEmpty {
-                                        Text(record.note).font(.caption).foregroundColor(.secondary)
-                                    }
-                                    if !record.imageFileNames.isEmpty {
-                                        ScrollView(.horizontal, showsIndicators: false) {
-                                            HStack(spacing: 8) {
-                                                ForEach(record.imageFileNames, id: \.self) { name in
-                                                    if let uiImage = FabricImageStore.loadImage(named: name) {
-                                                        Image(uiImage: uiImage).resizable().scaledToFill().frame(width: 64, height: 64).clipped().cornerRadius(8)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            Button(action: { store.deleteSaleRecord(record) }) {
-                                Image(systemName: "trash").foregroundColor(.red).font(.footnote)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 8)
-                        }
-                        .padding(.vertical, 8)
-                        Divider()
-                    }
-                }
+                .padding(.vertical, 4)
             }
+            .buttonStyle(.plain)
         }
     }
 
@@ -1110,6 +1261,21 @@ struct FabricDetailView: View {
                         .foregroundColor(fabric.note.isEmpty ? .secondary : .primary)
                         .padding(.bottom, 4)
                 }
+                // 关联脑洞：多选（store.brainstorms 全量列表，不限数量），
+                // 选中即把本布料 id 写入 Brainstorm.linkedFabricIds（去重）。
+                Button(action: { showingBrainstormPicker = true }) {
+                    HStack {
+                        Image(systemName: "lightbulb")
+                        Text(linkedBrainstorms.isEmpty ? "关联脑洞" : "关联脑洞（已关联 \(linkedBrainstorms.count) 个）")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(themeAccent)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关联脑洞")
                 if !linkedBrainstorms.isEmpty {
                     Divider()
                         .padding(.vertical, 8)
@@ -1156,6 +1322,433 @@ struct FabricDetailView: View {
         if let image = renderer.uiImage {
             longImage = image
             showingLongImage = true
+        }
+    }
+}
+
+// MARK: - 专属记录页（REQ 5）：从详情入口卡经 NavigationLink 推进来，
+// 跑在已有的 NavigationStack 里。添加表单用 NavigationLink push
+//（标题"添加使用记录/添加出售记录"，返回键回到记录页）；
+// 编辑用 sheet（复用 UsageFormView / SaleFormView 的 record: 初始化）。
+
+/// 子编号"关联"用的布料选择器：点一块布料，把 subCode 追加到对方 subCodes
+///（去重），双方 updatedAt 刷新后 store.save() 一次落盘。
+struct SubCodeFabricPickerView: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    var fabric: Fabric
+    var subCode: String
+
+    var body: some View {
+        List {
+            ForEach(store.fabrics.filter { $0.id != fabric.id }) { other in
+                Button(action: {
+                    if !subCode.isEmpty && !other.subCodes.contains(subCode) {
+                        other.subCodes.append(subCode)
+                        other.updatedAt = Date()
+                    }
+                    fabric.updatedAt = Date()
+                    store.save()
+                    dismiss()
+                }) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(other.displayName).foregroundColor(.primary)
+                            if !other.code.isEmpty {
+                                Text(other.code).font(.caption).foregroundColor(.secondary)
+                            }
+                        }
+                        Spacer()
+                        if !subCode.isEmpty && other.subCodes.contains(subCode) {
+                            Image(systemName: "checkmark").foregroundColor(Design.accent)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .navigationTitle("关联布料")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+        }
+    }
+}
+
+/// 脑洞与备注 → 关联脑洞：store.brainstorms 全量多选（不限数量），
+/// 勾选即把本布料 id 写入 Brainstorm.linkedFabricIds（去重），取消勾选即移除。
+struct BrainstormLinkPickerView: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    var fabric: Fabric
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+
+    var body: some View {
+        List {
+            if store.brainstorms.isEmpty {
+                Text("还没有脑洞，去脑洞 Tab 先记一条").foregroundColor(.secondary)
+            } else {
+                ForEach(store.brainstorms) { b in
+                    let linked = b.linkedFabricIds.contains(fabric.id)
+                    Button(action: {
+                        if linked {
+                            b.linkedFabricIds.removeAll { $0 == fabric.id }
+                        } else {
+                            b.linkedFabricIds.append(fabric.id)
+                        }
+                        store.save()
+                    }) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(b.title.isEmpty ? "未命名脑洞" : b.title).foregroundColor(.primary)
+                                Text(b.status).font(.caption).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if linked {
+                                Image(systemName: "checkmark").foregroundColor(themeAccent)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .navigationTitle("关联脑洞")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
+        }
+    }
+}
+
+/// 使用记录专属页：摘要卡（名称/状态/已用/可用大数字/共长/进度条）+
+/// 记录行（日期/长度/备注/删除，点行进编辑 sheet）+ 空态；
+/// 右上 + 与空态大按钮都 push 添加页。
+struct UsageRecordsPageView: View {
+    @EnvironmentObject private var store: Store
+    var fabric: Fabric
+    @State private var editingUsage: UsageRecord?
+    private var records: [UsageRecord] { store.usageRecords(for: fabric.id) }
+    private var remaining: Double { store.remaining(for: fabric) }
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+
+    private var usedSummary: String {
+        let base = "已使用 \(LengthUnitHelper.format(fabric.usedLength, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
+        if fabric.hasPurchaseLength && fabric.length > 0 {
+            return "\(base) · \(Int(fabric.usedLength / fabric.length * 100))%"
+        }
+        return base
+    }
+
+    /// 灰底状态胶囊（与原型一致）。
+    private var statusCapsule: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .stroke(Color.secondary, lineWidth: 1.5)
+                .frame(width: 8, height: 8)
+            Text(store.status(for: fabric))
+                .font(.subheadline)
+                .fontWeight(.semibold)
+        }
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Capsule().fill(Color.gray.opacity(0.12)))
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(fabric.displayName)
+                    .font(.headline)
+                    .lineLimit(2)
+                Spacer()
+                statusCapsule
+            }
+            Text(usedSummary)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(themeAccent)
+            if fabric.hasPurchaseLength {
+                HStack(alignment: .bottom) {
+                    HStack(alignment: .lastTextBaseline, spacing: 3) {
+                        Text(LengthUnitHelper.format(remaining, unit: store.lengthUnit))
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(themeAccent)
+                        Text("\(LengthUnitHelper.suffix(unit: store.lengthUnit))可用")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Text("共 \(LengthUnitHelper.format(fabric.length, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                if fabric.length > 0 {
+                    ProgressBarView(fraction: remaining / fabric.length, height: 8, accent: themeAccent)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(themeAccent.opacity(0.12))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "scissors")
+                    .font(.title)
+                    .foregroundColor(themeAccent)
+            }
+            .padding(.top, 24)
+            Text("还没有使用记录")
+                .font(.headline)
+            Text("添加记录后，布长和使用状态会自动更新")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            NavigationLink(destination: UsageFormView(fabric: fabric)) {
+                HStack {
+                    Spacer()
+                    Image(systemName: "plus")
+                    Text("添加第一条记录").fontWeight(.semibold)
+                    Spacer()
+                }
+                .foregroundColor(.white)
+                .padding(.vertical, 14)
+                .background(themeAccent)
+                .cornerRadius(14)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(20)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                summaryCard
+                if records.isEmpty {
+                    emptyState
+                } else {
+                    CardView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(records) { record in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Button(action: { editingUsage = record }) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            HStack {
+                                                Text(CSVValues.dateString(record.date)).font(.subheadline)
+                                                Spacer()
+                                                Text("\(LengthUnitHelper.format(record.length, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                                    .font(.subheadline)
+                                                    .fontWeight(.semibold)
+                                            }
+                                            if !record.note.isEmpty {
+                                                Text(record.note).font(.caption).foregroundColor(.secondary)
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    Button(action: { store.removeUsageAndRestore(record) }) {
+                                        Image(systemName: "trash").foregroundColor(.red).font(.footnote)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.top, 8)
+                                }
+                                .padding(.vertical, 8)
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(Design.background)
+        .navigationTitle("使用记录")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink(destination: UsageFormView(fabric: fabric)) {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("添加使用记录")
+            }
+        }
+        .sheet(item: $editingUsage) { record in
+            NavigationStack { UsageFormView(fabric: fabric, record: record) }
+        }
+    }
+}
+
+/// 出售记录专属页：摘要卡（名称/状态/已售米·件/实收/双色进度条）+
+/// 记录行（日期/长度或份数·金额/渠道/备注/删除，点行进编辑 sheet）+ 空态；
+/// 右上 + 与空态大按钮都 push 添加页。
+struct SaleRecordsPageView: View {
+    @EnvironmentObject private var store: Store
+    var fabric: Fabric
+    @State private var editingSale: SaleRecord?
+    private var records: [SaleRecord] { store.saleRecords(for: fabric.id) }
+    private var sold: Double { store.soldLength(for: fabric.id) }
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+
+    private var totalPieces: Int { records.filter { $0.isPieces }.reduce(0) { $0 + $1.pieces } }
+    private var totalRevenue: Double { records.reduce(0) { $0 + $1.price } }
+
+    private var statusCapsule: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .stroke(Color.secondary, lineWidth: 1.5)
+                .frame(width: 8, height: 8)
+            Text(store.status(for: fabric))
+                .font(.subheadline)
+                .fontWeight(.semibold)
+        }
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Capsule().fill(Color.gray.opacity(0.12)))
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(fabric.displayName)
+                    .font(.headline)
+                    .lineLimit(2)
+                Spacer()
+                statusCapsule
+            }
+            HStack(alignment: .bottom) {
+                Text("已售出 \(LengthUnitHelper.format(sold, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit)) · \(totalPieces) 件")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(themeAccent)
+                Spacer()
+                Text("实收 ¥\(String(format: "%.2f", totalRevenue))")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(Design.priceAccent)
+            }
+            if fabric.hasPurchaseLength && fabric.length > 0 {
+                DualProgressBarView(
+                    usedFraction: fabric.usedLength / fabric.length,
+                    soldFraction: sold / fabric.length,
+                    height: 8,
+                    usedColor: themeAccent
+                )
+            }
+        }
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(themeAccent.opacity(0.12))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "scissors")
+                    .font(.title)
+                    .foregroundColor(themeAccent)
+            }
+            .padding(.top, 24)
+            Text("还没有出售记录")
+                .font(.headline)
+            Text("添加记录后，售出数量和布料状态会自动更新")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            NavigationLink(destination: SaleFormView(fabric: fabric)) {
+                HStack {
+                    Spacer()
+                    Image(systemName: "plus")
+                    Text("添加第一条记录").fontWeight(.semibold)
+                    Spacer()
+                }
+                .foregroundColor(.white)
+                .padding(.vertical, 14)
+                .background(themeAccent)
+                .cornerRadius(14)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(20)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                summaryCard
+                if records.isEmpty {
+                    emptyState
+                } else {
+                    CardView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(records) { record in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Button(action: { editingSale = record }) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            HStack {
+                                                Text(CSVValues.dateString(record.date)).font(.subheadline)
+                                                Spacer()
+                                                if record.isPieces {
+                                                    Text("\(record.pieces) 件 · ¥\(String(format: "%.2f", record.price))")
+                                                        .font(.subheadline).fontWeight(.semibold).foregroundColor(Design.priceAccent)
+                                                } else {
+                                                    Text("\(LengthUnitHelper.format(record.length, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit)) · ¥\(String(format: "%.2f", record.price))")
+                                                        .font(.subheadline).fontWeight(.semibold).foregroundColor(Design.priceAccent)
+                                                }
+                                            }
+                                            if !record.channel.isEmpty {
+                                                Text(record.channel).font(.caption).foregroundColor(.secondary)
+                                            }
+                                            if !record.note.isEmpty {
+                                                Text(record.note).font(.caption).foregroundColor(.secondary)
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    Button(action: { store.deleteSaleRecord(record) }) {
+                                        Image(systemName: "trash").foregroundColor(.red).font(.footnote)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.top, 8)
+                                }
+                                .padding(.vertical, 8)
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(Design.background)
+        .navigationTitle("出售记录")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink(destination: SaleFormView(fabric: fabric)) {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("添加出售记录")
+            }
+        }
+        .sheet(item: $editingSale) { record in
+            NavigationStack { SaleFormView(fabric: fabric, record: record) }
         }
     }
 }
@@ -1867,6 +2460,28 @@ struct UsageFormView: View {
     @State private var selectedWorkIDs: Set<UUID> = []
     @State private var note = ""
     @State private var errorMessage: String?
+    @State private var showingWorkPicker = false
+    @State private var lengthInitialized = false
+
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    /// 可用上限（米）：编辑时把旧记录的长度加回剩余。
+    private var maxAvailable: Double {
+        if let old = record { return store.remaining(for: fabric) + old.length }
+        return store.remaining(for: fabric)
+    }
+    private var hasMax: Bool { fabric.hasPurchaseLength }
+    private var maxDisplay: Double { maxAvailable * LengthUnitHelper.factorToDisplay(unit: store.lengthUnit) }
+    private var enteredMetres: Double {
+        guard let d = Double(lengthText), d > 0 else { return 0 }
+        return LengthUnitHelper.fromDisplay(d, unit: store.lengthUnit)
+    }
+    /// 滑块↔输入框双向绑定（显示单位）。
+    private var lengthSliderBinding: Binding<Double> {
+        Binding(
+            get: { min(max(Double(lengthText) ?? 0, 0), maxDisplay) },
+            set: { lengthText = displayNum($0) }
+        )
+    }
 
     init(fabric: Fabric, record: UsageRecord? = nil) {
         self.fabric = fabric
@@ -1880,42 +2495,153 @@ struct UsageFormView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Text("布料：\(fabric.displayName)")
-                Text("编号：\(fabric.code.isEmpty ? "未填" : fabric.code)")
-                Text("剩余：\(LengthUnitHelper.format(store.remaining(for: fabric), unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                if record != nil { Text("编辑已有记录：保存会按新长度重新扣减（先回补旧长度再扣新长度）。").font(.caption).foregroundColor(.secondary) }
-            }
-            Section("填写使用记录") {
-                LabeledTextField(label: "使用长度", placeholder: "点击输入", text: $lengthText, keyboardType: .decimalPad, unit: store.lengthUnit)
-                DatePicker("使用时间", selection: $date, displayedComponents: .date)
-                LabeledMultilineField(label: "用途备注", text: $note)
-            }
-            Section("关联成品（可多选）") {
-                if store.works.isEmpty { Text("还没有成品").foregroundColor(.secondary) }
-                else {
-                    ForEach(store.works) { work in
-                        Button(action: {
-                            if selectedWorkIDs.contains(work.id) { selectedWorkIDs.remove(work.id) } else { selectedWorkIDs.insert(work.id) }
-                        }) {
-                            HStack { Text(work.name.isEmpty ? "未命名成品" : work.name); Spacer(); if selectedWorkIDs.contains(work.id) { Image(systemName: "checkmark") } }
+        ScrollView {
+            VStack(spacing: 16) {
+                // 长度卡：大数字输入 + 米单位 + 滑块 + 最多/记录后可用 + 全部使用链接。
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "ruler").foregroundColor(themeAccent)
+                        Text("使用长度").font(.headline)
+                        Spacer()
+                        if hasMax {
+                            Text("最多 \(LengthUnitHelper.format(maxAvailable, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                         }
-                        .foregroundColor(.primary)
+                    }
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        TextField("0", text: $lengthText)
+                            .keyboardType(.decimalPad)
+                            .font(.system(size: 44, weight: .bold))
+                        Text(LengthUnitHelper.suffix(unit: store.lengthUnit))
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    if hasMax {
+                        Slider(value: lengthSliderBinding, in: 0...maxDisplay)
+                            .tint(themeAccent)
+                        HStack {
+                            Text("记录后可用")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(LengthUnitHelper.format(max(0, maxAvailable - enteredMetres), unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(themeAccent)
+                        }
+                        Button("使用全部可用布长") {
+                            lengthText = displayNum(maxDisplay)
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(themeAccent)
+                        .buttonStyle(.plain)
+                    }
+                    if record != nil {
+                        Text("编辑已有记录：保存会按新长度重新扣减（先回补旧长度再扣新长度）。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
-            }
-            if record != nil {
-                Section {
+                .padding(16)
+                .background(Color(.systemBackground))
+                .cornerRadius(16)
+                // 记录信息卡：图标行。
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("记录信息")
+                        .font(.headline)
+                        .padding(.bottom, 8)
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "calendar", accent: themeAccent)
+                        Text("使用日期").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        DatePicker("", selection: $date, displayedComponents: .date)
+                            .labelsHidden()
+                    }
+                    .padding(.vertical, 6)
+                    Divider()
+                    Button(action: { showingWorkPicker = true }) {
+                        HStack(spacing: 12) {
+                            RecordIconBox(icon: "tshirt", accent: themeAccent)
+                            Text("关联作品").font(.subheadline).foregroundColor(.secondary)
+                            Spacer()
+                            Text(selectedWorkIDs.isEmpty ? "未选择" : "\(selectedWorkIDs.count) 个已选")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "text.alignleft", accent: themeAccent)
+                        TextField("用途，如衣身、袖口", text: $note)
+                            .font(.subheadline)
+                    }
+                    .padding(.vertical, 6)
+                }
+                .padding(16)
+                .background(Color(.systemBackground))
+                .cornerRadius(16)
+                if record != nil {
                     Button("删除这条使用记录", role: .destructive) {
                         if let record { store.removeUsageAndRestore(record) }
                         dismiss()
                     }
+                    .buttonStyle(.plain)
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(16)
+                }
+                if let errorMessage {
+                    Text(errorMessage).foregroundColor(.red).font(.subheadline)
                 }
             }
-            if let errorMessage { Text(errorMessage).foregroundColor(.red) }
+            .padding()
         }
-        .navigationTitle(record == nil ? "填写使用记录" : "编辑使用记录")
+        .background(Design.background)
+        .navigationTitle(record == nil ? "添加使用记录" : "编辑使用记录")
+        .onAppear {
+            // 编辑时把记录的米数换算成显示单位（init 里读不到 store，只能在这里做）。
+            if !lengthInitialized, let record {
+                lengthText = String(format: "%.2f", record.length * LengthUnitHelper.factorToDisplay(unit: store.lengthUnit))
+                lengthInitialized = true
+            }
+        }
+        .sheet(isPresented: $showingWorkPicker) {
+            NavigationStack {
+                List {
+                    if store.works.isEmpty {
+                        Text("还没有成品").foregroundColor(.secondary)
+                    } else {
+                        ForEach(store.works) { work in
+                            Button(action: {
+                                if selectedWorkIDs.contains(work.id) { selectedWorkIDs.remove(work.id) }
+                                else { selectedWorkIDs.insert(work.id) }
+                            }) {
+                                HStack {
+                                    Text(work.name.isEmpty ? "未命名成品" : work.name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedWorkIDs.contains(work.id) {
+                                        Image(systemName: "checkmark").foregroundColor(themeAccent)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .navigationTitle("关联作品")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("完成") { showingWorkPicker = false } }
+                }
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
@@ -1959,7 +2685,28 @@ struct SaleFormView: View {
     @State private var note = ""
     @State private var imageNames: [String] = []
     @State private var errorMessage: String?
+    @State private var lengthInitialized = false
     private let originalImageNames: [String]
+
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    /// 长度出售的可用上限（米）：编辑时把旧记录的长度加回剩余；份数模式不用。
+    private var maxAvailable: Double {
+        if let old = record, !old.isPieces { return store.remaining(for: fabric) + old.length }
+        return store.remaining(for: fabric)
+    }
+    private var hasMax: Bool { fabric.hasPurchaseLength && !isPieces }
+    private var maxDisplay: Double { maxAvailable * LengthUnitHelper.factorToDisplay(unit: store.lengthUnit) }
+    private var enteredMetres: Double {
+        guard let d = Double(lengthText), d > 0 else { return 0 }
+        return LengthUnitHelper.fromDisplay(d, unit: store.lengthUnit)
+    }
+    /// 滑块↔输入框双向绑定（显示单位）。
+    private var lengthSliderBinding: Binding<Double> {
+        Binding(
+            get: { min(max(Double(lengthText) ?? 0, 0), maxDisplay) },
+            set: { lengthText = displayNum($0) }
+        )
+    }
 
     init(fabric: Fabric, record: SaleRecord? = nil) {
         self.fabric = fabric
@@ -1979,37 +2726,131 @@ struct SaleFormView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Text("布料：\(fabric.displayName)")
-                Text("剩余：\(LengthUnitHelper.format(store.remaining(for: fabric), unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                Text("售出不计入消耗。长度出售会扣剩余；份数出售只计份数，不扣剩余长度、不进售出米数。")
-                    .font(.caption).foregroundColor(.secondary)
-            }
-            Section("出售记录") {
-                Picker("单位", selection: $isPieces) {
-                    Text("长度").tag(false)
-                    Text("份").tag(true)
-                }.pickerStyle(.segmented)
-                if isPieces {
-                    LabeledTextField(label: "份数", placeholder: ">0", text: $piecesText, keyboardType: .numberPad, unit: "件")
-                } else {
-                    LabeledTextField(label: "售出长度", placeholder: "点击输入", text: $lengthText, keyboardType: .decimalPad, unit: store.lengthUnit)
+        ScrollView {
+            VStack(spacing: 16) {
+                // 数量卡：长度/份切换 + 大数字输入 + 单位；长度模式带滑块/最多/记录后可用/全部售出链接。
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("单位", selection: $isPieces) {
+                        Text("长度").tag(false)
+                        Text("份").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    HStack {
+                        Image(systemName: isPieces ? "shippingbox" : "ruler").foregroundColor(themeAccent)
+                        Text(isPieces ? "售出份数" : "售出长度").font(.headline)
+                        Spacer()
+                        if hasMax {
+                            Text("最多 \(LengthUnitHelper.format(maxAvailable, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        TextField("0", text: isPieces ? $piecesText : $lengthText)
+                            .keyboardType(isPieces ? .numberPad : .decimalPad)
+                            .font(.system(size: 44, weight: .bold))
+                        Text(isPieces ? "份" : LengthUnitHelper.suffix(unit: store.lengthUnit))
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    if hasMax {
+                        Slider(value: lengthSliderBinding, in: 0...maxDisplay)
+                            .tint(themeAccent)
+                        HStack {
+                            Text("记录后可用")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(LengthUnitHelper.format(max(0, maxAvailable - enteredMetres), unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(themeAccent)
+                        }
+                        Button("售出全部可用布长") {
+                            lengthText = displayNum(maxDisplay)
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(themeAccent)
+                        .buttonStyle(.plain)
+                    }
+                    Text("售出不计入消耗。长度出售会扣剩余；份数出售只计份数，不扣剩余长度、不进售出米数。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                Picker("售出渠道", selection: $channel) {
-                    Text("未填").tag("")
-                    ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
+                .padding(16)
+                .background(Color(.systemBackground))
+                .cornerRadius(16)
+                // 记录信息卡：图标行（售出价格 / 渠道 / 商家 / 日期 / 备注）。
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("记录信息")
+                        .font(.headline)
+                        .padding(.bottom, 8)
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "yensign", accent: themeAccent)
+                        Text("售出价格").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        TextField("点击输入", text: $priceText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .font(.subheadline)
+                            .frame(width: 110)
+                        Text("元").font(.subheadline).foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                    Divider()
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "bag", accent: themeAccent)
+                        Text("渠道").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        Picker("售出渠道", selection: $channel) {
+                            Text("未填").tag("")
+                            ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.subheadline)
+                    }
+                    .padding(.vertical, 6)
+                    Divider()
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "storefront", accent: themeAccent)
+                        Text("商家").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        TextField("选填", text: $merchant)
+                            .multilineTextAlignment(.trailing)
+                            .font(.subheadline)
+                            .frame(width: 140)
+                    }
+                    .padding(.vertical, 6)
+                    Divider()
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "calendar", accent: themeAccent)
+                        Text("售出日期").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        DatePicker("", selection: $date, displayedComponents: .date)
+                            .labelsHidden()
+                    }
+                    .padding(.vertical, 6)
+                    Divider()
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "note.text", accent: themeAccent)
+                        TextField("备注（选填）", text: $note)
+                            .font(.subheadline)
+                    }
+                    .padding(.vertical, 6)
                 }
-                LabeledTextField(label: "商家", placeholder: "选填", text: $merchant)
-                LabeledTextField(label: "售出价格", placeholder: "点击输入", text: $priceText, keyboardType: .decimalPad, unit: "元")
-                DatePicker("售出日期", selection: $date, displayedComponents: .date)
-                LabeledMultilineField(label: "备注", text: $note)
-            }
-            Section("图片") {
-                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
-            }
-            if record != nil {
-                Section {
+                .padding(16)
+                .background(Color(.systemBackground))
+                .cornerRadius(16)
+                // 图片卡。
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("图片").font(.headline)
+                    FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
+                }
+                .padding(16)
+                .background(Color(.systemBackground))
+                .cornerRadius(16)
+                if record != nil {
                     Button("删除这条出售记录", role: .destructive) {
                         if let record {
                             for name in record.imageFileNames { FabricImageStore.delete(named: name) }
@@ -2017,11 +2858,28 @@ struct SaleFormView: View {
                         }
                         dismiss()
                     }
+                    .buttonStyle(.plain)
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(16)
+                }
+                if let errorMessage {
+                    Text(errorMessage).foregroundColor(.red).font(.subheadline)
                 }
             }
-            if let errorMessage { Text(errorMessage).foregroundColor(.red) }
+            .padding()
         }
-        .navigationTitle(record == nil ? "标记出售" : "编辑出售记录")
+        .background(Design.background)
+        .navigationTitle(record == nil ? "添加出售记录" : "编辑出售记录")
+        .onAppear {
+            // 编辑时把记录的米数换算成显示单位（init 里读不到 store，只能在这里做）。
+            if !lengthInitialized, let record, !record.isPieces {
+                lengthText = String(format: "%.2f", record.length * LengthUnitHelper.factorToDisplay(unit: store.lengthUnit))
+                lengthInitialized = true
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("取消") {

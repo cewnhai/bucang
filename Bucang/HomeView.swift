@@ -202,7 +202,6 @@ struct BucangView: View {
                 }
             }
             .background(Design.background)
-            .navigationTitle("布仓")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: FabricNavTarget.self) { target in
                 switch target {
@@ -330,32 +329,42 @@ struct BucangView: View {
 
     private var tabBar: some View {
         HStack(spacing: 0) {
-            ForEach(visibleTabs) { t in
-                Button(action: { tab = t }) {
-                    VStack(spacing: 4) {
-                        HStack(spacing: 2) {
-                            Text(t.title)
-                                .fontWeight(tab == t ? .bold : .regular)
-                                .foregroundColor(tab == t ? .primary : .secondary)
-                            if t == .wishlist && !store.wishlistItems.isEmpty {
-                                Text("\(store.wishlistItems.count)")
-                                    .font(.caption2).fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(Color.orange)
-                                    .cornerRadius(10)
+            // 一级 Tab 横向滚动：一次约显示 3 个（每按钮固定 110pt），左滑查看更多。
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(visibleTabs) { t in
+                        Button(action: { tab = t }) {
+                            VStack(spacing: 4) {
+                                HStack(spacing: 2) {
+                                    Text(t.title)
+                                        .fontWeight(tab == t ? .bold : .regular)
+                                        .foregroundColor(tab == t ? .primary : .secondary)
+                                    if t == .wishlist && !store.wishlistItems.isEmpty {
+                                        Text("\(store.wishlistItems.count)")
+                                            .font(.caption2).fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 6).padding(.vertical, 2)
+                                            .background(Color.orange)
+                                            .cornerRadius(10)
+                                    }
+                                }
+                                Rectangle()
+                                    .fill(tab == t ? themeAccent : Color.clear)
+                                    .frame(height: 2)
                             }
                         }
-                        Rectangle()
-                            .fill(tab == t ? themeAccent : Color.clear)
-                            .frame(height: 2)
+                        .buttonStyle(.plain)
+                        .frame(width: 110)
                     }
                 }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
             }
+            // "…" 固定在右侧滚动区外，开 顶栏显示 设置。
             Button(action: { showingTabSelection = true }) {
-                Image(systemName: "ellipsis").foregroundColor(.secondary).padding(.horizontal, 4)
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 22))
+                    .foregroundColor(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }.buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
@@ -393,18 +402,12 @@ struct BucangView: View {
     private var fabricStatsCard: some View {
         VStack(spacing: 10) {
             HStack {
-                Button(action: { showOutbound.toggle() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.left.arrow.right")
-                        Text(showOutbound ? "入库" : "出库")
-                    }
-                    .font(.caption).fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(Color.white.opacity(0.2))
-                    .cornerRadius(14)
+                Picker("统计视图", selection: $showOutbound) {
+                    Text("库存").tag(false)
+                    Text("出库").tag(true)
                 }
-                .buttonStyle(.plain)
+                .pickerStyle(.segmented)
+                .frame(width: 140)
                 Spacer()
                 Text("\(store.fabrics.count) 份布料")
                     .font(.headline).fontWeight(.bold).foregroundColor(.white)
@@ -429,7 +432,7 @@ struct BucangView: View {
                                 Text("售出米数").font(.caption).foregroundColor(.white.opacity(0.85))
                                 HStack(spacing: 4) {
                                     Text("\(LengthUnitHelper.format(store.totalSoldMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                                        .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
+                                        .font(.headline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
                                     Button(action: { showingSaleFlow = true }) {
                                         Image(systemName: "chevron.right").font(.caption).foregroundColor(.white)
                                     }
@@ -460,7 +463,7 @@ struct BucangView: View {
                                 .buttonStyle(.plain)
                             }
                             Text(hideAmounts ? "****" : "¥\(String(format: "%.2f", store.totalValue))")
-                                .font(.subheadline).fontWeight(.bold).foregroundColor(Design.priceAccent).lineLimit(1).minimumScaleFactor(0.7)
+                                .font(.headline).fontWeight(.bold).foregroundColor(Design.priceAccent).lineLimit(1).minimumScaleFactor(0.7)
                         }
                         .frame(maxWidth: .infinity)
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
@@ -470,7 +473,7 @@ struct BucangView: View {
                             Text("消耗米数").font(.caption).foregroundColor(.white.opacity(0.85))
                             HStack(spacing: 4) {
                                 Text("\(LengthUnitHelper.format(store.totalConsumed, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                                    .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
+                                    .font(.headline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
                                 Button(action: { showingUsageDetail = true }) {
                                     Image(systemName: "chevron.right").font(.caption).foregroundColor(.white)
                                 }
@@ -637,7 +640,7 @@ struct BucangView: View {
     private func statColumn(label: String, value: String, valueColor: Color = .white) -> some View {
         VStack(spacing: 2) {
             Text(label).font(.caption).foregroundColor(.white.opacity(0.85))
-            Text(value).font(.subheadline).fontWeight(.bold).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.7)
+            Text(value).font(.headline).fontWeight(.bold).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
     }
