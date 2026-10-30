@@ -31,6 +31,7 @@ enum FabricStatusLabel {
 
 /// 用户自选的卡片字段（`Store.cardDisplayFields`，@Published，持久化于 StoreData）。
 /// 为空时回落到默认 5 项（与 Store 端"空视为未设置"的迁移口径一致）。
+@MainActor
 private func cardDisplayFields(of store: Store) -> [String] {
     let v = store.cardDisplayFields
     return v.isEmpty ? ["material", "width", "length", "unitPrice", "remaining"] : v
@@ -505,7 +506,7 @@ struct FabricDetailView: View {
             NavigationStack { SubCodeFabricPickerView(fabric: fabric, subCode: linkingSubCode ?? "") }
         }
         .sheet(isPresented: $showingBrainstormPicker) {
-            NavigationStack { BrainstormLinkPickerView(fabric: fabric) }
+            NavigationStack { FabricBrainstormLinkPickerView(fabric: fabric) }
         }
         .sheet(isPresented: $showingLongImage) {
             if let longImage {
@@ -1376,7 +1377,7 @@ struct SubCodeFabricPickerView: View {
 
 /// 脑洞与备注 → 关联脑洞：store.brainstorms 全量多选（不限数量），
 /// 勾选即把本布料 id 写入 Brainstorm.linkedFabricIds（去重），取消勾选即移除。
-struct BrainstormLinkPickerView: View {
+struct FabricBrainstormLinkPickerView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
