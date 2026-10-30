@@ -728,13 +728,14 @@ final class Store: ObservableObject {
     static let statusCapsules = ["全部", "收藏", "未使用", "使用中", "已用完", "部分出售", "已出售"]
     // 旧颜色名 → 新色系表名（V8 编号体系的色系级）。不在映射里且不在色系表里的
     // 名字保留原样，code 查不到（显示时只显示名字）。
-    static let oldColorNameMap = ["棕": "茶", "米": "茶", "多彩": "多"]
+    // V8.1："多/多色/多彩"统一为"其他"（色轮图标），"米/米色/米白"并入"茶"。
+    static let oldColorNameMap = ["棕": "茶", "米": "茶", "多": "其他", "多色": "其他", "多彩": "其他"]
 
     static func defaultCodeLevels() -> [CodeLevel] {
         let colorItems = [
             ("白", "W", "⚪"), ("黑", "B", "⚫"), ("红", "R", "🔴"), ("粉", "P", "🌸"),
             ("橙", "O", "🟠"), ("黄", "Y", "🟡"), ("绿", "G", "🟢"), ("蓝", "L", "🔵"),
-            ("紫", "Z", "🟣"), ("灰", "H", "🔘"), ("茶", "T", "🟤"), ("多", "M", "🌈"),
+            ("紫", "Z", "🟣"), ("灰", "H", "🔘"), ("茶", "T", "🟤"), ("其他", "M", "wheel"),
         ].map { CodeItem(name: $0.0, code: $0.1, icon: $0.2) }
         let patternItems = [
             ("无地", "1"), ("小纹", "2"), ("付下", "3"),
@@ -779,6 +780,7 @@ final class Store: ObservableObject {
         channelOptions = decoded.channelOptions.isEmpty ? Self.defaultChannelOptions : decoded.channelOptions
         patternOptions = decoded.patternOptions.isEmpty ? Self.defaultPatternOptions : decoded.patternOptions
         codeLevels = decoded.codeLevels.isEmpty ? Self.defaultCodeLevels() : decoded.codeLevels
+        migrateColorWheel()
         if decoded.visibleTabs.isEmpty {
             visibleTabs = Self.defaultVisibleTabs
         } else {
@@ -789,6 +791,37 @@ final class Store: ObservableObject {
         if !visibleTabs.contains("fabric") { visibleTabs.insert("fabric", at: 0) }
         themeName = decoded.themeName.isEmpty ? "深蓝" : decoded.themeName
         normalizeLegacyFabrics()
+    }
+
+    /// 色轮迁移（V8.1）：色系级里删除 米/米色/米白 条目；
+    /// 多/多色/多彩 条目改名为"其他"、图标改成 "wheel"；
+    /// 布料 colorName 同步：米/米色/米白→茶，多/多色/多彩→其他。
+    /// 精确匹配；幂等，每次 load/apply 都可安全重跑；有改动才 save。
+    private func migrateColorWheel() {
+        var changed = false
+        for level in codeLevels where level.kind == "color" {
+            let before = level.items.count
+            level.items.removeAll { $0.name == "米" || $0.name == "米色" || $0.name == "米白" }
+            if level.items.count != before { changed = true }
+            for item in level.items where item.name == "多" || item.name == "多色" || item.name == "多彩" {
+                item.name = "其他"
+                item.icon = "wheel"
+                changed = true
+            }
+        }
+        for fabric in fabrics {
+            let newName: String
+            switch fabric.colorName {
+            case "米", "米色", "米白": newName = "茶"
+            case "多", "多色", "多彩": newName = "其他"
+            default: newName = fabric.colorName
+            }
+            if newName != fabric.colorName {
+                fabric.colorName = newName
+                changed = true
+            }
+        }
+        if changed { save() }
     }
 
     /// 旧数据归一化：旧布料只有 materialId/channelId 时，按字典名填进
@@ -814,8 +847,9 @@ final class Store: ObservableObject {
             for fabric in fabrics where !fabric.channelName.isEmpty && !channelOptions.contains(fabric.channelName) {
             channelOptions.append(fabric.channelName)
         }
-        // V8 颜色迁移：旧颜色名按 oldColorNameMap 映射到新色系表（棕/米→茶，多彩→多），
-        // 其余旧名原样保留；色系表里查不到 code 的显示时只显示名字。
+        // V8 颜色迁移：旧颜色名按 oldColorNameMap 映射到新色系表
+        //（棕/米→茶，多/多色/多彩→其他），其余旧名原样保留；
+        // 色系表里查不到 code 的显示时只显示名字。
         for fabric in fabrics {
             if let mapped = Self.oldColorNameMap[fabric.colorName] {
                 fabric.colorName = mapped

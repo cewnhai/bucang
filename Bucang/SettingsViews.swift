@@ -874,7 +874,7 @@ struct CodeLevelEditView: View {
                         HStack(spacing: 8) {
                             Button(action: { editingItem = item }) {
                                 HStack(spacing: 8) {
-                                    if !item.icon.isEmpty { Text(item.icon) }
+                                    if !item.icon.isEmpty { CodeItemIconView(icon: item.icon, size: 24) }
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.name.isEmpty ? "未命名" : item.name)
                                         Text("代码：\(item.code.isEmpty ? "—" : item.code)")

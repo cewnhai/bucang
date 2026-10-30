@@ -28,6 +28,24 @@ enum Design {
     })
     static let corner: CGFloat = 18
     static let smallCorner: CGFloat = 12
+
+    // 色系代码 → 实际颜色（详情页颜色行色块用）；"M"（其他）用色轮，不在此表。
+    static func fabricColor(_ code: String) -> Color? {
+        switch code {
+        case "W": return .white
+        case "B": return .black
+        case "R": return .red
+        case "P": return .pink
+        case "O": return .orange
+        case "Y": return .yellow
+        case "G": return .green
+        case "L": return .blue
+        case "Z": return .purple
+        case "H": return .gray
+        case "T": return .brown
+        default: return nil
+        }
+    }
 }
 
 // MARK: - 个性化主题（设置 > 个性化）
@@ -290,6 +308,33 @@ struct SectionHeaderView: View {
                     .foregroundColor(.secondary)
             }
         }
+    }
+}
+
+// MARK: - 色系图标（含色轮）
+// 色系条目 icon == "wheel" 时渲染彩虹色轮（"其他"色系）；
+// 空 icon 兜底 🎨，其余按 emoji/文字渲染。
+struct ColorWheelIcon: View {
+    var size: CGFloat = 28
+    var body: some View {
+        Circle()
+            .fill(AngularGradient(gradient: Gradient(colors: [.red, .orange, .yellow, .green, .blue, .purple, .red]), center: .center))
+            .frame(width: size, height: size)
+    }
+}
+
+struct CodeItemIconView: View {
+    var icon: String
+    var size: CGFloat = 28
+    var body: some View {
+        Group {
+            if icon == "wheel" {
+                ColorWheelIcon(size: size)
+            } else {
+                Text(icon.isEmpty ? "🎨" : icon).font(.system(size: size * 0.85))
+            }
+        }
+        .frame(width: size, height: size)
     }
 }
 

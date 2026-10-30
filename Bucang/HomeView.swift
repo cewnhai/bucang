@@ -113,6 +113,13 @@ struct BucangView: View {
     @State private var showingSale = false
     @State private var showingUsageDetail = false
     @State private var showingSaleFlow = false
+    // 布料 Tab 的导航路径：卡片详情 / 统计图表。FAB 只在路径为空（列表页）时显示，
+    // 避免详情页被 FAB 遮挡。destination 均为值类型，经 id 查 store（引用类型 Fabric）。
+    @State private var fabricPath: [FabricNavTarget] = []
+    enum FabricNavTarget: Hashable {
+        case detail(UUID)
+        case charts
+    }
     private var visibleTabs: [BucangTab] {
         let keys = store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs
         var list = BucangTab.allCases.filter { keys.contains($0.rawValue) }
@@ -197,6 +204,18 @@ struct BucangView: View {
             .background(Design.background)
             .navigationTitle("布仓")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: FabricNavTarget.self) { target in
+                switch target {
+                case .detail(let id):
+                    if let fabric = store.fabrics.first(where: { $0.id == id }) {
+                        FabricDetailView(fabric: fabric)
+                    } else {
+                        Text("该布料已删除").foregroundColor(.secondary)
+                    }
+                case .charts:
+                    ChartsView()
+                }
+            }
             .onAppear { hideAmounts = store.hideAmounts }
             .sheet(isPresented: $showingFilter) {
                 NavigationStack {
@@ -290,7 +309,8 @@ struct BucangView: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if tab == .fabric {
+            // 只在布料列表页显示：detail/charts 推入后 fabricPath 非空，FAB 藏起不挡详情页。
+            if tab == .fabric && fabricPath.isEmpty {
                 // 长按 = 从心愿单转入库，点按 = 新增布料；不用 Button 包手势，
                 // 避免 Button 的点击抢走长按手势。
                 Circle()
@@ -390,7 +410,7 @@ struct BucangView: View {
                     .font(.headline).fontWeight(.bold).foregroundColor(.white)
                 Spacer()
                 HStack(spacing: 12) {
-                    NavigationLink(destination: ChartsView()) {
+                    NavigationLink(value: FabricNavTarget.charts) {
                         Image(systemName: "chart.bar").foregroundColor(.white)
                     }
                     Button(action: { statsExpanded.toggle() }) {
@@ -405,7 +425,18 @@ struct BucangView: View {
                         HStack(spacing: 0) {
                             statColumn(label: "售出块数", value: "\(store.soldPieceCount)")
                             Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                            statColumn(label: "售出米数", value: "\(LengthUnitHelper.format(store.totalSoldMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                            VStack(spacing: 2) {
+                                Text("售出米数").font(.caption).foregroundColor(.white.opacity(0.85))
+                                HStack(spacing: 4) {
+                                    Text("\(LengthUnitHelper.format(store.totalSoldMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                        .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
+                                    Button(action: { showingSaleFlow = true }) {
+                                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.white)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
                             Divider().frame(height: 36).background(Color.white.opacity(0.4))
                             statColumn(label: "售出回款", value: hideAmounts ? "****" : "¥\(String(format: "%.2f", store.soldRevenue))", valueColor: Design.priceAccent)
                         }
@@ -413,15 +444,6 @@ struct BucangView: View {
                             Text("已售出占比 \(String(format: "%.1f", store.totalSoldMeters / store.totalMeters * 100))%")
                                 .font(.caption).foregroundColor(.white.opacity(0.85))
                         }
-                        Button(action: { showingSaleFlow = true }) {
-                            Text("出售记录流水")
-                                .font(.caption).fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Color.white.opacity(0.2))
-                                .cornerRadius(12)
-                        }
-                        .buttonStyle(.plain)
                         if store.soldPiecesTotal() > 0 {
                             Text("另有份数出售 \(store.soldPiecesTotal()) 份（不计入售出米数，不扣剩余长度）")
                                 .font(.caption).foregroundColor(.white.opacity(0.85))
@@ -445,15 +467,15 @@ struct BucangView: View {
                         statColumn(label: "总米数", value: "\(LengthUnitHelper.format(store.totalMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
                         VStack(spacing: 2) {
+                            Text("消耗米数").font(.caption).foregroundColor(.white.opacity(0.85))
                             HStack(spacing: 4) {
-                                Text("消耗米数").font(.caption).foregroundColor(.white.opacity(0.85))
+                                Text("\(LengthUnitHelper.format(store.totalConsumed, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                                    .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
                                 Button(action: { showingUsageDetail = true }) {
-                                    Image(systemName: "arrow.left").font(.caption).foregroundColor(.white)
+                                    Image(systemName: "chevron.right").font(.caption).foregroundColor(.white)
                                 }
                                 .buttonStyle(.plain)
                             }
-                            Text("\(LengthUnitHelper.format(store.totalConsumed, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                                .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
                         }
                         .frame(maxWidth: .infinity)
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
@@ -560,7 +582,7 @@ struct BucangView: View {
             } else if viewMode == .list {
                 LazyVStack(spacing: 12) {
                     ForEach(filteredFabrics) { fabric in
-                        NavigationLink(destination: FabricDetailView(fabric: fabric)) {
+                        NavigationLink(value: FabricNavTarget.detail(fabric.id)) {
                             FabricCardView(fabric: fabric, onAddUsage: {
                                 usageFabric = fabric; showingUsage = true
                             }, onAddSale: {
@@ -575,7 +597,7 @@ struct BucangView: View {
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(filteredFabrics) { fabric in
-                        NavigationLink(destination: FabricDetailView(fabric: fabric)) {
+                        NavigationLink(value: FabricNavTarget.detail(fabric.id)) {
                             FabricCardView(fabric: fabric, onAddUsage: {
                                 usageFabric = fabric; showingUsage = true
                             }, onAddSale: {
