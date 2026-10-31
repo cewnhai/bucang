@@ -92,6 +92,12 @@ struct SettingsView: View {
     @State private var themeImageStamp = Date()
 
     private func refreshLocalZips() { localZips = LocalZipHelper.list() }
+    private var colorCountText: String {
+        if let level = store.codeLevels.first(where: { $0.kind == "color" }) {
+            return "\(level.items.count) 条"
+        }
+        return ""
+    }
     private func importLocalZip(_ file: LocalZipFile) {
         if let data = try? Data(contentsOf: file.url) {
             importSummary = ZipBackup.importZip(data, store: store).text
@@ -160,11 +166,7 @@ struct SettingsView: View {
                                 HStack {
                                     Text("颜色选项")
                                     Spacer()
-                                    if let colorLevel = store.codeLevels.first(where: { $0.kind == "color" }) {
-                                        Text("\(colorLevel.items.count) 条").foregroundColor(.secondary)
-                                    } else {
-                                        Text("未找到色系层级").foregroundColor(.secondary)
-                                    }
+                                    Text(colorCountText).foregroundColor(.secondary).font(.caption)
                                     Image(systemName: "chevron.right").foregroundColor(.secondary).font(.caption)
                                 }
                                 .foregroundColor(.primary)

@@ -12,6 +12,8 @@
 		EBCF18A71CAC522D17E1177A /* CSVImportExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558322DEFA692596C8A28D19 /* CSVImportExport.swift */; };
 		1BDB901C8DEDBB939CAD6B9A /* FabricViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC664966DBA5E6D73065C7E /* FabricViews.swift */; };
 		A4D6B6540E9F1F4252BB1477 /* SimpleRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6326634716176CF227131013 /* SimpleRecordViews.swift */; };
+		B1C2D3E4F5A6B7C8D9E0F1A2 /* DictionaryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D3E4F5A6B7C8D9E0F1A2B3C4 /* DictionaryViews.swift */; };
+		D3E4F5A6B7C8D9E0F1A2B3C4D5 /* OtherSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F5A6B7C8D9E0F1A2B3C4D5E6 /* OtherSettingsView.swift */; };
 		0D228C0A95BD12EE25122C92 /* SettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1463850DC2EF884FE50D6BAD /* SettingsViews.swift */; };
 		75047C771595BFDEA3CAA7EE /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 216427EB6859DB51C5EC6C48 /* Design.swift */; };
 		E5A45BAAFF4CD7CFC8325BC0 /* WebDAVBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */; };
@@ -29,6 +31,8 @@
 		558322DEFA692596C8A28D19 /* CSVImportExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImportExport.swift; sourceTree = "<group>"; };
 		1EC664966DBA5E6D73065C7E /* FabricViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FabricViews.swift; sourceTree = "<group>"; };
 		6326634716176CF227131013 /* SimpleRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleRecordViews.swift; sourceTree = "<group>"; };
+		C2D3E4F5A6B7C8D9E0F1A2B3C4 /* DictionaryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryViews.swift; sourceTree = "<group>"; };
+		E4F5A6B7C8D9E0F1A2B3C4D5E6 /* OtherSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OtherSettingsView.swift; sourceTree = "<group>"; };
 		1463850DC2EF884FE50D6BAD /* SettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViews.swift; sourceTree = "<group>"; };
 		216427EB6859DB51C5EC6C48 /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
 		8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVBackup.swift; sourceTree = "<group>"; };
@@ -69,6 +73,8 @@
 				558322DEFA692596C8A28D19 /* CSVImportExport.swift */,
 				1EC664966DBA5E6D73065C7E /* FabricViews.swift */,
 				6326634716176CF227131013 /* SimpleRecordViews.swift */,
+				C2D3E4F5A6B7C8D9E0F1A2B3C4 /* DictionaryViews.swift */,
+				E4F5A6B7C8D9E0F1A2B3C4D5E6 /* OtherSettingsView.swift */,
 				1463850DC2EF884FE50D6BAD /* SettingsViews.swift */,
 				216427EB6859DB51C5EC6C48 /* Design.swift */,
 				8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */,
@@ -164,6 +170,8 @@
 				EBCF18A71CAC522D17E1177A /* CSVImportExport.swift in Sources */,
 				1BDB901C8DEDBB939CAD6B9A /* FabricViews.swift in Sources */,
 				A4D6B6540E9F1F4252BB1477 /* SimpleRecordViews.swift in Sources */,
+				B1C2D3E4F5A6B7C8D9E0F1A2 /* DictionaryViews.swift in Sources */,
+				D3E4F5A6B7C8D9E0F1A2B3C4D5 /* OtherSettingsView.swift in Sources */,
 				0D228C0A95BD12EE25122C92 /* SettingsViews.swift in Sources */,
 				DAF753E8ACFB1472DEABD599 /* CreationView.swift in Sources */,
 				16BEC0643B3F67A9CE25D8C8 /* ZipBackup.swift in Sources */,
