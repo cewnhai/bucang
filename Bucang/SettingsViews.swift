@@ -1066,7 +1066,7 @@ struct ColorItemsSettingsView: View {
         var n = 1
         let existing = Set(level.items.map { $0.name })
         while existing.contains("自定义\(n)") { n += 1 }
-        level.items.append(CodeItem(name: "自定义\(n)", code: "", icon: ""))
+        level.items.append(CodeItem(name: "自定义\(n)", code: "", icon: pickedColor.toHex()))
         store.save()
         // 复位选色器：保证下次选相同颜色也能触发 onChange。
         suppressPickerChange = true

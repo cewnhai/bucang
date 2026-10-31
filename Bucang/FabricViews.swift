@@ -355,6 +355,7 @@ struct FabricDetailView: View {
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
     var onEdit: (Fabric) -> Void = { _ in }
+    var onOpenFabric: (Fabric) -> Void = { _ in }
     @State private var showingDelete = false
     @State private var showingSimilar = false
     @State private var showingLongImage = false
@@ -1095,7 +1096,10 @@ struct FabricDetailView: View {
     /// 关联操作 = 把该子编号追加到被选布料的 subCodes（去重）。
     /// 这里展示除本布料外、subCodes 里含有该子编号的第一块布料名。
     private func linkedFabricName(forSubCode sub: String) -> String? {
-        store.fabrics.first { $0.id != fabric.id && $0.subCodes.contains(sub) }?.displayName
+        linkedFabric(forSubCode: sub)?.displayName
+    }
+    private func linkedFabric(forSubCode sub: String) -> Fabric? {
+        store.fabrics.first { $0.id != fabric.id && $0.subCodes.contains(sub) }
     }
 
     private var fabricInfoCard: some View {
@@ -1133,6 +1137,15 @@ struct FabricDetailView: View {
                                 }
                             }
                             Spacer()
+                            if let linked = linkedFabric(forSubCode: sub) {
+                                Button(action: { onOpenFabric(linked) }) {
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(Design.accent)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("查看关联布料")
+                            }
                             Button("关联") {
                                 linkingSubCode = sub
                                 showingSubCodePicker = true
@@ -1223,28 +1236,34 @@ struct FabricDetailView: View {
             let items = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
                 .filter { $0.enabled }
             if !items.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(items) { item in
-                            let selected = fabric.colorName == item.name
-                            Button(action: { applyColor(item) }) {
-                                VStack(spacing: 4) {
-                                    CodeItemIconView(icon: item.icon, size: 30)
-                                    Text(item.name)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                // 4列网格（按图2设计）：圆色块 + 名称
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 16) {
+                    ForEach(items) { item in
+                        let selected = fabric.colorName == item.name
+                        Button(action: { applyColor(item) }) {
+                            VStack(spacing: 6) {
+                                ZStack {
+                                    CodeItemIconView(icon: item.icon, size: 44)
+                                    if selected {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.title3)
+                                            .foregroundColor(.white)
+                                            .background(Circle().fill(themeAccent).frame(width: 20, height: 20))
+                                            .offset(x: 16, y: -16)
+                                    }
                                 }
-                                .padding(6)
-                                .background(selected ? themeAccent.opacity(0.12) : Color.clear)
-                                .cornerRadius(10)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(selected ? themeAccent : Color.gray.opacity(0.25), lineWidth: 1)
-                                )
+                                Text(item.name)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("颜色 \(item.name)")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(selected ? themeAccent.opacity(0.12) : Color.clear)
+                            .cornerRadius(12)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("颜色 \(item.name)")
                     }
                 }
             }

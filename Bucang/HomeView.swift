@@ -206,7 +206,7 @@ struct BucangView: View {
                 switch target {
                 case .detail(let id):
                     if let fabric = store.fabrics.first(where: { $0.id == id }) {
-                        FabricDetailView(fabric: fabric, onEdit: { editingFabricRoot = $0 })
+                        FabricDetailView(fabric: fabric, onEdit: { editingFabricRoot = $0 }, onOpenFabric: { fabricPath.append(.detail($0.id)) })
                     } else {
                         Text("该布料已删除").foregroundColor(.secondary)
                     }

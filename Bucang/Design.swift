@@ -330,11 +330,38 @@ struct CodeItemIconView: View {
         Group {
             if icon == "wheel" {
                 ColorWheelIcon(size: size)
+            } else if let color = Color(hex: icon) {
+                // 16进制色值：渲染为圆色块（选色器取色存这里）
+                Circle()
+                    .fill(color)
+                    .frame(width: size, height: size)
+                    .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
             } else {
                 Text(icon.isEmpty ? "🎨" : icon).font(.system(size: size * 0.85))
             }
         }
         .frame(width: size, height: size)
+    }
+}
+
+// 16进制色值 <-> Color 互转（存 CodeItem.icon）
+extension Color {
+    init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard s.hasPrefix("#") else { return nil }
+        s.removeFirst()
+        guard s.count == 6, let v = UInt64(s, radix: 16) else { return nil }
+        self.init(
+            red: Double((v >> 16) & 0xFF) / 255.0,
+            green: Double((v >> 8) & 0xFF) / 255.0,
+            blue: Double(v & 0xFF) / 255.0
+        )
+    }
+    func toHex() -> String {
+        let ui = UIColor(self)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
     }
 }
 
