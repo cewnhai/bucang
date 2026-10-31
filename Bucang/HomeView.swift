@@ -106,11 +106,9 @@ struct BucangView: View {
     @State private var convertedFabric: Fabric?
     @State private var showingConvertedEdit = false
     @State private var usageFabric: Fabric?
-    @State private var showingUsage = false
     @State private var showingWishlistAdd = false
     @State private var showingTabSelection = false
     @State private var saleFabric: Fabric?
-    @State private var showingSale = false
     @State private var showingUsageDetail = false
     @State private var showingSaleFlow = false
     // 布料 Tab 的导航路径：卡片详情 / 统计图表。FAB 只在路径为空（列表页）时显示，
@@ -281,10 +279,10 @@ struct BucangView: View {
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { showingTabSelection = false } } }
                 }
             }
-            .sheet(isPresented: $showingSale) {
-                if let saleFabric {
-                    NavigationStack { SaleFormView(fabric: saleFabric) }
-                }
+            // 用 item 绑定代替 isPresented + if let：iOS 16 上后者在弹窗链里容易出现内容判空时机错乱导致白屏。
+            // SaleFormView 自身没有 NavigationStack，这里包一层提供标题栏。
+            .sheet(item: $saleFabric) { fabric in
+                NavigationStack { SaleFormView(fabric: fabric) }
             }
             .sheet(isPresented: $showingUsageDetail) { NavigationStack { UsageDetailSheetView() } }
             .sheet(isPresented: $showingSaleFlow) { NavigationStack { SaleFlowSheetView() } }
@@ -298,10 +296,9 @@ struct BucangView: View {
                     NavigationStack { FabricEditView(fabric: convertedFabric) }
                 }
             }
-            .sheet(isPresented: $showingUsage) {
-                if let usageFabric {
-                    NavigationStack { UsageFormView(fabric: usageFabric) }
-                }
+            // UsageFormView 自带 NavigationStack，直接呈现不再套一层，避免双重导航栈。
+            .sheet(item: $usageFabric) { fabric in
+                UsageFormView(fabric: fabric)
             }
             .sheet(isPresented: $showingWishlistAdd) {
                 NavigationStack { WishlistEditView(item: nil, presetName: searchText) }
@@ -375,32 +372,29 @@ struct BucangView: View {
     // MARK: - 布料 Tab：统计卡吸顶 + 内容滚动
 
     private var fabricTabView: some View {
-        // 工具栏放固定区（不进 LazyVStack）：iOS 16 上懒加载 section 重建后按钮触摸会失效，
-        // 固定住可根治"切换视图后筛选/排序点不动"的问题，顺手让工具栏常驻。
-        VStack(spacing: 0) {
-            fabricToolbar
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 2)
-                .background(Design.background)
-            ScrollView {
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        statusCapsuleRow
-                        if hasActiveFilter {
-                            activeFilterRow
-                                .padding(.bottom, 4)
-                        }
-                        fabricCards
-                    } header: {
-                    // 统计卡吸顶：固定在 Tab 栏正下方，内容从卡片下面滚过。
-                    fabricStatsCard
-                        .padding(.horizontal, 16)
-                        .padding(.top, 10)
-                        .padding(.bottom, 6)
-                        .background(Design.background)
+        // 工具栏放吸顶 header 里（不进懒加载内容区）：iOS 16 上 LazyVStack 内容重建后按钮触摸会失效，
+        // header 是即时渲染的不受影响；顺序按用户要求：统计卡在上，工具栏在下，一起吸顶。
+        ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    statusCapsuleRow
+                    if hasActiveFilter {
+                        activeFilterRow
+                            .padding(.bottom, 4)
+                    }
+                    fabricCards
+                } header: {
+                    VStack(spacing: 0) {
+                        fabricStatsCard
+                            .padding(.horizontal, 16)
+                            .padding(.top, 10)
+                            .padding(.bottom, 6)
+                        fabricToolbar
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                    }
+                    .background(Design.background)
                 }
-            }
             }
         }
     }
@@ -593,9 +587,9 @@ struct BucangView: View {
                     ForEach(filteredFabrics) { fabric in
                         NavigationLink(value: FabricNavTarget.detail(fabric.id)) {
                             FabricCardView(fabric: fabric, onAddUsage: {
-                                usageFabric = fabric; showingUsage = true
+                                usageFabric = fabric
                             }, onAddSale: {
-                                saleFabric = fabric; showingSale = true
+                                saleFabric = fabric
                             })
                         }
                         .buttonStyle(.plain)
@@ -608,9 +602,9 @@ struct BucangView: View {
                     ForEach(filteredFabrics) { fabric in
                         NavigationLink(value: FabricNavTarget.detail(fabric.id)) {
                             FabricCardView(fabric: fabric, onAddUsage: {
-                                usageFabric = fabric; showingUsage = true
+                                usageFabric = fabric
                             }, onAddSale: {
-                                saleFabric = fabric; showingSale = true
+                                saleFabric = fabric
                             }, compact: true)
                         }
                         .buttonStyle(.plain)
