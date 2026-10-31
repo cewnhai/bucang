@@ -236,6 +236,8 @@ final class WebDAVManager: ObservableObject {
             guard (200...299).contains(status) else {
                 if status == 401 {
                     errorMessage = "备份失败：HTTP 401，用户名或密码不对"
+                } else if status == 404 {
+                    errorMessage = "备份失败：HTTP 404。Alist 的 /dav 根目录是存储列表，不能直接存文件，请在地址后加上存储名，例如 http://192.168.5.1:3767/dav/本地存储"
                 } else {
                     errorMessage = "备份失败：服务器返回 HTTP \(status)"
                 }
@@ -365,7 +367,7 @@ final class WebDAVManager: ObservableObject {
     }
 
     func countsText(store: Store) -> String {
-        "布料 \(store.fabrics.count) · 成品 \(store.works.count) · 其他 \(store.otherItems.count) · 心愿单 \(store.wishlistItems.count) · 使用记录 \(store.usageRecords.count) · 出售记录 \(store.saleRecords.count)"
+        "布料 \(store.fabrics.count) · 成品 \(store.works.count) · 其他 \(store.otherItems.count) · 心愿单 \(store.wishlistItems.count) · 消耗记录 \(store.usageRecords.count) · 出售记录 \(store.saleRecords.count)"
     }
 }
 
