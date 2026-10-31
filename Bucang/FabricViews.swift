@@ -504,7 +504,7 @@ struct FabricDetailView: View {
                     Button("生成长图", action: { generateLongImage() })
                     Button("删除", role: .destructive) { showingDelete = true }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "gearshape")
                 }
             }
         }

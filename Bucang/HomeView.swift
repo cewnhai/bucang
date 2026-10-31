@@ -184,36 +184,28 @@ struct BucangView: View {
             VStack(spacing: 0) {
                 // 顶栏一级 Tab：固定在顶部，不随列表滚动（只显示设置里开启的，布料始终显示）。
                 tabBar
-                // 内容区：各 Tab 自己的滚动视图；布料/脑洞的统计卡在各自滚动区内吸顶。
-                // 2026-10-31：左右滑动切换一级 tab。
-                Group {
-                    switch tab {
-                    case .fabric:
-                        fabricTabView
-                    case .work:
-                        WorksListView()
-                    case .brainstorm:
-                        BrainstormListView()
-                    case .other:
-                        OtherListView()
-                    case .wishlist:
-                        WishlistListView()
-                    }
-                }
-                .gesture(
-                    DragGesture(minimumDistance: 50)
-                        .onEnded { value in
-                            let tabs = visibleTabs
-                            guard let idx = tabs.firstIndex(of: tab) else { return }
-                            if value.translation.width < -50, idx < tabs.count - 1 {
-                                // 左滑：下一个 tab
-                                tab = tabs[idx + 1]
-                            } else if value.translation.width > 50, idx > 0 {
-                                // 右滑：上一个 tab
-                                tab = tabs[idx - 1]
+                // 内容区：原生 PageTabView 实现平滑左右滑动切换一级 tab（2026-10-31）。
+                // 各 Tab 自己的滚动视图；布料/脑洞的统计卡在各自滚动区内吸顶。
+                TabView(selection: $tab) {
+                    ForEach(visibleTabs, id: \.self) { t in
+                        Group {
+                            switch t {
+                            case .fabric:
+                                fabricTabView
+                            case .work:
+                                WorksListView()
+                            case .brainstorm:
+                                BrainstormListView()
+                            case .other:
+                                OtherListView()
+                            case .wishlist:
+                                WishlistListView()
                             }
                         }
-                )
+                        .tag(t)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
             .background(Design.background)
             .navigationBarTitleDisplayMode(.inline)

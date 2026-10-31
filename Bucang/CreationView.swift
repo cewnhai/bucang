@@ -17,13 +17,15 @@ struct WorksListView: View {
 
     private var making: [Work] {
         guard statusFilter == "全部" || statusFilter == "制作中" else { return [] }
-        var list = store.works.filter { !$0.isFinished }
+        var list = store.works.filter { !$0.isFinished && (statusFilter != "已出售" || $0.isSold) }
+        if statusFilter == "已出售" { list = store.works.filter { $0.isSold } }
         list = filterWorks(list)
         return sortWorks(list)
     }
     private var finished: [Work] {
-        guard statusFilter == "全部" || statusFilter == "已完成" else { return [] }
+        guard statusFilter == "全部" || statusFilter == "已完成" || statusFilter == "已出售" else { return [] }
         var list = store.works.filter { $0.isFinished }
+        if statusFilter == "已出售" { list = list.filter { $0.isSold } }
         list = filterWorks(list)
         return sortWorks(list)
     }
@@ -169,7 +171,7 @@ struct WorksListView: View {
                         showingSort = true
                     }
                 }
-                StatusCapsuleAxis(options: ["全部", "制作中", "已完成"], selected: $statusFilter, accent: themeAccent)
+                StatusCapsuleAxis(options: ["全部", "制作中", "已完成", "已出售"], selected: $statusFilter, accent: themeAccent)
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeaderView(title: "制作中")
                     if making.isEmpty { Text("暂无制作中的成品").font(.caption).foregroundColor(.secondary) }
@@ -246,7 +248,7 @@ struct OtherListView: View {
             ? [GridItem(.flexible())]
             : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     }
-    private var categoryNames: [String] { ["全部"] + store.otherCategories }
+    private var categoryNames: [String] { ["全部"] } // 2026-10-31：胶囊轴只显示内置，自定义分类仅卡片右上角
 
     private var filtered: [OtherItem] {
         var list = store.otherItems
@@ -321,7 +323,12 @@ struct OtherListView: View {
                 .background(ThemeStatsBackground(themeName: store.themeName))
                 .cornerRadius(Design.corner)
                 .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
-                TabSearchField(placeholder: "搜索 名称 / 备注 / 分类 / 渠道", text: $searchText)
+                HStack(spacing: 8) {
+                    TabSearchField(placeholder: "搜索 名称 / 备注 / 分类 / 渠道", text: $searchText)
+                    TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
+                        isSingleColumn.toggle()
+                    }
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(categoryNames, id: \.self) { cat in
