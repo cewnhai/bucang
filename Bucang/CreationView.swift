@@ -54,14 +54,39 @@ struct WorksListView: View {
     }
 
     private func workRow(_ work: Work) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
+            // 图片区 + 右上角状态（类比布料卡片）
+            ZStack(alignment: .topTrailing) {
+                if let first = work.imageFileNames.first,
+                   let uiImage = FabricImageStore.loadImage(named: first) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 120)
+                        .clipped()
+                } else {
+                    Rectangle()
+                        .fill(Design.accentSoft)
+                        .frame(height: 120)
+                        .overlay(Image(systemName: "hammer").foregroundColor(Design.accent).font(.title))
+                }
+                Text(work.isFinished ? "已完成" : "制作中")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.45))
+                    .cornerRadius(10)
+                    .padding(8)
+            }
+            VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(work.name.isEmpty ? "未命名成品" : work.name).font(.headline).lineLimit(1)
                 if !work.colorName.isEmpty, let cItem = store.colorItem(forName: work.colorName) {
                     CodeItemIconView(icon: cItem.icon, size: 18)
                 }
                 Spacer()
-                Text(work.isFinished ? "已完成" : "制作中").font(.caption).foregroundColor(work.isFinished ? .green : Design.accent)
             }
             if let start = work.startedAt {
                 Text("开始：\(CSVValues.dateString(start))").font(.caption).foregroundColor(.secondary)
@@ -91,8 +116,9 @@ struct WorksListView: View {
             }
             Button("加用料") { addingMaterialWork = work }
                 .font(.caption)
+            }
+            .padding(12)
         }
-        .padding(12)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
@@ -248,22 +274,30 @@ struct OtherListView: View {
     }
 
     private func otherRow(_ item: OtherItem) -> some View {
-        HStack(spacing: 12) {
-            if let first = item.imageFileNames.first,
-               let uiImage = FabricImageStore.loadImage(named: first) {
-                Image(uiImage: uiImage).resizable().scaledToFill().frame(width: 56, height: 56).clipped().cornerRadius(12)
-            } else {
-                RoundedRectangle(cornerRadius: 12).fill(Design.accentSoft).frame(width: 56, height: 56)
-                    .overlay(Image(systemName: "archivebox").foregroundColor(Design.accent))
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                if let first = item.imageFileNames.first,
+                   let uiImage = FabricImageStore.loadImage(named: first) {
+                    Image(uiImage: uiImage).resizable().scaledToFill().frame(height: 120).clipped()
+                } else {
+                    Rectangle().fill(Design.accentSoft).frame(height: 120)
+                        .overlay(Image(systemName: "archivebox").foregroundColor(Design.accent).font(.title))
+                }
+                if !item.category.isEmpty {
+                    Text(item.category)
+                        .font(.caption).fontWeight(.semibold).foregroundColor(.white)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color.black.opacity(0.45)).cornerRadius(10)
+                        .padding(8)
+                }
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name.isEmpty ? "未命名条目" : item.name).font(.headline).lineLimit(1)
                 Text("\(item.quantityText.isEmpty ? "" : item.quantityText + " · ")\(item.hasPrice ? "¥\(String(format: "%.2f", item.price))" : "")")
                     .font(.caption).foregroundColor(.secondary)
             }
-            Spacer()
+            .padding(12)
         }
-        .padding(12)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
@@ -372,15 +406,23 @@ struct WishlistListView: View {
     }
 
     private func wishlistRow(_ item: WishlistItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topTrailing) {
                 if let first = item.imageFileNames.first,
                    let uiImage = FabricImageStore.loadImage(named: first) {
-                    Image(uiImage: uiImage).resizable().scaledToFill().frame(width: 56, height: 56).clipped().cornerRadius(12)
+                    Image(uiImage: uiImage).resizable().scaledToFill().frame(height: 120).clipped()
                 } else {
-                    RoundedRectangle(cornerRadius: 12).fill(Design.accentSoft).frame(width: 56, height: 56)
-                        .overlay(Image(systemName: "heart").foregroundColor(Design.accent))
+                    Rectangle().fill(Design.accentSoft).frame(height: 120)
+                        .overlay(Image(systemName: "heart").foregroundColor(Design.accent).font(.title))
                 }
+                Text(item.isPurchased ? "已购" : "待购")
+                    .font(.caption).fontWeight(.semibold).foregroundColor(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.black.opacity(0.45)).cornerRadius(10)
+                    .padding(8)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.name.isEmpty ? "未命名心愿" : item.name).font(.headline).lineLimit(1)
                     if !item.note.isEmpty { Text(item.note).font(.caption).foregroundColor(.secondary).lineLimit(2) }
@@ -415,8 +457,9 @@ struct WishlistListView: View {
                 }
                 .buttonStyle(.plain)
             }
+            }
+            .padding(12)
         }
-        .padding(12)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)

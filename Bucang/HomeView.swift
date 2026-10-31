@@ -185,6 +185,7 @@ struct BucangView: View {
                 // 顶栏一级 Tab：固定在顶部，不随列表滚动（只显示设置里开启的，布料始终显示）。
                 tabBar
                 // 内容区：各 Tab 自己的滚动视图；布料/脑洞的统计卡在各自滚动区内吸顶。
+                // 2026-10-31：左右滑动切换一级 tab。
                 Group {
                     switch tab {
                     case .fabric:
@@ -199,6 +200,20 @@ struct BucangView: View {
                         WishlistListView()
                     }
                 }
+                .gesture(
+                    DragGesture(minimumDistance: 50)
+                        .onEnded { value in
+                            let tabs = visibleTabs
+                            guard let idx = tabs.firstIndex(of: tab) else { return }
+                            if value.translation.width < -50, idx < tabs.count - 1 {
+                                // 左滑：下一个 tab
+                                tab = tabs[idx + 1]
+                            } else if value.translation.width > 50, idx > 0 {
+                                // 右滑：上一个 tab
+                                tab = tabs[idx - 1]
+                            }
+                        }
+                )
             }
             .background(Design.background)
             .navigationBarTitleDisplayMode(.inline)
@@ -1056,17 +1071,35 @@ struct BrainstormCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
+            // 图片区 + 右上角状态（类比布料卡片）
+            ZStack(alignment: .topTrailing) {
+                if let first = brainstorm.imageFileNames.first,
+                   let uiImage = FabricImageStore.loadImage(named: first) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 120)
+                        .clipped()
+                } else {
+                    Rectangle()
+                        .fill(Color.orange.opacity(0.15))
+                        .frame(height: 120)
+                        .overlay(Image(systemName: "lightbulb").foregroundColor(.orange).font(.title))
+                }
+                Text(brainstorm.status)
+                    .font(.caption).fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.black.opacity(0.45))
+                    .cornerRadius(10)
+                    .padding(8)
+            }
+            VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(brainstorm.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名脑洞" : brainstorm.title)
                     .font(.headline).lineLimit(1)
                 Spacer()
-                Text(brainstorm.status)
-                    .font(.caption).fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(statusColor)
-                    .cornerRadius(10)
             }
             let summary = String(brainstorm.content.prefix(60))
             if !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1088,8 +1121,9 @@ struct BrainstormCardView: View {
                     }
                 }
             }
+            }
+            .padding(12)
         }
-        .padding(12)
         .background(Design.card)
         .cornerRadius(Design.smallCorner)
     }
