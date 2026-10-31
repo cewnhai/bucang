@@ -416,7 +416,7 @@ struct BucangView: View {
                 .frame(width: 140)
                 Spacer()
                 Text("\(store.fabrics.count) 份布料")
-                    .font(.title3).fontWeight(.bold).foregroundColor(.white)
+                    .font(.title2).fontWeight(.bold).foregroundColor(.white)
                 Spacer()
                 HStack(spacing: 12) {
                     NavigationLink(value: FabricNavTarget.charts) {
@@ -493,7 +493,7 @@ struct BucangView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(20)
         .background(ThemeStatsBackground(themeName: store.themeName))
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)

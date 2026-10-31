@@ -578,6 +578,25 @@ struct FabricDetailView: View {
             Button("删除", role: .destructive) { store.deleteFabric(fabric); dismiss() }
             Button("取消", role: .cancel) {}
         } message: { Text("删除后无法恢复，同时会删除它的使用与出售记录。") }
+        .onAppear { syncColorFromCode() }
+    }
+
+    /// 编号→颜色同步（2026-10-31）：若已生成编号，按编号体系色系段自动选中颜色，两者保持一致。
+    private func syncColorFromCode() {
+        guard let colorIdx = store.levelOrder().firstIndex(where: { $0.kind == "color" }) else { return }
+        let segs = fabric.codeSegments.isEmpty ? store.parseSegments(code: fabric.code) : fabric.codeSegments
+        guard colorIdx < segs.count else { return }
+        let code = segs[colorIdx].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { return }
+        let items = store.levelOrder()[colorIdx].items.filter { $0.enabled }
+        // 按编码找颜色项
+        if let match = items.first(where: { $0.code == code }) {
+            if fabric.colorName != match.name {
+                fabric.colorName = match.name
+                fabric.updatedAt = Date()
+                store.save()
+            }
+        }
     }
 
     // MARK: - 折叠

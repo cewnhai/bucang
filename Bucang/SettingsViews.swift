@@ -1028,15 +1028,19 @@ struct ColorItemsSettingsView: View {
     @EnvironmentObject private var store: Store
     @State private var editingItemId: UUID?
     @State private var deletingItem: CodeItem?
-    @State private var pickedColor = Color.red
-    @State private var suppressPickerChange = false
+    @State private var isEditing = false          // 自定义编辑模式（批量删除）
+    @State private var selectedIds = Set<UUID>()  // 批量选中的 id
+    // 添加颜色：内嵌选色器
+    @State private var newColor = Color.red
+    @State private var newName = ""
+    @State private var newCode = ""
 
     private var colorLevel: CodeLevel? {
         store.codeLevels.first { $0.kind == "color" }
     }
     private var items: [CodeItem] { colorLevel?.items ?? [] }
-    // 颜色数量不限（2026-10-31 用户要求）
-    private var isOtherItem: (CodeItem) -> Bool = { $0.name == "其他" && $0.icon == "rainbow" }
+    // "其他"固定项：rainbow 图标，不可删除
+    private func isOtherItem(_ item: CodeItem) -> Bool { item.name == "其他" && item.icon == "rainbow" }
 
     // 行显示：有代码 → "名/码"（如 红/R），无代码 → 只有名。
     private func displayText(_ item: CodeItem) -> String {
@@ -1046,9 +1050,23 @@ struct ColorItemsSettingsView: View {
         return code.isEmpty ? base : "\(base)/\(code)"
     }
 
-    private func addBlank() {
+    private func addFromInlinePicker() {
         guard let level = colorLevel else { return }
-        let item = CodeItem(name: "", code: "", icon: "")
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName: String
+        if !name.isEmpty {
+            finalName = name
+        } else {
+            var n = 1
+            let existing = Set(level.items.map { $0.name })
+            while existing.contains("自定义\(n)") { n += 1 }
+            finalName = "自定义\(n)"
+        }
+        let item = CodeItem(
+            name: finalName,
+            code: newCode.trimmingCharacters(in: .whitespacesAndNewlines),
+            icon: newColor.toHex()
+        )
         // "其他"固定项保持在末尾：新项插到它前面
         if let otherIdx = level.items.firstIndex(where: { isOtherItem($0) }) {
             level.items.insert(item, at: otherIdx)
@@ -1056,29 +1074,23 @@ struct ColorItemsSettingsView: View {
             level.items.append(item)
         }
         store.save()
-        editingItemId = item.id   // 新行直接展开行内编辑
-    }
-
-    private func addFromPicker() {
-        guard let level = colorLevel else { return }
-        var n = 1
-        let existing = Set(level.items.map { $0.name })
-        while existing.contains("自定义\(n)") { n += 1 }
-        let item = CodeItem(name: "自定义\(n)", code: "", icon: pickedColor.toHex())
-        if let otherIdx = level.items.firstIndex(where: { isOtherItem($0) }) {
-            level.items.insert(item, at: otherIdx)
-        } else {
-            level.items.append(item)
-        }
-        store.save()
-        // 复位选色器：保证下次选相同颜色也能触发 onChange。
-        suppressPickerChange = true
-        pickedColor = Color(hue: Double.random(in: 0...1), saturation: 0.6, brightness: 0.9)
+        newName = ""; newCode = ""
+        // 选色器复位为随机色，保证下次选相同颜色也有变化感
+        newColor = Color(hue: Double.random(in: 0...1), saturation: 0.6, brightness: 0.9)
     }
 
     private func confirmDelete(_ item: CodeItem) {
+        guard !isOtherItem(item) else { return }
         colorLevel?.items.removeAll { $0.id == item.id }
+        selectedIds.remove(item.id)
         if editingItemId == item.id { editingItemId = nil }
+        store.save()
+    }
+
+    private func deleteSelected() {
+        let ids = selectedIds
+        colorLevel?.items.removeAll { ids.contains($0.id) && !isOtherItem($0) }
+        selectedIds.removeAll()
         store.save()
     }
 
@@ -1087,7 +1099,7 @@ struct ColorItemsSettingsView: View {
         store.save()
     }
 
-    // 行内编辑器：名称 + 代码 + 选色器（改实色圆）。
+    // 行内编辑器：名称 + 代码（颜色改色直接在行内的选色器完成）。
     @ViewBuilder
     private func editRow(_ item: CodeItem) -> some View {
         VStack(spacing: 8) {
@@ -1098,15 +1110,6 @@ struct ColorItemsSettingsView: View {
                     set: { item.name = $0; store.save() }
                 ))
                 .textFieldStyle(.roundedBorder)
-                // 实色圆（hex图标）可用选色器自由改色；"其他"固定项不显示
-                if Color(hex: item.icon) != nil {
-                    ColorPicker("", selection: Binding(
-                        get: { Color(hex: item.icon) ?? .red },
-                        set: { item.icon = $0.toHex(); store.save() }
-                    ))
-                    .labelsHidden()
-                    .frame(width: 44)
-                }
             }
             HStack(spacing: 10) {
                 TextField("代码（如 R，可空）", text: Binding(
@@ -1122,67 +1125,147 @@ struct ColorItemsSettingsView: View {
         .padding(.vertical, 4)
     }
 
+    // 普通行：图标 + 名/码 + 实色圆行内选色器（点圆直接改色）
+    @ViewBuilder
+    private func normalRow(_ item: CodeItem) -> some View {
+        if editingItemId == item.id {
+            editRow(item)
+        } else {
+            HStack(spacing: 10) {
+                Button(action: { editingItemId = item.id }) {
+                    HStack(spacing: 10) {
+                        CodeItemIconView(icon: item.icon, size: 28)
+                        Text(displayText(item)).foregroundColor(.primary)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+                // 实色圆：行内选色器，点圆直接改色；"其他"固定项不显示
+                if !isOtherItem(item), Color(hex: item.icon) != nil {
+                    ColorPicker("", selection: Binding(
+                        get: { Color(hex: item.icon) ?? .red },
+                        set: { item.icon = $0.toHex(); store.save() }
+                    ))
+                    .labelsHidden()
+                    .frame(width: 40)
+                }
+                if !isEditing {
+                    Button(role: .destructive, action: { deletingItem = item }) {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.red)
+                    .opacity(isOtherItem(item) ? 0 : 1)
+                    .disabled(isOtherItem(item))
+                }
+            }
+        }
+    }
+
+    // 编辑模式行：多选框 + 图标 + 名/码
+    @ViewBuilder
+    private func editingRow(_ item: CodeItem) -> some View {
+        HStack(spacing: 10) {
+            Button(action: {
+                if selectedIds.contains(item.id) { selectedIds.remove(item.id) }
+                else { selectedIds.insert(item.id) }
+            }) {
+                Image(systemName: selectedIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(selectedIds.contains(item.id) ? Design.accent : .secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isOtherItem(item))
+            .opacity(isOtherItem(item) ? 0.3 : 1)
+            CodeItemIconView(icon: item.icon, size: 28)
+            Text(displayText(item)).foregroundColor(.primary)
+            Spacer()
+        }
+    }
+
     var body: some View {
         Group {
             if colorLevel != nil {
                 List {
                     Section {
                         ForEach(items) { item in
-                            if editingItemId == item.id {
-                                editRow(item)
+                            if isEditing {
+                                editingRow(item)
                             } else {
-                                HStack(spacing: 10) {
-                                    Button(action: { editingItemId = item.id }) {
-                                        HStack(spacing: 10) {
-                                            // icon=="wheel" 的"其他"项走色轮图标，可照常排序/删除。
-                                            CodeItemIconView(icon: item.icon, size: 28)
-                                            Text(displayText(item))
-                                                .foregroundColor(.primary)
-                                            Spacer()
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    // "其他"为固定项，不可删除
-                                    if !isOtherItem(item) {
-                                        Button(role: .destructive, action: { deletingItem = item }) {
-                                            Image(systemName: "trash")
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .foregroundColor(.red)
-                                    }
-                                }
+                                normalRow(item)
                             }
-                        }
-                        .onDelete { offsets in
-                            let snapshot = items   // 先快照：按 id 删除，多选删除时下标不会错位
-                            for i in offsets where !isOtherItem(snapshot[i]) { confirmDelete(snapshot[i]) }
                         }
                         .onMove(perform: moveItem)
                     } header: {
                         Text("颜色列表（\(items.count)）")
                     } footer: {
-                        Text("点一行改名、改代码、改颜色；拖动排序后，编号生成器与布料表单里的颜色顺序同步变化。“其他”为固定项，不可删除。")
+                        Text("点圆直接改色；点一行改名与代码；拖动排序后，编号生成器与布料表单里的颜色顺序同步变化。“其他”为固定项，不可删除。")
                     }
 
+                    // 添加颜色：内嵌选色器（点“添加”才加入，不会自动乱加）
                     Section {
-                        Button("添加颜色", action: addBlank)
+                        HStack(spacing: 10) {
+                            CodeItemIconView(icon: newColor.toHex(), size: 28)
+                            ColorPicker("取色", selection: $newColor)
+                                .labelsHidden()
+                                .frame(width: 44)
+                            TextField("名称（可空）", text: $newName)
+                                .textFieldStyle(.roundedBorder)
+                            TextField("码", text: $newCode)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 64)
+                            Button("添加", action: addFromInlinePicker)
+                                .buttonStyle(.borderedProminent).tint(Design.accent)
+                        }
+                    } header: {
+                        Text("添加颜色")
                     } footer: {
-                        Text("数量不限。")
-                    }
-
-                    Section {
-                        ColorPicker("选色器", selection: $pickedColor)
-                            .onChange(of: pickedColor) { _ in
-                                if suppressPickerChange { suppressPickerChange = false; return }
-                                addFromPicker()
-                            }
-                        Text("从系统选色器取色加入列表，名称默认为“自定义1、自定义2…”，点行可改。")
-                            .font(.caption).foregroundColor(.secondary)
+                        Text("选好颜色、填好名称点“添加”才会加入列表；数量不限。")
                     }
                 }
                 .navigationTitle("颜色选项")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { EditButton() }
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            isEditing.toggle()
+                            if !isEditing { selectedIds.removeAll() }
+                            editingItemId = nil
+                        }) {
+                            // 图标式编辑键：铅笔 / 对勾
+                            Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle")
+                                .font(.title3)
+                        }
+                    }
+                    if isEditing {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(selectedIds.count == items.filter({ !isOtherItem($0) }).count ? "取消全选" : "全选") {
+                                let deletable = items.filter { !isOtherItem($0) }
+                                if selectedIds.count == deletable.count {
+                                    selectedIds.removeAll()
+                                } else {
+                                    selectedIds = Set(deletable.map { $0.id })
+                                }
+                            }
+                        }
+                    }
+                }
+                // 编辑模式底部批量删除条
+                .safeAreaInset(edge: .bottom) {
+                    if isEditing {
+                        HStack {
+                            Spacer()
+                            Text("已选 \(selectedIds.count) 项")
+                                .font(.subheadline).foregroundColor(.secondary)
+                            Button("删除选中", role: .destructive, action: deleteSelected)
+                                .buttonStyle(.borderedProminent).tint(.red)
+                                .disabled(selectedIds.isEmpty)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(.thinMaterial)
+                    }
+                }
                 .alert("删除颜色", isPresented: Binding(
                     get: { deletingItem != nil },
                     set: { if !$0 { deletingItem = nil } }
@@ -1208,3 +1291,4 @@ struct ColorItemsSettingsView: View {
         }
     }
 }
+
