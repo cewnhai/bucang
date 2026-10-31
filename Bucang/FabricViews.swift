@@ -22,8 +22,8 @@ enum FabricStatusLabel {
     // 全部 / 收藏 / 未使用 / 使用中 / 已用完 / 部分出售 / 已出售。
     // 布料自身状态取 store.status(for:)；兜底保证永远返回胶囊表里的值。
     static func text(store: Store, fabric: Fabric) -> String {
-        let s = store.status(for: fabric)
-        return Store.statusCapsules.contains(s) ? s : "未使用"
+        let parts = store.statuses(for: fabric).filter { Store.statusCapsules.contains($0) }
+        return parts.isEmpty ? "未使用" : parts.joined(separator: "|")
     }
 }
 
@@ -159,7 +159,7 @@ struct FabricCardView: View {
 
     private var sold: Double { store.soldLength(for: fabric.id) }
     private var remaining: Double { store.remaining(for: fabric) }
-    private var statusText: String { store.status(for: fabric) }
+    private var statusText: String { store.statuses(for: fabric).joined(separator: "|") }
     private var isSoldOut: Bool { statusText == "已出售" }
 
     var body: some View {
@@ -207,8 +207,10 @@ struct FabricCardView: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 // 名称不再显示；编号小字在照片下方左对齐。
-                if !fabric.code.isEmpty {
-                    Text(fabric.code)
+                // 主编号为空时显示第一个子编号（被关联的布料）。
+                let cardCode = fabric.code.isEmpty ? (fabric.subCodes.first ?? "") : fabric.code
+                if !cardCode.isEmpty {
+                    Text(cardCode)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -353,6 +355,7 @@ struct FabricDetailView: View {
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
     @State private var showingEdit = false
+    @State private var editingFabric: Fabric?
     @State private var showingDelete = false
     @State private var showingSimilar = false
     @State private var showingLongImage = false
@@ -487,10 +490,16 @@ struct FabricDetailView: View {
         }
         .background(Design.background)
         .navigationTitle(fabric.displayName)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "chevron.left")
+                }
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
-                    Button("编辑", action: { showingEdit = true })
+                    Button("编辑", action: { editingFabric = fabric })
                     ShareLink(item: fabricSummary, preview: SharePreview(fabric.displayName)) {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
@@ -501,7 +510,7 @@ struct FabricDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingEdit) { NavigationStack { FabricEditView(fabric: fabric) } }
+        .sheet(item: $editingFabric) { f in NavigationStack { FabricEditView(fabric: f) } }
         .sheet(isPresented: $showingSimilar) { NavigationStack { SimilarSearchView() } }
         .sheet(isPresented: $showingSubCodePicker) {
             NavigationStack { SubCodeFabricPickerView(fabric: fabric, subCode: linkingSubCode ?? "") }
@@ -533,25 +542,19 @@ struct FabricDetailView: View {
                     .ignoresSafeArea()
             }
         }
-        .fullScreenCover(item: Binding(
-            get: { previewName.map { DetailPreviewItem(name: $0) } },
-            set: { previewName = $0?.name }
-        )) { item in
-            ZStack(alignment: .topTrailing) {
-                Color.black.ignoresSafeArea()
-                if let uiImage = FabricImageStore.loadImage(named: item.name) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                        .ignoresSafeArea()
-                }
-                Button(action: { previewName = nil }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title)
-                        .foregroundColor(.white)
-                        .padding()
-                }
-            }
+        .fullScreenCover(isPresented: Binding(
+            get: { previewName != nil },
+            set: { if !$0 { previewName = nil } }
+        )) {
+            let idx = max(0, fabric.imageFileNames.firstIndex(of: previewName ?? "") ?? 0)
+            PhotoViewerView(
+                imageNames: fabric.imageFileNames,
+                currentIndex: idx,
+                isPresented: Binding(
+                    get: { previewName != nil },
+                    set: { if !$0 { previewName = nil } }
+                )
+            )
         }
         .alert("删除确认", isPresented: $showingDelete) {
             Button("删除", role: .destructive) { store.deleteFabric(fabric); dismiss() }
@@ -738,6 +741,104 @@ struct FabricDetailView: View {
         var id: String { name }
     }
 
+    /// 全屏图片查看器：居中显示、双指缩放、左右滑动切换。
+    private struct PhotoViewerView: View {
+        var imageNames: [String]
+        @State var currentIndex: Int
+        @Binding var isPresented: Bool
+
+        var body: some View {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if !imageNames.isEmpty {
+                    TabView(selection: $currentIndex) {
+                        ForEach(imageNames.indices, id: \.self) { idx in
+                            ZoomablePhotoView(name: imageNames[idx])
+                                .tag(idx)
+                        }
+                    }
+                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                }
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: { isPresented = false }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title)
+                                .foregroundColor(.white.opacity(0.9))
+                                .padding()
+                        }
+                    }
+                    Spacer()
+                    if imageNames.count > 1 {
+                        Text("\(currentIndex + 1) / \(imageNames.count)")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(.bottom, 32)
+                    }
+                }
+            }
+        }
+    }
+
+    /// 可缩放的单张图片：双指缩放、双击放大/还原、放大后可拖动。
+    private struct ZoomablePhotoView: View {
+        var name: String
+        @State private var scale: CGFloat = 1.0
+        @State private var lastScale: CGFloat = 1.0
+        @State private var offset: CGSize = .zero
+        @State private var lastOffset: CGSize = .zero
+
+        private func reset() {
+            scale = 1.0; lastScale = 1.0
+            offset = .zero; lastOffset = .zero
+        }
+
+        var body: some View {
+            GeometryReader { geo in
+                if let uiImage = FabricImageStore.loadImage(named: name) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
+                        .clipped()
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let newScale = lastScale * value
+                                    scale = min(max(newScale, 1.0), 4.0)
+                                }
+                                .onEnded { _ in
+                                    lastScale = scale
+                                    if scale <= 1.0 { reset() }
+                                }
+                        )
+                        .simultaneousGesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    guard scale > 1.0 else { return }
+                                    offset = CGSize(
+                                        width: lastOffset.width + value.translation.width,
+                                        height: lastOffset.height + value.translation.height
+                                    )
+                                }
+                                .onEnded { _ in
+                                    lastOffset = offset
+                                }
+                        )
+                        .onTapGesture(count: 2) {
+                            if scale > 1.0 { reset() }
+                            else { scale = 2.0; lastScale = 2.0 }
+                        }
+                } else {
+                    Color.gray.opacity(0.2)
+                }
+            }
+        }
+    }
+
     // MARK: - 一、基础信息（原版头：照片头 + 视频条 + 摘要卡）
 
     /// 照片头：全宽 4:3，多图可横滑（TabView，不显示系统页码，右下角自绘 "N / M"），
@@ -871,10 +972,18 @@ struct FabricDetailView: View {
                 }
             }
             HStack(alignment: .bottom) {
-                Text(usedSummaryText)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(themeAccent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(usedSummaryText)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(themeAccent)
+                    if store.soldLength(for: fabric.id) > 0 {
+                        Text(soldSummaryText)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Design.priceAccent)
+                    }
+                }
                 Spacer()
                 if fabric.hasPurchaseLength {
                     HStack(alignment: .lastTextBaseline, spacing: 3) {
@@ -895,7 +1004,7 @@ struct FabricDetailView: View {
                 }
             }
             if fabric.hasPurchaseLength && fabric.length > 0 {
-                ProgressBarView(fraction: remaining / fabric.length, height: 6, accent: themeAccent)
+                DualProgressBarView(usedFraction: fabric.usedLength / fabric.length, soldFraction: store.soldLength(for: fabric.id) / fabric.length, height: 6, usedColor: themeAccent)
             }
             Divider()
             HStack(spacing: 0) {
@@ -922,6 +1031,15 @@ struct FabricDetailView: View {
         let base = "已使用 \(LengthUnitHelper.format(fabric.usedLength, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
         if fabric.hasPurchaseLength && fabric.length > 0 {
             return "\(base) · \(Int(fabric.usedLength / fabric.length * 100))%"
+        }
+        return base
+    }
+    /// "已出售 X 米 · P%"（P = 已售 / 买入），显示样式与已使用一致，文本用价格橙色。
+    private var soldSummaryText: String {
+        let sold = store.soldLength(for: fabric.id)
+        let base = "已出售 \(LengthUnitHelper.format(sold, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
+        if fabric.hasPurchaseLength && fabric.length > 0 {
+            return "\(base) · \(Int(sold / fabric.length * 100))%"
         }
         return base
     }

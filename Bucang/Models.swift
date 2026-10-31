@@ -966,7 +966,8 @@ final class Store: ObservableObject {
         let base = fabric.code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty else { return "" }
         var n = 1
-        while codeConflict(code: "\(base)-\(n)", excluding: fabric.id) != nil { n += 1 }
+        // 自己已有的子编号也要跳过（codeConflict 会排除自身），否则永远生成 base-1 导致无法连续新增。
+        while codeConflict(code: "\(base)-\(n)", excluding: fabric.id) != nil || fabric.subCodes.contains("\(base)-\(n)") { n += 1 }
         return "\(base)-\(n)"
     }
 
@@ -1091,15 +1092,25 @@ final class Store: ObservableObject {
         return max(0, fabric.length - fabric.usedLength - soldLength(for: fabric.id))
     }
     func status(for fabric: Fabric) -> String {
-        // V8 七级：已出售（售出且剩余 0）＞ 部分出售（售出且剩余 >0）＞
-        // 已用完（剩余 0 且有用过）＞ 使用中（有用过）＞ 未使用。
+        // 主状态：取 statuses 的第一个，保持旧调用兼容。
+        statuses(for: fabric).first ?? "未使用"
+    }
+    /// 多状态：使用和出售可同时存在，如 ["使用中", "部分出售"]。
+    /// 完全售出（剩余 0）时独占"已出售"。
+    func statuses(for fabric: Fabric) -> [String] {
         let sold = soldLength(for: fabric.id)
         let rem = remaining(for: fabric)
-        if sold > 0 && fabric.hasPurchaseLength && rem == 0 { return "已出售" }
-        if sold > 0 { return "部分出售" }
-        if fabric.hasPurchaseLength && rem == 0 && fabric.usedLength > 0 { return "已用完" }
-        if fabric.usedLength > 0 { return "使用中" }
-        return "未使用"
+        let used = fabric.usedLength
+        if sold > 0 && fabric.hasPurchaseLength && rem == 0 { return ["已出售"] }
+        var result: [String] = []
+        if fabric.hasPurchaseLength && rem == 0 && used > 0 && sold == 0 {
+            result.append("已用完")
+        } else if used > 0 {
+            result.append("使用中")
+        }
+        if sold > 0 { result.append("部分出售") }
+        if result.isEmpty { result.append("未使用") }
+        return result
     }
     func works(for fabricId: UUID) -> [Work] {
         works.filter { $0.materials.contains { $0.fabricId == fabricId } }

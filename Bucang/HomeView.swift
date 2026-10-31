@@ -132,7 +132,7 @@ struct BucangView: View {
         case .all: break
         case .favorite: list = list.filter { $0.isFavorite }
         case .unused, .using, .usedUp, .partSold, .sold:
-            list = list.filter { store.status(for: $0) == statusFilter.rawValue }
+            list = list.filter { store.statuses(for: $0).contains(statusFilter.rawValue) }
         }
         if !filterMaterials.isEmpty { list = list.filter { filterMaterials.contains($0.materialName) } }
         if !filterColors.isEmpty { list = list.filter { filterColors.contains($0.colorName) } }
@@ -296,9 +296,9 @@ struct BucangView: View {
                     NavigationStack { FabricEditView(fabric: convertedFabric) }
                 }
             }
-            // UsageFormView 自带 NavigationStack，直接呈现不再套一层，避免双重导航栈。
+            // UsageFormView 自身没有 NavigationStack，外面包一层提供标题栏+保存/取消。
             .sheet(item: $usageFabric) { fabric in
-                UsageFormView(fabric: fabric)
+                NavigationStack { UsageFormView(fabric: fabric) }
             }
             .sheet(isPresented: $showingWishlistAdd) {
                 NavigationStack { WishlistEditView(item: nil, presetName: searchText) }
@@ -372,9 +372,9 @@ struct BucangView: View {
     // MARK: - 布料 Tab：统计卡吸顶 + 内容滚动
 
     private var fabricTabView: some View {
-        // 固定区：统计卡在上、工具栏在下（按用户要求的顺序），都不进滚动区。
-        // 不用 pinned header：iOS 16 上吸顶层的触摸区域会盖住下面的状态胶囊行导致点不动。
-        // 工具栏也不进 LazyVStack 内容区，避免懒加载重建后按钮触摸失效。
+        // 固定区：统计卡 → 工具栏 → 状态胶囊行，全部固定不滚动（用户要求）。
+        // 不用 pinned header：iOS 16 上吸顶层的触摸区域会盖住下面的行导致点不动。
+        // 工具栏和状态行都不进 LazyVStack 内容区，避免懒加载重建后按钮触摸失效。
         VStack(spacing: 0) {
             fabricStatsCard
                 .padding(.horizontal, 16)
@@ -383,13 +383,15 @@ struct BucangView: View {
                 .background(Design.background)
             fabricToolbar
                 .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .padding(.bottom, 4)
+                .background(Design.background)
+            statusCapsuleRow
                 .background(Design.background)
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    statusCapsuleRow
                     if hasActiveFilter {
                         activeFilterRow
+                            .padding(.top, 4)
                             .padding(.bottom, 4)
                     }
                     fabricCards
@@ -409,7 +411,7 @@ struct BucangView: View {
                 .frame(width: 140)
                 Spacer()
                 Text("\(store.fabrics.count) 份布料")
-                    .font(.headline).fontWeight(.bold).foregroundColor(.white)
+                    .font(.title3).fontWeight(.bold).foregroundColor(.white)
                 Spacer()
                 HStack(spacing: 12) {
                     NavigationLink(value: FabricNavTarget.charts) {
@@ -440,7 +442,7 @@ struct BucangView: View {
                             }
                             .frame(maxWidth: .infinity)
                             Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                            statColumn(label: "售出回款", value: hideAmounts ? "****" : "¥\(String(format: "%.2f", store.soldRevenue))", valueColor: Design.priceAccent)
+                            statColumn(label: "售出回款", value: hideAmounts ? "****" : "¥\(String(format: "%.2f", store.soldRevenue))")
                         }
                         if store.totalMeters > 0 {
                             Text("已售出占比 \(String(format: "%.1f", store.totalSoldMeters / store.totalMeters * 100))%")
@@ -462,7 +464,7 @@ struct BucangView: View {
                                 .buttonStyle(.plain)
                             }
                             Text(hideAmounts ? "****" : "¥\(String(format: "%.2f", store.totalValue))")
-                                .font(.headline).fontWeight(.bold).foregroundColor(Design.priceAccent).lineLimit(1).minimumScaleFactor(0.7)
+                                .font(.headline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
                         }
                         .frame(maxWidth: .infinity)
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
