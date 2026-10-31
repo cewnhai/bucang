@@ -788,12 +788,18 @@ final class Store: ObservableObject {
     // V8.1："多/多色/多彩"统一为"其他"（色轮图标），"米/米色/米白"并入"茶"。
     static let oldColorNameMap = ["棕": "茶", "米": "茶", "多": "其他", "多色": "其他", "多彩": "其他"]
 
-    static func defaultCodeLevels() -> [CodeLevel] {
-        let colorItems = [
-            ("白", "W", "⚪"), ("黑", "B", "⚫"), ("红", "R", "🔴"), ("粉", "P", "🌸"),
-            ("橙", "O", "🟠"), ("黄", "Y", "🟡"), ("绿", "G", "🟢"), ("蓝", "L", "🔵"),
-            ("紫", "Z", "🟣"), ("灰", "H", "🔘"), ("茶", "T", "🟤"), ("其他", "M", "wheel"),
+    static func defaultColorItems() -> [CodeItem] {
+        // 图2的13色默认值（2026-10-31）：圆色块图标存16进制，顺序按图。
+        [
+            ("红", "R", "#FF3B30"), ("橙", "O", "#FF9500"), ("黄", "Y", "#FFCC00"),
+            ("绿", "G", "#34C759"), ("蓝", "B", "#007AFF"), ("紫", "Z", "#AF52DE"),
+            ("粉", "P", "#FF2D55"), ("白", "W", "#FFFFFF"), ("黑", "K", "#000000"),
+            ("灰", "H", "#8E8E93"), ("棕", "BR", "#A2845E"), ("米", "M", "#E5D9B8"),
+            ("多彩", "D", "#C9A9E0"),
         ].map { CodeItem(name: $0.0, code: $0.1, icon: $0.2) }
+    }
+    static func defaultCodeLevels() -> [CodeLevel] {
+        let colorItems = defaultColorItems()
         let patternItems = [
             ("无地", "1"), ("小纹", "2"), ("付下", "3"),
             ("绞染/絣", "4"), ("刺绣", "5"), ("段染/霞染", "6"),
@@ -837,7 +843,8 @@ final class Store: ObservableObject {
         channelOptions = decoded.channelOptions.isEmpty ? Self.defaultChannelOptions : decoded.channelOptions
         patternOptions = decoded.patternOptions.isEmpty ? Self.defaultPatternOptions : decoded.patternOptions
         codeLevels = decoded.codeLevels.isEmpty ? Self.defaultCodeLevels() : decoded.codeLevels
-        migrateColorWheel()
+        migrateColorDefaults()
+        // migrateColorWheel 已停用（2026-10-31）：旧逻辑删"米"/改名"多彩"，与新13色默认值冲突
         if decoded.visibleTabs.isEmpty {
             visibleTabs = Self.defaultVisibleTabs
         } else {
@@ -1285,6 +1292,19 @@ final class Store: ObservableObject {
             }
         }
         return nil
+    }
+    /// 颜色默认值迁移到图2的13色（2026-10-31）：旧版12色（含茶/其他）替换为新13色，
+    /// 用户自定义的颜色（不在旧默认值里的）保留并追加到末尾。
+    private func migrateColorDefaults() {
+        guard let level = codeLevels.first(where: { $0.kind == "color" }) else { return }
+        let newNames = Set(Self.defaultColorItems().map { $0.name })
+        // 如果已经是新13色（名称完全匹配），不处理
+        let currentNames = Set(level.items.map { $0.name })
+        if currentNames == newNames { return }
+        // 保留自定义项（不在新13色里的）
+        let customs = level.items.filter { !newNames.contains($0.name) }
+        level.items = Self.defaultColorItems() + customs
+        save()
     }
     // 旧 nextCode（Build #12 颜色+纹样生成器）已被 V8 编号体系取代，
     // 生成逻辑见本文件 MARK: - 编号体系（V8）与 FabricViews 的新生成表。
