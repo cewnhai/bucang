@@ -222,6 +222,30 @@ enum LengthUnitHelper {
     }
 }
 
+// MARK: - 备注条目（V9.1：备注改为多条列表，每条带时间；
+// 旧数据的单条 note 文本在 Fabric 解码时迁移为第一条，note 字段保留作兼容）
+
+struct NoteEntry: Codable, Identifiable {
+    var id: UUID
+    var text: String
+    var createdAt: Date
+    init(id: UUID = UUID(), text: String = "", createdAt: Date = Date()) {
+        self.id = id; self.text = text; self.createdAt = createdAt
+    }
+    private enum CodingKeys: String, CodingKey { case id, text, createdAt }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(text, forKey: .text)
+        try c.encode(createdAt, forKey: .createdAt)
+    }
+}
+
 // MARK: - 布料（V3）
 
 final class Fabric: Identifiable, Codable {
@@ -238,6 +262,8 @@ final class Fabric: Identifiable, Codable {
     var isFavorite: Bool
     var status: Int
     var note: String
+    // V9.1：多条备注（UI 只读写 notes；note 保留给旧 JSON 解码，解码时迁移为 notes 第一条）。
+    var notes: [NoteEntry]
     var createdAt: Date
     var updatedAt: Date
     var materialId: UUID?
@@ -284,6 +310,7 @@ final class Fabric: Identifiable, Codable {
         id: UUID = UUID(), name: String = "", length: Double = 0, width: Double = 0,
         purchasePrice: Double = 0, pricePerMeter: Double = 0, purchaseDate: Date? = nil,
         usedLength: Double = 0, isFavorite: Bool = false, status: Int = 0, note: String = "",
+        notes: [NoteEntry] = [],
         createdAt: Date = Date(), updatedAt: Date = Date(),
         materialId: UUID? = nil, channelId: UUID? = nil, tagIds: [UUID] = [],
         imageFileNames: [String] = [],
@@ -299,6 +326,13 @@ final class Fabric: Identifiable, Codable {
         self.purchasePrice = purchasePrice; self.pricePerMeter = pricePerMeter
         self.purchaseDate = purchaseDate; self.usedLength = usedLength
         self.isFavorite = isFavorite; self.status = status; self.note = note
+        // V9.1：直接传 note 建布料时（如心愿单转入库、CSV 导入），自动同步为第一条备注，
+        // 避免各调用处逐个补同步逻辑；已显式传 notes 的不受影响。
+        if notes.isEmpty && !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            self.notes = [NoteEntry(text: note, createdAt: createdAt)]
+        } else {
+            self.notes = notes
+        }
         self.createdAt = createdAt; self.updatedAt = updatedAt
         self.materialId = materialId; self.channelId = channelId; self.tagIds = tagIds
         self.imageFileNames = imageFileNames; self.code = code; self.materialName = materialName
@@ -314,7 +348,7 @@ final class Fabric: Identifiable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case id, name, length, width, purchasePrice, pricePerMeter, purchaseDate
-        case usedLength, isFavorite, status, note, createdAt, updatedAt
+        case usedLength, isFavorite, status, note, notes, createdAt, updatedAt
         case materialId, channelId, tagIds, imageFileNames
         case code, materialName, composition, colorName, weightGsm, shrinkagePct
         case washing, usageNotes, channelName, merchantName, brainstorm, subCodes, videoFileNames
@@ -335,6 +369,11 @@ final class Fabric: Identifiable, Codable {
         isFavorite = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         status = try c.decodeIfPresent(Int.self, forKey: .status) ?? 0
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        // V9.1 迁移：旧 JSON 只有单条 note 文本时，把它作为第一条备注（时间用创建时间）。
+        notes = try c.decodeIfPresent([NoteEntry].self, forKey: .notes) ?? []
+        if notes.isEmpty && !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            notes = [NoteEntry(text: note, createdAt: try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date())]
+        }
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
         materialId = try c.decodeIfPresent(UUID.self, forKey: .materialId)
@@ -375,6 +414,7 @@ final class Fabric: Identifiable, Codable {
         try c.encode(isFavorite, forKey: .isFavorite)
         try c.encode(status, forKey: .status)
         try c.encode(note, forKey: .note)
+        try c.encode(notes, forKey: .notes)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
         try c.encodeIfPresent(materialId, forKey: .materialId)
@@ -1115,6 +1155,30 @@ final class Store: ObservableObject {
     func works(for fabricId: UUID) -> [Work] {
         works.filter { $0.materials.contains { $0.fabricId == fabricId } }
     }
+    /// V9.1：布料关联的成品（聚合，去重）：成品用料直接关联的 +
+    /// 各条使用/消耗记录里关联的成品。详情页"关联成品"项的计数与列表都走这里。
+    func aggregatedWorks(for fabricId: UUID) -> [Work] {
+        var seen = Set<UUID>()
+        var result: [Work] = []
+        for work in works(for: fabricId) {
+            if seen.insert(work.id).inserted { result.append(work) }
+        }
+        for record in usageRecords(for: fabricId) {
+            for wid in record.workIds {
+                if seen.insert(wid).inserted, let work = work(for: wid) {
+                    result.append(work)
+                }
+            }
+        }
+        return result
+    }
+    /// V9.1：出售记录页的状态胶囊（只看出售口径）：已售罄/部分出售/未出售。
+    func saleStatus(for fabric: Fabric) -> String {
+        let sold = soldLength(for: fabric.id)
+        guard sold > 0 else { return "未出售" }
+        if fabric.hasPurchaseLength && remaining(for: fabric) == 0 { return "已出售" }
+        return "部分出售"
+    }
     func workCost(for work: Work) -> (total: Double, hasMissingPrice: Bool) {
         var total = 0.0; var missing = false
         for m in work.materials {
@@ -1209,12 +1273,16 @@ final class Store: ObservableObject {
         for fabric in fabrics where fabric.channelId == channel.id { fabric.channelId = nil }
         save()
     }
-    func codeConflict(code: String, excluding fabricId: UUID) -> (fabric: Fabric, code: String)? {
+    func codeConflict(code: String, excluding fabricId: UUID, ownedSubCodes: Set<String> = []) -> (fabric: Fabric, code: String)? {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         for fabric in fabrics where fabric.id != fabricId {
             if fabric.code == trimmed { return (fabric, trimmed) }
-            if fabric.subCodes.contains(trimmed) { return (fabric, trimmed) }
+            if fabric.subCodes.contains(trimmed) {
+                // 自己拥有的子编号，被关联的布料也持有它（链接），不算冲突，否则关联后永远无法保存。
+                if ownedSubCodes.contains(trimmed) { continue }
+                return (fabric, trimmed)
+            }
         }
         return nil
     }

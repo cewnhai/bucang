@@ -155,7 +155,7 @@ struct BucangView: View {
                     || fabric.merchantName.localizedCaseInsensitiveContains(keyword)
                     || fabric.usageNotes.localizedCaseInsensitiveContains(keyword)
                     || fabric.brainstorm.localizedCaseInsensitiveContains(keyword)
-                    || fabric.note.localizedCaseInsensitiveContains(keyword)
+                    || fabric.notes.contains(where: { $0.text.localizedCaseInsensitiveContains(keyword) })
                     || workNames.localizedCaseInsensitiveContains(keyword)
             }
         }
@@ -624,7 +624,10 @@ struct BucangView: View {
     }
 
     private func convertWishlist(_ item: WishlistItem) {
-        let fabric = Fabric(name: item.name, note: item.note, imageFileNames: item.imageFileNames)
+        var fabric = Fabric(name: item.name, note: item.note, imageFileNames: item.imageFileNames)
+        if !item.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fabric.notes = [NoteEntry(text: item.note, createdAt: item.createdAt)]
+        }
         // 心愿单照片文件已在 bucang-images/，新布料直接复用文件名，不复制字节。
         store.addFabric(fabric)
         convertedFabric = fabric
@@ -773,7 +776,7 @@ struct WishlistPickerView: View {
     }
 }
 
-// MARK: - 消耗明细（统计卡“消耗米数”旁的左箭头打开）：全部使用记录，时间倒序。
+// MARK: - 消耗明细（统计卡“消耗米数”旁的左箭头打开）：全部消耗记录，时间倒序。
 struct UsageDetailSheetView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
@@ -783,7 +786,7 @@ struct UsageDetailSheetView: View {
     var body: some View {
         List {
             if records.isEmpty {
-                Text("还没有使用记录").foregroundColor(.secondary)
+                Text("还没有消耗记录").foregroundColor(.secondary)
             } else {
                 ForEach(records) { record in
                     let fabric = store.fabric(for: record.fabricId)

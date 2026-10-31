@@ -364,22 +364,25 @@ struct FabricDetailView: View {
     @State private var linkingSubCode: String?
     // 脑洞与备注：多选关联脑洞。
     @State private var showingBrainstormPicker = false
-    // 原版详情头：照片 Tab 索引 / 全屏预览图名 / 播放中的视频 / 备注 inline 编辑
+    // 原版详情头：照片 Tab 索引 / 全屏预览图名 / 播放中的视频 / 备注多条 inline 编辑
     @State private var headerPhotoIndex = 0
     @State private var previewName: String?
     @State private var playingURL: URL?
-    @State private var editingNote = ""
-    @State private var isEditingNote = false
+    @State private var editingNoteId: UUID?
+    @State private var editingNoteText = ""
+    // 关联成品跳转：点成品行进成品编辑页。
+    @State private var selectedWork: Work?
+    @State private var showingWorksList = false
 
     private var usageRecords: [UsageRecord] { store.usageRecords(for: fabric.id) }
     private var saleRecords: [SaleRecord] { store.saleRecords(for: fabric.id) }
-    private var linkedWorks: [Work] { store.works(for: fabric.id) }
+    private var linkedWorks: [Work] { store.aggregatedWorks(for: fabric.id) }
     private var linkedBrainstorms: [Brainstorm] { store.brainstorms(forFabric: fabric.id) }
     private var remaining: Double { store.remaining(for: fabric) }
     private var sold: Double { store.soldLength(for: fabric.id) }
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
-    private let sectionKeys = ["images", "basic", "fabric", "other", "usage", "sale", "brainstorm"]
+    private let sectionKeys = ["images", "basic", "source", "fabric", "other", "usage", "sale", "brainstorm"]
     private var allCollapsed: Bool { Set(sectionKeys).isSubset(of: Set(fabric.collapsedSections)) }
 
     var body: some View {
@@ -477,6 +480,7 @@ struct FabricDetailView: View {
                             }
                         }
                     }
+                    collapsibleSection(key: "source", title: "来源信息") { sourceInfoCard }
                     collapsibleSection(key: "fabric", title: "布料信息") { fabricInfoCard }
                     collapsibleSection(key: "other", title: "其他信息") { otherInfoCard }
                     collapsibleSection(key: "usage", title: "消耗记录") { usageCard }
@@ -505,6 +509,26 @@ struct FabricDetailView: View {
         }
         
         .sheet(isPresented: $showingSimilar) { NavigationStack { SimilarSearchView() } }
+        .sheet(item: $selectedWork) { work in
+            NavigationStack { WorkEditView(work: work) }
+        }
+        .sheet(isPresented: $showingWorksList) {
+            NavigationStack {
+                List(linkedWorks) { work in
+                    Button(action: { selectedWork = work; showingWorksList = false }) {
+                        HStack {
+                            Text(work.name.isEmpty ? "未命名成品" : work.name)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .navigationTitle("关联成品")
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showingWorksList = false } } }
+            }
+        }
         .sheet(isPresented: $showingSubCodePicker) {
             NavigationStack { SubCodeFabricPickerView(fabric: fabric, subCode: linkingSubCode ?? "") }
         }
@@ -1039,6 +1063,32 @@ struct FabricDetailView: View {
         return base
     }
 
+    // MARK: - 一点五、来源信息（图标盒卡）：从布料信息/其他信息里搬出来的购买相关行
+
+    private var sourceInfoCard: some View {
+        let totalValue = fabric.hasTotalPrice ? "¥\(String(format: "%.2f", fabric.purchasePrice))" : "未填"
+        let unitText = fabric.unitPrice.map { "¥\(String(format: "%.2f", $0)) 元/米" } ?? "未填"
+        let dateText = fabric.purchaseDate.map { CSVValues.dateString($0) } ?? "未填"
+        return CardView {
+            VStack(alignment: .leading, spacing: 0) {
+                iconInfoRow(icon: "bag", label: "渠道",
+                            value: fabric.channelName.isEmpty ? "未填" : fabric.channelName,
+                            subtext: fabric.merchantName.isEmpty ? nil : "商家：\(fabric.merchantName)")
+                Divider()
+                iconInfoRow(icon: "yensign", label: "总价",
+                            value: totalValue,
+                            valueColor: fabric.hasTotalPrice ? Design.priceAccent : nil)
+                Divider()
+                iconInfoRow(icon: "yensign", label: "单价",
+                            value: unitText,
+                            valueColor: fabric.unitPrice != nil ? Design.priceAccent : nil)
+                Divider()
+                iconInfoRow(icon: "calendar", label: "购买日期",
+                            value: dateText)
+            }
+        }
+    }
+
     // MARK: - 二、布料信息（图标盒卡）
 
     /// 子编号↔布料的关联是派生的（模型没有专门的关联表）：
@@ -1109,29 +1159,39 @@ struct FabricDetailView: View {
                 Divider()
                 colorRow
                 Divider()
-                iconInfoRow(icon: "bag", label: "渠道",
-                            value: fabric.channelName.isEmpty ? "未填" : fabric.channelName,
-                            subtext: fabric.merchantName.isEmpty ? nil : "商家：\(fabric.merchantName)")
-                Divider()
                 let tagNames = store.tags(for: fabric).map { $0.name }
                 iconInfoRow(icon: "tag", label: "标签",
                             value: tagNames.isEmpty ? "未填" : tagNames.joined(separator: "、"))
                 Divider()
-                HStack(spacing: 12) {
-                    iconBox("briefcase")
-                    Text("关联成品").font(.subheadline).foregroundColor(.secondary)
-                    Spacer()
-                    Text(linkedWorks.isEmpty ? "暂无" : "\(linkedWorks.count) 个")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(linkedWorks.isEmpty ? .secondary : .primary)
+                Button(action: {
+                    if linkedWorks.count == 1 { selectedWork = linkedWorks.first }
+                    else if linkedWorks.count > 1 { showingWorksList = true }
+                }) {
+                    HStack(spacing: 12) {
+                        iconBox("briefcase")
+                        Text("关联成品").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        Text(linkedWorks.isEmpty ? "暂无" : "\(linkedWorks.count) 个")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(linkedWorks.isEmpty ? .secondary : .primary)
+                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                    }
                 }
+                .buttonStyle(.plain)
                 .padding(.vertical, 6)
                 if !linkedWorks.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(linkedWorks) { work in
-                            Text(work.name.isEmpty ? "未命名成品" : work.name)
-                                .font(.subheadline)
+                            Button(action: { selectedWork = work }) {
+                                HStack {
+                                    Text(work.name.isEmpty ? "未命名成品" : work.name)
+                                        .font(.subheadline)
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.leading, 56)
@@ -1241,28 +1301,6 @@ struct FabricDetailView: View {
                 iconInfoRow(icon: "sparkles", label: "洗涤方式",
                             value: fabric.washing.isEmpty ? "未填" : fabric.washing.joined(separator: "、"))
                 Divider()
-                if fabric.usageNotes.isEmpty {
-                    iconInfoRow(icon: "note.text", label: "用途备注", value: "未填")
-                } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 12) {
-                            iconBox("note.text")
-                            Text("用途备注").font(.subheadline).foregroundColor(.secondary)
-                        }
-                        Text(fabric.usageNotes).font(.subheadline)
-                    }
-                    .padding(.vertical, 6)
-                }
-                Divider()
-                if let unit = fabric.unitPrice {
-                    iconInfoRow(icon: "yensign", label: "单价",
-                                value: "¥\(String(format: "%.2f", unit)) 元/米",
-                                valueColor: Design.priceAccent)
-                    Divider()
-                }
-                iconInfoRow(icon: "calendar", label: "购买日期",
-                            value: fabric.purchaseDate.map { CSVValues.dateString($0) } ?? "未填")
-                Divider()
                 iconInfoRow(icon: "calendar.badge.plus", label: "创建时间",
                             value: CSVValues.dateString(fabric.createdAt))
             }
@@ -1277,7 +1315,7 @@ struct FabricDetailView: View {
                 HStack(spacing: 12) {
                     RecordIconBox(icon: "scissors", accent: themeAccent)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("使用记录").font(.headline).foregroundColor(.primary)
+                        Text("消耗记录").font(.headline).foregroundColor(.primary)
                         Text("共 \(usageRecords.count) 条记录")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -1325,56 +1363,44 @@ struct FabricDetailView: View {
         }
     }
 
-    // MARK: - 六、脑洞与备注（备注 inline 编辑 + 关联的 Brainstorm 实体）
+    // MARK: - 六、脑洞与备注（多条备注 inline 编辑 + 关联的 Brainstorm 实体）
 
     private var brainstormCard: some View {
         CardView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("备注").font(.headline)
+                    if !fabric.notes.isEmpty {
+                        Text("\(fabric.notes.count)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
                     Spacer()
-                    Button(action: {
-                        editingNote = fabric.note
-                        isEditingNote = true
-                    }) {
-                        Image(systemName: "pencil")
+                    Button(action: addNote) {
+                        Image(systemName: "plus.circle")
                             .font(.subheadline)
                             .foregroundColor(themeAccent)
                             .frame(width: 32, height: 32)
                             .background(Circle().fill(themeAccent.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("编辑备注")
+                    .accessibilityLabel("新增备注")
                 }
                 .padding(.bottom, 6)
-                if isEditingNote {
-                    TextEditor(text: $editingNote)
-                        .frame(minHeight: 90)
-                        .padding(6)
-                        .background(Color(UIColor.tertiarySystemGroupedBackground))
-                        .cornerRadius(8)
-                    HStack {
-                        Button("取消") { isEditingNote = false }
-                            .buttonStyle(.plain)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Button("保存") {
-                            fabric.note = editingNote
-                            fabric.updatedAt = Date()
-                            store.save()
-                            isEditingNote = false
-                        }
-                        .buttonStyle(.plain)
-                        .fontWeight(.semibold)
-                        .foregroundColor(themeAccent)
-                    }
-                    .font(.subheadline)
-                    .padding(.top, 6)
-                } else {
-                    Text(fabric.note.isEmpty ? "暂无备注" : fabric.note)
+                if fabric.notes.isEmpty {
+                    Text("暂无备注")
                         .font(.subheadline)
-                        .foregroundColor(fabric.note.isEmpty ? .secondary : .primary)
+                        .foregroundColor(.secondary)
                         .padding(.bottom, 4)
+                } else {
+                    let sortedNotes = fabric.notes.sorted { $0.createdAt < $1.createdAt }
+                    ForEach(sortedNotes) { entry in
+                        if editingNoteId == entry.id {
+                            noteEditorRow(entry)
+                        } else {
+                            noteRow(entry)
+                        }
+                    }
                 }
                 // 关联脑洞：多选（store.brainstorms 全量列表，不限数量），
                 // 选中即把本布料 id 写入 Brainstorm.linkedFabricIds（去重）。
@@ -1414,6 +1440,94 @@ struct FabricDetailView: View {
         }
     }
 
+    /// 备注行：文本 + 日期 + 删除按钮。
+    private func noteRow(_ entry: NoteEntry) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.text.isEmpty ? "（空备注）" : entry.text)
+                    .font(.subheadline)
+                Text(CSVValues.dateString(entry.createdAt))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Button(action: { deleteNote(entry) }) {
+                Image(systemName: "trash")
+                    .foregroundColor(.red)
+                    .font(.footnote)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// 备注编辑行：TextEditor + 保存/取消。
+    private func noteEditorRow(_ entry: NoteEntry) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextEditor(text: $editingNoteText)
+                .frame(minHeight: 90)
+                .padding(6)
+                .background(Color(UIColor.tertiarySystemGroupedBackground))
+                .cornerRadius(8)
+            HStack {
+                Button("取消") { cancelNoteEdit(entry) }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("保存") { saveNoteEdit(entry) }
+                    .buttonStyle(.plain)
+                    .fontWeight(.semibold)
+                    .foregroundColor(themeAccent)
+            }
+            .font(.subheadline)
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// 新增备注：先追加一条空备注并进入编辑态。
+    private func addNote() {
+        let entry = NoteEntry(text: "")
+        fabric.notes.append(entry)
+        fabric.note = fabric.notes.first?.text ?? ""
+        fabric.updatedAt = Date()
+        store.save()
+        editingNoteId = entry.id
+        editingNoteText = ""
+    }
+
+    /// 保存备注编辑：写回文本，同步兼容字段，存盘。
+    private func saveNoteEdit(_ entry: NoteEntry) {
+        if let idx = fabric.notes.firstIndex(where: { $0.id == entry.id }) {
+            fabric.notes[idx].text = editingNoteText
+        }
+        fabric.note = fabric.notes.first?.text ?? ""
+        fabric.updatedAt = Date()
+        store.save()
+        editingNoteId = nil
+        editingNoteText = ""
+    }
+
+    /// 取消备注编辑：若该条为空则删掉（新增时点取消不会留下空条）。
+    private func cancelNoteEdit(_ entry: NoteEntry) {
+        if let idx = fabric.notes.firstIndex(where: { $0.id == entry.id }),
+           fabric.notes[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fabric.notes.remove(at: idx)
+            fabric.note = fabric.notes.first?.text ?? ""
+            fabric.updatedAt = Date()
+            store.save()
+        }
+        editingNoteId = nil
+        editingNoteText = ""
+    }
+
+    /// 删除一条备注：删条目、同步兼容字段、存盘。
+    private func deleteNote(_ entry: NoteEntry) {
+        fabric.notes.removeAll { $0.id == entry.id }
+        fabric.note = fabric.notes.first?.text ?? ""
+        fabric.updatedAt = Date()
+        store.save()
+    }
+
     // MARK: - 分享 / 长图
 
     private var fabricSummary: String {
@@ -1425,7 +1539,9 @@ struct FabricDetailView: View {
         if fabric.hasPurchaseLength { lines.append("剩余：\(LengthUnitHelper.format(remaining, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))") }
         if !fabric.materialName.isEmpty { lines.append("材质：\(fabric.materialName)") }
         if !fabric.channelName.isEmpty { lines.append("渠道：\(fabric.channelName)") }
-        if !fabric.note.isEmpty { lines.append("备注：\(fabric.note)") }
+        let noteTexts = fabric.notes.map { $0.text }
+        let nonEmptyNoteTexts = noteTexts.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if !nonEmptyNoteTexts.isEmpty { lines.append("备注：" + nonEmptyNoteTexts.joined(separator: "；")) }
         return lines.joined(separator: "\n")
     }
 
@@ -1443,7 +1559,7 @@ struct FabricDetailView: View {
 
 // MARK: - 专属记录页（REQ 5）：从详情入口卡经 NavigationLink 推进来，
 // 跑在已有的 NavigationStack 里。添加表单用 NavigationLink push
-//（标题"添加使用记录/添加出售记录"，返回键回到记录页）；
+//（标题"添加消耗记录/添加出售记录"，返回键回到记录页）；
 // 编辑用 sheet（复用 UsageFormView / SaleFormView 的 record: 初始化）。
 
 /// 子编号"关联"用的布料选择器：点一块布料，把 subCode 追加到对方 subCodes
@@ -1534,7 +1650,7 @@ struct FabricBrainstormLinkPickerView: View {
     }
 }
 
-/// 使用记录专属页：摘要卡（名称/状态/已用/可用大数字/共长/进度条）+
+/// 消耗记录专属页：摘要卡（名称/状态/已用/可用大数字/共长/进度条）+
 /// 记录行（日期/长度/备注/删除，点行进编辑 sheet）+ 空态；
 /// 右上 + 与空态大按钮都 push 添加页。
 struct UsageRecordsPageView: View {
@@ -1620,7 +1736,7 @@ struct UsageRecordsPageView: View {
                     .foregroundColor(themeAccent)
             }
             .padding(.top, 24)
-            Text("还没有使用记录")
+            Text("还没有消耗记录")
                 .font(.headline)
             Text("添加记录后，布长和使用状态会自动更新")
                 .font(.subheadline)
@@ -1688,13 +1804,13 @@ struct UsageRecordsPageView: View {
             .padding()
         }
         .background(Design.background)
-        .navigationTitle("使用记录")
+        .navigationTitle("消耗记录")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(destination: UsageFormView(fabric: fabric)) {
                     Image(systemName: "plus")
                 }
-                .accessibilityLabel("添加使用记录")
+                .accessibilityLabel("添加消耗记录")
             }
         }
         .sheet(item: $editingUsage) { record in
@@ -1722,7 +1838,7 @@ struct SaleRecordsPageView: View {
             Circle()
                 .stroke(Color.secondary, lineWidth: 1.5)
                 .frame(width: 8, height: 8)
-            Text(store.status(for: fabric))
+            Text(store.saleStatus(for: fabric))
                 .font(.subheadline)
                 .fontWeight(.semibold)
         }
@@ -1890,7 +2006,9 @@ struct LongDetailSummaryView: View {
             if !fabric.channelName.isEmpty { Text("渠道：\(fabric.channelName)") }
             let tagNames = store.tags(for: fabric).map { $0.name }
             if !tagNames.isEmpty { Text("标签：\(tagNames.joined(separator: "、"))") }
-            if !fabric.note.isEmpty { Text("备注：\(fabric.note)") }
+            let noteTexts = fabric.notes.map { $0.text }
+            let nonEmptyNoteTexts = noteTexts.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if !nonEmptyNoteTexts.isEmpty { Text("备注：" + nonEmptyNoteTexts.joined(separator: "；")) }
             Spacer()
         }
         .padding(24)
@@ -1917,8 +2035,7 @@ struct FabricEditView: View {
     @State private var washing: Set<String>
     @State private var channel: String
     @State private var merchantName: String
-    @State private var usageNotes: String
-    @State private var note: String
+    @State private var newNoteText = ""
     @State private var subCodes: [String]
     @State private var codeSegments: [String]
     @State private var purchaseDate: Date
@@ -1928,6 +2045,7 @@ struct FabricEditView: View {
     @State private var imageNames: [String]
     @State private var videoNames: [String]
     @State private var errorMessage: String?
+    @State private var showingSaveError = false
     @State private var lengthInitialized = false
     @State private var showingCodeGenerator = false
     @State private var codeGenTargetSubIndex: Int?
@@ -1957,8 +2075,6 @@ struct FabricEditView: View {
         _washing = State(initialValue: Set(fabric?.washing ?? []))
         _channel = State(initialValue: fabric?.channelName ?? "")
         _merchantName = State(initialValue: fabric?.merchantName ?? "")
-        _usageNotes = State(initialValue: fabric?.usageNotes ?? "")
-        _note = State(initialValue: fabric?.note ?? "")
         _subCodes = State(initialValue: fabric?.subCodes ?? [])
         _codeSegments = State(initialValue: fabric?.codeSegments ?? [])
         _purchaseDate = State(initialValue: fabric?.purchaseDate ?? Date())
@@ -1970,20 +2086,23 @@ struct FabricEditView: View {
     }
 
     private func save() {
+        errorMessage = nil
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
         let selfId = fabric?.id ?? UUID()
         // 主编号 + 每个子编号，对照全部其他布料的主编号与子编号（不含自身）。
-        var codesToCheck = [trimmedCode] + subCodes.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let ownedSubs = Set(subCodes.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+        var codesToCheck = [trimmedCode] + Array(ownedSubs)
         codesToCheck = Array(Set(codesToCheck))
         for candidate in codesToCheck where !candidate.isEmpty {
-            if let conflict = store.codeConflict(code: candidate, excluding: selfId) {
+            if let conflict = store.codeConflict(code: candidate, excluding: selfId, ownedSubCodes: ownedSubs) {
                 errorMessage = "编号重复，禁止保存：编号 \(candidate) 已被「\(conflict.fabric.displayName)」使用（主编号/子编号冲突）"
+                showingSaveError = true
                 return
             }
         }
         // 同一块布料内主编号与子编号也不能重复。
         if !trimmedCode.isEmpty && subCodes.contains(trimmedCode) {
-            errorMessage = "编号重复，禁止保存：子编号不能与主编号相同"; return
+            errorMessage = "编号重复，禁止保存：子编号不能与主编号相同"; showingSaveError = true; return
         }
         let materialValue = customMaterial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? material.trimmingCharacters(in: .whitespacesAndNewlines) : customMaterial.trimmingCharacters(in: .whitespacesAndNewlines)
         // 长度输入按当前设置单位换算回米；留空 = 未填，不显示进度条。
@@ -1993,10 +2112,10 @@ struct FabricEditView: View {
         let widthMetres = widthCm / 100
         let price = Double(priceText) ?? 0
         if lengthMetres < 0 || widthMetres < 0 || price < 0 {
-            errorMessage = "长度、幅宽、价格不能为负数"; return
+            errorMessage = "长度、幅宽、价格不能为负数"; showingSaveError = true; return
         }
         if let existing = fabric, lengthMetres < existing.usedLength && !lengthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            errorMessage = "买入长度不能小于已用长度"; return
+            errorMessage = "买入长度不能小于已用长度"; showingSaveError = true; return
         }
         if !materialValue.isEmpty && !store.materialOptions.contains(materialValue) {
             store.materialOptions.append(materialValue)
@@ -2017,7 +2136,12 @@ struct FabricEditView: View {
             existing.merchantName = merchantName
             existing.subCodes = subCodes.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
             existing.codeSegments = codeSegments
-            existing.usageNotes = usageNotes; existing.note = note
+            // 新增备注：表单里"新增备注"去空后非空则追加；兼容字段同步为首条。
+            let trimmedNewNote = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedNewNote.isEmpty {
+                existing.notes.append(NoteEntry(text: trimmedNewNote))
+            }
+            existing.note = existing.notes.first?.text ?? ""
             existing.purchaseDate = fillPurchaseDate ? purchaseDate : nil; existing.isFavorite = isFavorite
             existing.tagIds = tagIDsArray; existing.updatedAt = Date()
             for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
@@ -2026,13 +2150,16 @@ struct FabricEditView: View {
             existing.videoFileNames = videoNames
             store.save()
         } else {
+            let trimmedNewNoteText = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let initialNotes: [NoteEntry] = trimmedNewNoteText.isEmpty ? [] : [NoteEntry(text: trimmedNewNoteText)]
             let newFabric = Fabric(
                 name: name, length: lengthMetres, width: widthMetres,
                 purchasePrice: price, pricePerMeter: 0, purchaseDate: fillPurchaseDate ? purchaseDate : nil,
-                note: note, tagIds: tagIDsArray, imageFileNames: imageNames,
+                note: initialNotes.first?.text ?? "", notes: initialNotes,
+                tagIds: tagIDsArray, imageFileNames: imageNames,
                 code: trimmedCode, materialName: materialValue, composition: composition,
                 colorName: colorName, weightGsm: Double(weightText), shrinkagePct: Double(shrinkageText),
-                washing: Array(washing), usageNotes: usageNotes, channelName: channel,
+                washing: Array(washing), channelName: channel,
                 merchantName: merchantName,
                 subCodes: subCodes.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
                 videoFileNames: videoNames, codeSegments: codeSegments,
@@ -2180,13 +2307,34 @@ struct FabricEditView: View {
                     }
                     .foregroundColor(.primary)
                 }
-                LabeledMultilineField(label: "用途备注", text: $usageNotes)
-                LabeledMultilineField(label: "备注", text: $note)
+                if let existingFabric = fabric {
+                    let sortedExistingNotes = existingFabric.notes.sorted { $0.createdAt < $1.createdAt }
+                    if !sortedExistingNotes.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("已有备注").font(.subheadline).foregroundColor(.secondary)
+                            ForEach(sortedExistingNotes) { entry in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(entry.text.isEmpty ? "（空备注）" : entry.text)
+                                        .font(.subheadline)
+                                    Text(CSVValues.dateString(entry.createdAt))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+                LabeledMultilineField(label: "新增备注", text: $newNoteText)
                 Toggle(isOn: $isFavorite) {
                     Label("收藏", systemImage: isFavorite ? "star.fill" : "star")
                 }
             }
             if let errorMessage { Text(errorMessage).foregroundColor(.red) }
+        }
+        .alert("无法保存", isPresented: $showingSaveError) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
         .sheet(isPresented: $showingCodeGenerator) {
             NavigationStack {
@@ -2209,7 +2357,8 @@ struct FabricEditView: View {
         .navigationTitle(fabric == nil ? "新增布料" : "编辑布料")
         .onAppear {
             if !lengthInitialized, let f = fabric, f.hasPurchaseLength {
-                lengthText = String(format: "%.2f", f.length * LengthUnitHelper.factorToDisplay(unit: store.lengthUnit))
+                // 全精度：避免 %.2f 截断后 save() 里"买入长度不能小于已用长度"误触发。
+                lengthText = String(f.length * LengthUnitHelper.factorToDisplay(unit: store.lengthUnit))
                 lengthInitialized = true
             }
         }
@@ -2679,7 +2828,7 @@ struct UsageFormView: View {
                     Button(action: { showingWorkPicker = true }) {
                         HStack(spacing: 12) {
                             RecordIconBox(icon: "tshirt", accent: themeAccent)
-                            Text("关联作品").font(.subheadline).foregroundColor(.secondary)
+                            Text("关联成品").font(.subheadline).foregroundColor(.secondary)
                             Spacer()
                             Text(selectedWorkIDs.isEmpty ? "未选择" : "\(selectedWorkIDs.count) 个已选")
                                 .font(.subheadline)
@@ -2701,7 +2850,7 @@ struct UsageFormView: View {
                 .background(Color(.systemBackground))
                 .cornerRadius(16)
                 if record != nil {
-                    Button("删除这条使用记录", role: .destructive) {
+                    Button("删除这条消耗记录", role: .destructive) {
                         if let record { store.removeUsageAndRestore(record) }
                         dismiss()
                     }
@@ -2719,7 +2868,7 @@ struct UsageFormView: View {
             .padding()
         }
         .background(Design.background)
-        .navigationTitle(record == nil ? "添加使用记录" : "编辑使用记录")
+        .navigationTitle(record == nil ? "添加消耗记录" : "编辑消耗记录")
         .onAppear {
             // 编辑时把记录的米数换算成显示单位（init 里读不到 store，只能在这里做）。
             if !lengthInitialized, let record {
@@ -2751,7 +2900,7 @@ struct UsageFormView: View {
                         }
                     }
                 }
-                .navigationTitle("关联作品")
+                .navigationTitle("关联成品")
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) { Button("完成") { showingWorkPicker = false } }
                 }
