@@ -932,11 +932,9 @@ struct BrainstormListView: View {
         return VStack(spacing: 10) {
             StatsBigNumberHeader(count: total, label: "条想法")
             HStack(spacing: 0) {
-                bsStatColumn(label: "想法数", value: "\(total)")
-                Divider().frame(height: 36).background(Color.white.opacity(0.4))
                 bsStatColumn(label: "想法中", value: "\(thinking)")
                 Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                bsStatColumn(label: "已立项", value: "\(approved)")
+                bsStatColumn(label: "完成", value: "\(approved)")
                 Divider().frame(height: 36).background(Color.white.opacity(0.4))
                 bsStatColumn(label: "已放弃", value: "\(dropped)")
             }

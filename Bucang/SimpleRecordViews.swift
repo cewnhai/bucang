@@ -1,7 +1,7 @@
 import SwiftUI
 
 // MARK: - V3 成品 / 其他 / 心愿单表单
-// 成品用料与使用记录同源：成品页加用料 = 给该布新建一条使用记录，
+// 成品用料与消耗记录同源：成品页加用料 = 给该布新建一条消耗记录，
 // 剩余只扣一次，绝不重复计量。
 
 struct WorkEditView: View {
@@ -25,6 +25,7 @@ struct WorkEditView: View {
     @State private var usageCount: Int
     @State private var laborCostText: String
     @State private var hasLaborCost: Bool
+    @State private var colorName: String
     private let originalImageNames: [String]
 
     init(work: Work?) {
@@ -47,6 +48,7 @@ struct WorkEditView: View {
         _usageCount = State(initialValue: work?.usageCount ?? 0)
         _laborCostText = State(initialValue: work == nil || !work!.hasLaborCost ? "" : String(work!.laborCost))
         _hasLaborCost = State(initialValue: work?.hasLaborCost ?? false)
+        _colorName = State(initialValue: work?.colorName ?? "")
     }
 
     private func save() {
@@ -66,6 +68,7 @@ struct WorkEditView: View {
             existing.usageCount = usageCount
             existing.laborCost = labor
             existing.hasLaborCost = laborFilled
+            existing.colorName = colorName
             for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
             existing.imageFileNames = imageNames
             store.save()
@@ -79,7 +82,7 @@ struct WorkEditView: View {
                 hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 saleDate: (isSold && hasSaleDate) ? saleDate : nil,
                 saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
-                laborCost: labor, hasLaborCost: laborFilled
+                laborCost: labor, hasLaborCost: laborFilled, colorName: colorName
             )
             store.addWork(newWork)
         }
@@ -108,6 +111,17 @@ struct WorkEditView: View {
             }
             Section("成品（全部可留空）") {
                 LabeledTextField(label: "成品名称", placeholder: "选填", text: $name)
+                HStack {
+                    Text("颜色")
+                    Spacer()
+                    Picker("颜色", selection: $colorName) {
+                        Text("未选").tag("")
+                        ForEach(store.levelOrder().first(where: { $0.kind == "color" })?.items.filter({ $0.enabled }) ?? []) { item in
+                            Text(item.name).tag(item.name)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
                 Toggle("填写开始创作时间", isOn: $hasStartDate)
                 if hasStartDate { DatePicker("开始创作时间", selection: Binding(get: { startDate ?? Date() }, set: { startDate = $0 }), displayedComponents: .date) }
                 Toggle("填写完成时间（填了即视为已完成）", isOn: $hasFinishDate)
@@ -147,8 +161,8 @@ struct WorkEditView: View {
                                 Spacer()
                                 Text("\(LengthUnitHelper.format(material.amount, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))").font(.caption).foregroundColor(.secondary)
                                 // Form 里 swipe 删除不可靠，另给明确的删除按钮；
-                                // 删用料不自动回补剩余（已生成的使用记录仍在），
-                                // 如需回补请在布料详情里删对应使用记录。
+                                // 删用料不自动回补剩余（已生成的消耗记录仍在），
+                                // 如需回补请在布料详情里删对应消耗记录。
                                 Button("删除", role: .destructive) {
                                     work.materials.removeAll { $0.id == material.id }
                                     store.save()
@@ -203,7 +217,7 @@ struct WorkMaterialAddView: View {
         Form {
             Section {
                 Text("成品：\(work.name.isEmpty ? "未命名成品" : work.name)")
-                Text("加用料会同时给这块布生成一条使用记录，剩余只扣一次。")
+                Text("加用料会同时给这块布生成一条消耗记录，剩余只扣一次。")
                     .font(.caption).foregroundColor(.secondary)
             }
             Section("选布料") {

@@ -9,10 +9,29 @@ struct WorksListView: View {
     @State private var addingMaterialWork: Work?
     @State private var showSold = false
     @State private var isSingleColumn = false // 成品页本地二态：两列 ⇄ 整宽单列（无横向）
+    @State private var searchText = ""
+    @State private var showingSort = false
+    @State private var sortNewestFirst = true
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
-    private var making: [Work] { store.works.filter { !$0.isFinished }.sorted { $0.createdAt > $1.createdAt } }
-    private var finished: [Work] { store.works.filter { $0.isFinished }.sorted { $0.createdAt > $1.createdAt } }
+    private var making: [Work] {
+        var list = store.works.filter { !$0.isFinished }
+        list = filterWorks(list)
+        return sortWorks(list)
+    }
+    private var finished: [Work] {
+        var list = store.works.filter { $0.isFinished }
+        list = filterWorks(list)
+        return sortWorks(list)
+    }
+    private func filterWorks(_ list: [Work]) -> [Work] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return list }
+        return list.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+    private func sortWorks(_ list: [Work]) -> [Work] {
+        list.sorted { sortNewestFirst ? $0.createdAt > $1.createdAt : $0.createdAt < $1.createdAt }
+    }
     private var soldWorks: [Work] { store.works.filter { $0.isSold } }
     private var usedWorks: [Work] { store.works.filter { $0.isUsed } }
     private var totalCost: Double { store.works.reduce(0) { $0 + store.workTotalCost(for: $1) } }
@@ -35,6 +54,9 @@ struct WorksListView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(work.name.isEmpty ? "未命名成品" : work.name).font(.headline).lineLimit(1)
+                if !work.colorName.isEmpty, let cItem = store.colorItem(forName: work.colorName) {
+                    CodeItemIconView(icon: cItem.icon, size: 18)
+                }
                 Spacer()
                 Text(work.isFinished ? "已完成" : "制作中").font(.caption).foregroundColor(work.isFinished ? .green : Design.accent)
             }
@@ -109,14 +131,14 @@ struct WorksListView: View {
                 .background(ThemeStatsBackground(themeName: store.themeName))
                 .cornerRadius(Design.corner)
                 .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
-                HStack {
-                    Picker("视图", selection: $isSingleColumn) {
-                        Text("两列").tag(false)
-                        Text("单列").tag(true)
+                HStack(spacing: 8) {
+                    TabSearchField(placeholder: "搜成品名称…", text: $searchText)
+                    TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet", accent: themeAccent) {
+                        isSingleColumn.toggle()
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 140)
-                    Spacer()
+                    TabIconButton(icon: "arrow.up.arrow.down", accent: themeAccent) {
+                        showingSort = true
+                    }
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeaderView(title: "制作中")
@@ -156,6 +178,22 @@ struct WorksListView: View {
         .sheet(isPresented: $showingAdd) { NavigationStack { WorkEditView(work: nil) } }
         .sheet(item: $editingWork) { work in NavigationStack { WorkEditView(work: work) } }
         .sheet(item: $addingMaterialWork) { work in NavigationStack { WorkMaterialAddView(work: work) } }
+        .sheet(isPresented: $showingSort) {
+            NavigationStack {
+                Form {
+                    Section("排序方式") {
+                        Picker("排序", selection: $sortNewestFirst) {
+                            Text("最新在前").tag(true)
+                            Text("最早在前").tag(false)
+                        }
+                        .pickerStyle(.inline)
+                    }
+                }
+                .navigationTitle("排序")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.medium])
+        }
         .overlay(alignment: .bottomTrailing) {
             TabFAB(accent: themeAccent) { showingAdd = true }
         }
@@ -302,13 +340,16 @@ struct WishlistListView: View {
     @State private var showingClearConfirm = false
     @State private var searchText = ""
     @State private var convertingItem: WishlistItem?
+    @State private var showPurchased = false
+    @State private var isSingleColumn = false
 
     private var totalEstimate: Double {
         store.wishlistItems.filter { $0.hasEstimatedPrice }.reduce(0) { $0 + $1.estimatedPrice }
     }
 
     private var filtered: [WishlistItem] {
-        let list = store.wishlistItems.sorted { $0.createdAt > $1.createdAt }
+        var list = store.wishlistItems.sorted { $0.createdAt > $1.createdAt }
+        list = list.filter { $0.isPurchased == showPurchased }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return list }
         return list.filter {
@@ -346,6 +387,18 @@ struct WishlistListView: View {
                 Spacer()
             }
             HStack {
+                Button(action: {
+                    item.isPurchased.toggle()
+                    store.save()
+                }) {
+                    Text(item.isPurchased ? "已购 ✓" : "标为已购")
+                        .font(.caption).fontWeight(.semibold)
+                        .foregroundColor(item.isPurchased ? .white : Design.accent)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(item.isPurchased ? Design.accent : Design.accentSoft)
+                        .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Button(action: { convertingItem = item }) {
                     Text("转入库")
@@ -392,11 +445,30 @@ struct WishlistListView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // 心愿单统计卡（粘性在滚动区顶部）。
                 VStack(spacing: 8) {
-                    StatsBigNumberHeader(count: store.wishlistItems.count, label: "条心愿")
+                    HStack {
+                        Picker("心愿视图", selection: $showPurchased) {
+                            Text("待购").tag(false)
+                            Text("已购").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 100)
+                        StatsBigNumberHeader(
+                            count: showPurchased ? store.wishlistItems.filter({ $0.isPurchased }).count : store.wishlistItems.filter({ !$0.isPurchased }).count,
+                            label: showPurchased ? "条已购" : "条待购"
+                        )
+                        .padding(.leading, 8)
+                        Spacer()
+                    }
                     HStack(spacing: 0) {
-                        wishlistStatColumn(label: "待购数", value: "\(store.wishlistItems.count)")
-                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                        wishlistStatColumn(label: "预估金额", value: "¥\(String(format: "%.2f", totalEstimate))")
+                        if showPurchased {
+                            wishlistStatColumn(label: "已购数", value: "\(store.wishlistItems.filter({ $0.isPurchased }).count)")
+                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                            wishlistStatColumn(label: "已购金额", value: "¥\(String(format: "%.2f", store.wishlistItems.filter({ $0.isPurchased && $0.hasEstimatedPrice }).reduce(0) { $0 + $1.estimatedPrice }))")
+                        } else {
+                            wishlistStatColumn(label: "待购数", value: "\(store.wishlistItems.filter({ !$0.isPurchased }).count)")
+                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                            wishlistStatColumn(label: "预估金额", value: "¥\(String(format: "%.2f", totalEstimate))")
+                        }
                     }
                 }
                 .padding(14)
@@ -407,7 +479,12 @@ struct WishlistListView: View {
                     Button("清空心愿单", role: .destructive) { showingClearConfirm = true }
                     Spacer()
                 }
-                TabSearchField(placeholder: "搜索 名称 / 想法备注", text: $searchText)
+                HStack(spacing: 8) {
+                    TabSearchField(placeholder: "搜索 名称 / 想法备注", text: $searchText)
+                    TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
+                        isSingleColumn.toggle()
+                    }
+                }
                 if filtered.isEmpty {
                     EmptyPlaceholderView(icon: "heart", title: "心愿单是空的", subtitle: "逛店看中先丢进来，只当备忘；长按布料页右下 + 可以从心愿单转入库")
                 } else {

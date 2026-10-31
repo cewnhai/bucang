@@ -550,6 +550,8 @@ final class Work: Identifiable, Codable {
     // V8 新增：工费（非必填，留空不计入总成本）
     var laborCost: Double
     var hasLaborCost: Bool
+    // 2026-10-31：成品颜色
+    var colorName: String
     var isFinished: Bool { finishedAt != nil }
     init(
         id: UUID = UUID(), name: String = "", progress: Double = 0,
@@ -559,7 +561,7 @@ final class Work: Identifiable, Codable {
         imageFileNames: [String] = [], materials: [WorkMaterial] = [],
         isSold: Bool = false, salePrice: Double = 0, hasSalePrice: Bool = false,
         saleDate: Date? = nil, saleChannel: String = "", isUsed: Bool = false, usageCount: Int = 0,
-        laborCost: Double = 0, hasLaborCost: Bool = false
+        laborCost: Double = 0, hasLaborCost: Bool = false, colorName: String = ""
     ) {
         self.id = id; self.name = name; self.progress = progress
         self.startedAt = startedAt; self.finishedAt = finishedAt
@@ -568,12 +570,12 @@ final class Work: Identifiable, Codable {
         self.imageFileNames = imageFileNames; self.materials = materials
         self.isSold = isSold; self.salePrice = salePrice; self.hasSalePrice = hasSalePrice
         self.saleDate = saleDate; self.saleChannel = saleChannel; self.isUsed = isUsed; self.usageCount = usageCount
-        self.laborCost = laborCost; self.hasLaborCost = hasLaborCost
+        self.laborCost = laborCost; self.hasLaborCost = hasLaborCost; self.colorName = colorName
     }
     private enum CodingKeys: String, CodingKey {
         case id, name, progress, startedAt, finishedAt, costPrice, sellPrice, timeHours, note, createdAt, imageFileNames, materials
         case isSold, salePrice, hasSalePrice, saleDate, saleChannel, isUsed, usageCount
-        case laborCost, hasLaborCost
+        case laborCost, hasLaborCost, colorName
     }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -598,6 +600,7 @@ final class Work: Identifiable, Codable {
         usageCount = try c.decodeIfPresent(Int.self, forKey: .usageCount) ?? 0
         laborCost = try c.decodeIfPresent(Double.self, forKey: .laborCost) ?? 0
         hasLaborCost = try c.decodeIfPresent(Bool.self, forKey: .hasLaborCost) ?? (laborCost > 0)
+        colorName = try c.decodeIfPresent(String.self, forKey: .colorName) ?? "" 
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -675,12 +678,14 @@ final class WishlistItem: Identifiable, Codable {
     var id: UUID; var name: String; var imageFileNames: [String]; var note: String; var createdAt: Date
     // V8 新增：预估价（转入库时带入布料总价）
     var estimatedPrice: Double; var hasEstimatedPrice: Bool
+    // 2026-10-31：已购标记
+    var isPurchased: Bool
     init(id: UUID = UUID(), name: String = "", imageFileNames: [String] = [], note: String = "", createdAt: Date = Date(),
-         estimatedPrice: Double = 0, hasEstimatedPrice: Bool = false) {
+         estimatedPrice: Double = 0, hasEstimatedPrice: Bool = false, isPurchased: Bool = false) {
         self.id = id; self.name = name; self.imageFileNames = imageFileNames; self.note = note; self.createdAt = createdAt
-        self.estimatedPrice = estimatedPrice; self.hasEstimatedPrice = hasEstimatedPrice
+        self.estimatedPrice = estimatedPrice; self.hasEstimatedPrice = hasEstimatedPrice; self.isPurchased = isPurchased
     }
-    private enum CodingKeys: String, CodingKey { case id, name, imageFileNames, note, createdAt, estimatedPrice, hasEstimatedPrice }
+    private enum CodingKeys: String, CodingKey { case id, name, imageFileNames, note, createdAt, estimatedPrice, hasEstimatedPrice, isPurchased }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -690,6 +695,7 @@ final class WishlistItem: Identifiable, Codable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         estimatedPrice = try c.decodeIfPresent(Double.self, forKey: .estimatedPrice) ?? 0
         hasEstimatedPrice = try c.decodeIfPresent(Bool.self, forKey: .hasEstimatedPrice) ?? (estimatedPrice > 0)
+        isPurchased = try c.decodeIfPresent(Bool.self, forKey: .isPurchased) ?? false
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
