@@ -132,20 +132,20 @@ struct OtherSettingsView: View {
         } message: {
             Text(importSummary ?? "")
         }
-        .sheet(isPresented: $showingExporter) {
-            if !exportURLs.isEmpty {
-                DocumentExporter(urls: exportURLs)
+        .sheet(isPresented: $showingExporter) { ActivityView(urls: exportURLs) }
+        .fileExporter(
+            isPresented: $showingZipExporter,
+            document: zipDocument,
+            contentType: UTType.zip,
+            defaultFilename: ZipBackup.defaultExportFileName()
+        ) { result in
+            if case .failure(let error) = result {
+                importSummary = "导出压缩包失败：\(error.localizedDescription)"
+                showingSummary = true
             }
         }
-        .sheet(isPresented: $showingZipExporter) {
-            if let doc = zipDocument {
-                DocumentExporter(urls: [doc])
-            }
-        }
-        .alert("清空全部本地数据", isPresented: $showingClearConfirm) {
-            Button("清空", role: .destructive) {
-                store.clearAllData()
-            }
+        .alert("清空确认", isPresented: $showingClearConfirm) {
+            Button("清空", role: .destructive) { store.clearRecords() }
             Button("取消", role: .cancel) {}
         } message: {
             Text("会删除全部本地数据，无法恢复。请先备份。")
