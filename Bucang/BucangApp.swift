@@ -8,6 +8,15 @@ struct BucangApp: App {
     @StateObject private var store = Store()
     @StateObject private var webdav = WebDAVManager()
 
+    init() {
+        // 返回按钮只留 "<"：把 "Back" 文字设为透明，保留系统右滑返回手势。
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithDefaultBackground()
+        appearance.backButtonAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor.clear]
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

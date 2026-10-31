@@ -106,6 +106,7 @@ struct BucangView: View {
     @State private var convertedFabric: Fabric?
     @State private var showingConvertedEdit = false
     @State private var usageFabric: Fabric?
+    @State private var editingFabricRoot: Fabric?
     @State private var showingWishlistAdd = false
     @State private var showingTabSelection = false
     @State private var saleFabric: Fabric?
@@ -205,7 +206,7 @@ struct BucangView: View {
                 switch target {
                 case .detail(let id):
                     if let fabric = store.fabrics.first(where: { $0.id == id }) {
-                        FabricDetailView(fabric: fabric)
+                        FabricDetailView(fabric: fabric, onEdit: { editingFabricRoot = $0 })
                     } else {
                         Text("该布料已删除").foregroundColor(.secondary)
                     }
@@ -299,6 +300,10 @@ struct BucangView: View {
             // UsageFormView 自身没有 NavigationStack，外面包一层提供标题栏+保存/取消。
             .sheet(item: $usageFabric) { fabric in
                 NavigationStack { UsageFormView(fabric: fabric) }
+            }
+            // 详情页的编辑 sheet 放到根级：iOS 16 上从 navigationDestination 里直接弹 sheet 不稳定。
+            .sheet(item: $editingFabricRoot) { f in
+                NavigationStack { FabricEditView(fabric: f) }
             }
             .sheet(isPresented: $showingWishlistAdd) {
                 NavigationStack { WishlistEditView(item: nil, presetName: searchText) }

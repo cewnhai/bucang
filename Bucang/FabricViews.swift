@@ -354,8 +354,7 @@ struct FabricDetailView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
-    @State private var showingEdit = false
-    @State private var editingFabric: Fabric?
+    var onEdit: (Fabric) -> Void = { _ in }
     @State private var showingDelete = false
     @State private var showingSimilar = false
     @State private var showingLongImage = false
@@ -490,16 +489,10 @@ struct FabricDetailView: View {
         }
         .background(Design.background)
         .navigationTitle(fabric.displayName)
-        .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "chevron.left")
-                }
-            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
-                    Button("编辑", action: { editingFabric = fabric })
+                    Button("编辑", action: { onEdit(fabric) })
                     ShareLink(item: fabricSummary, preview: SharePreview(fabric.displayName)) {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
@@ -510,7 +503,7 @@ struct FabricDetailView: View {
                 }
             }
         }
-        .sheet(item: $editingFabric) { f in NavigationStack { FabricEditView(fabric: f) } }
+        
         .sheet(isPresented: $showingSimilar) { NavigationStack { SimilarSearchView() } }
         .sheet(isPresented: $showingSubCodePicker) {
             NavigationStack { SubCodeFabricPickerView(fabric: fabric, subCode: linkingSubCode ?? "") }
@@ -697,7 +690,7 @@ struct FabricDetailView: View {
             Circle()
                 .stroke(themeAccent, lineWidth: 1.5)
                 .frame(width: 8, height: 8)
-            Text(store.status(for: fabric))
+            Text(store.statuses(for: fabric).joined(separator: "|"))
                 .font(.subheadline)
                 .fontWeight(.semibold)
         }
@@ -826,7 +819,9 @@ struct FabricDetailView: View {
                                 }
                                 .onEnded { _ in
                                     lastOffset = offset
-                                }
+                                },
+                            // 1x 时禁用拖动手势，让 TabView 的左右滑动接管；放大后才启用拖动看图。
+                            including: scale > 1.0 ? .all : .none
                         )
                         .onTapGesture(count: 2) {
                             if scale > 1.0 { reset() }
