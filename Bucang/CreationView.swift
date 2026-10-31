@@ -90,11 +90,10 @@ struct WorksListView: View {
                             .background(Color.white.opacity(0.2))
                             .cornerRadius(14)
                         }.buttonStyle(.plain)
+                        .frame(width: 100)
                         Spacer()
-                        Text("\(store.works.count) 件成品").font(.headline).fontWeight(.bold).foregroundColor(.white)
-                        Spacer()
-                        Spacer().frame(width: 44)
                     }
+                    StatsBigNumberHeader(count: store.works.count, label: "件成品")
                     if showSold {
                         HStack(spacing: 0) {
                             workStatColumn(label: "已售出数", value: "\(soldWorks.count)")
@@ -166,6 +165,9 @@ struct WorksListView: View {
         .sheet(isPresented: $showingAdd) { NavigationStack { WorkEditView(work: nil) } }
         .sheet(item: $editingWork) { work in NavigationStack { WorkEditView(work: work) } }
         .sheet(item: $addingMaterialWork) { work in NavigationStack { WorkMaterialAddView(work: work) } }
+        .overlay(alignment: .bottomTrailing) {
+            TabFAB(accent: themeAccent) { showingAdd = true }
+        }
     }
 }
 
@@ -239,6 +241,7 @@ struct OtherListView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // 其他统计卡（粘性在滚动区顶部，类比成品统计栏）。
                 VStack(spacing: 8) {
+                    StatsBigNumberHeader(count: store.otherItems.count, label: "条其他")
                     HStack(spacing: 0) {
                         otherStatColumn(label: "条数", value: "\(store.otherItems.count)")
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
@@ -295,19 +298,7 @@ struct OtherListView: View {
             .padding(.bottom, 80)
         }
         .overlay(alignment: .bottomTrailing) {
-            Button(action: { showingAdd = true }) {
-                Image(systemName: "plus")
-                    .font(.title2)
-                    .foregroundColor(.white)
-                    .frame(width: 56, height: 56)
-                    .background(Design.accent)
-                    .clipShape(Circle())
-                    .shadow(color: Color.black.opacity(0.25), radius: 6, x: 0, y: 3)
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 20)
-            .padding(.bottom, 24)
-            .accessibilityLabel("新建其他")
+            TabFAB(accent: Design.accent) { showingAdd = true }
         }
         .sheet(isPresented: $showingAdd) { NavigationStack { OtherEditView(item: nil) } }
         .sheet(item: $editingItem) { item in NavigationStack { OtherEditView(item: item) } }
@@ -411,6 +402,7 @@ struct WishlistListView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // 心愿单统计卡（粘性在滚动区顶部）。
                 VStack(spacing: 8) {
+                    StatsBigNumberHeader(count: store.wishlistItems.count, label: "条心愿")
                     HStack(spacing: 0) {
                         wishlistStatColumn(label: "待购数", value: "\(store.wishlistItems.count)")
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
@@ -463,6 +455,9 @@ struct WishlistListView: View {
             let raw = convertingItem?.name ?? ""
             let display = raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名心愿" : raw
             Text("将「\(display)」转为布料入库（照片复制一份、预估价带入总价），心愿单条目会删除。")
+        }
+        .overlay(alignment: .bottomTrailing) {
+            TabFAB(accent: Design.accent) { showingAdd = true }
         }
     }
 }

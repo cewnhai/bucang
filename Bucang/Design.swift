@@ -444,3 +444,38 @@ struct LabeledMultilineField: View {
         .padding(.vertical, 4)
     }
 }
+
+// 各1级Tab统一悬浮按钮（2026-10-31）：圆形56pt，点按新增，无长按（布料tab除外）。
+struct TabFAB: View {
+    var accent: Color
+    var action: () -> Void
+    var body: some View {
+        Circle()
+            .fill(accent)
+            .frame(width: 56, height: 56)
+            .overlay(Image(systemName: "plus").foregroundColor(.white).font(.title2))
+            .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
+            .padding(.trailing, 20)
+            .padding(.bottom, 20)
+            .onTapGesture(perform: action)
+    }
+}
+
+// 统计卡大数字头（2026-10-31）：数字大、汉字小，同排不分行。
+struct StatsBigNumberHeader: View {
+    var count: Int
+    var label: String
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("\(count)")
+                .font(.system(size: 38, weight: .bold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+            Text(label)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.85))
+                .lineLimit(1)
+            Spacer()
+        }
+    }
+}

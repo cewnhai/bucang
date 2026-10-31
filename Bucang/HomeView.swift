@@ -407,16 +407,14 @@ struct BucangView: View {
 
     private var fabricStatsCard: some View {
         VStack(spacing: 10) {
+            // 第一排：左上小 segmented + 右上图标按钮
             HStack {
                 Picker("统计视图", selection: $showOutbound) {
                     Text("库存").tag(false)
                     Text("出库").tag(true)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 140)
-                Spacer()
-                Text("\(store.fabrics.count) 份布料")
-                    .font(.title).fontWeight(.bold).foregroundColor(.white)
+                .frame(width: 100)
                 Spacer()
                 HStack(spacing: 12) {
                     NavigationLink(value: FabricNavTarget.charts) {
@@ -427,6 +425,18 @@ struct BucangView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            // 第二排：数字大、汉字小，同排不分行
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(store.fabrics.count)")
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text("份布料")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.85))
+                    .lineLimit(1)
+                Spacer()
             }
             if statsExpanded {
                 if showOutbound {
@@ -908,14 +918,7 @@ struct BrainstormListView: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            Circle()
-                .fill(themeAccent)
-                .frame(width: 56, height: 56)
-                .overlay(Image(systemName: "plus").foregroundColor(.white).font(.title2))
-                .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
-                .padding(.trailing, 20)
-                .padding(.bottom, 20)
-                .onTapGesture { showingAddForm = true }
+            TabFAB(accent: themeAccent) { showingAddForm = true }
         }
         .sheet(isPresented: $showingAddForm) {
             NavigationStack { BrainstormFormView(brainstorm: nil) }
@@ -928,13 +931,7 @@ struct BrainstormListView: View {
         let approved = store.brainstorms.filter { $0.status == "已立项" }.count
         let dropped = store.brainstorms.filter { $0.status == "已放弃" }.count
         return VStack(spacing: 10) {
-            HStack {
-                Text("脑洞灵感")
-                    .font(.headline).fontWeight(.bold).foregroundColor(.white)
-                Spacer()
-                Text("\(total) 条想法")
-                    .font(.subheadline).foregroundColor(.white.opacity(0.85))
-            }
+            StatsBigNumberHeader(count: total, label: "条想法")
             HStack(spacing: 0) {
                 bsStatColumn(label: "想法数", value: "\(total)")
                 Divider().frame(height: 36).background(Color.white.opacity(0.4))
