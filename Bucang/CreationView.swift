@@ -79,21 +79,16 @@ struct WorksListView: View {
                 // 成品统计栏（粘性在滚动区顶部，类比布料统计卡但更简单）。
                 VStack(spacing: 8) {
                     HStack {
-                        Button(action: { showSold.toggle() }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.left.arrow.right")
-                                Text(showSold ? "成品" : "售出")
-                            }
-                            .font(.caption).fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Color.white.opacity(0.2))
-                            .cornerRadius(14)
-                        }.buttonStyle(.plain)
+                        Picker("成品视图", selection: $showSold) {
+                            Text("成品").tag(false)
+                            Text("售出").tag(true)
+                        }
+                        .pickerStyle(.segmented)
                         .frame(width: 100)
+                        StatsBigNumberHeader(count: store.works.count, label: "件成品")
+                            .padding(.leading, 8)
                         Spacer()
                     }
-                    StatsBigNumberHeader(count: store.works.count, label: "件成品")
                     if showSold {
                         HStack(spacing: 0) {
                             workStatColumn(label: "已售出数", value: "\(soldWorks.count)")
@@ -122,10 +117,6 @@ struct WorksListView: View {
                     .pickerStyle(.segmented)
                     .frame(width: 140)
                     Spacer()
-                    Button(action: { showingAdd = true }) {
-                        Label("新建成品", systemImage: "plus")
-                    }
-                    .buttonStyle(.borderedProminent).tint(themeAccent)
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeaderView(title: "制作中")
@@ -254,8 +245,7 @@ struct OtherListView: View {
                 .background(ThemeStatsBackground(themeName: store.themeName))
                 .cornerRadius(Design.corner)
                 .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
-                TextField("搜索 名称 / 备注 / 分类 / 渠道", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
+                TabSearchField(placeholder: "搜索 名称 / 备注 / 分类 / 渠道", text: $searchText)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(categoryNames, id: \.self) { cat in
@@ -416,11 +406,8 @@ struct WishlistListView: View {
                 HStack {
                     Button("清空心愿单", role: .destructive) { showingClearConfirm = true }
                     Spacer()
-                    Button(action: { showingAdd = true }) { Label("新增心愿", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent).tint(Design.accent)
                 }
-                TextField("搜索 名称 / 想法备注", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
+                TabSearchField(placeholder: "搜索 名称 / 想法备注", text: $searchText)
                 if filtered.isEmpty {
                     EmptyPlaceholderView(icon: "heart", title: "心愿单是空的", subtitle: "逛店看中先丢进来，只当备忘；长按布料页右下 + 可以从心愿单转入库")
                 } else {

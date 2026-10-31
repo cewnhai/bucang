@@ -479,3 +479,38 @@ struct StatsBigNumberHeader: View {
         }
     }
 }
+
+// 各1级Tab统一搜索栏（2026-10-31）：圆角卡片底 + 放大镜 + 清除键，和布料tab一致。
+struct TabSearchField: View {
+    var placeholder: String
+    @Binding var text: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+            TextField(placeholder, text: $text)
+            if !text.isEmpty {
+                Button(action: { text = "" }) {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(Design.card)
+        .cornerRadius(12)
+    }
+}
+
+// 各1级Tab统一小图标按钮（2026-10-31）：36pt圆角卡片底，和布料tab工具栏一致。
+struct TabIconButton: View {
+    var icon: String
+    var accent: Color = Design.accent
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon).foregroundColor(accent)
+                .frame(width: 36, height: 36).background(Design.card).cornerRadius(10)
+        }
+        .buttonStyle(.plain)
+    }
+}

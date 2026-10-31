@@ -407,7 +407,7 @@ struct BucangView: View {
 
     private var fabricStatsCard: some View {
         VStack(spacing: 10) {
-            // 第一排：左上小 segmented + 右上图标按钮
+            // 第一排：左上小 segmented + 份数（数字大汉字小，同排不换行）+ 右上图标按钮
             HStack {
                 Picker("统计视图", selection: $showOutbound) {
                     Text("库存").tag(false)
@@ -415,6 +415,17 @@ struct BucangView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 100)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(store.fabrics.count)")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    Text("份布料")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
+                .padding(.leading, 8)
                 Spacer()
                 HStack(spacing: 12) {
                     NavigationLink(value: FabricNavTarget.charts) {
@@ -425,18 +436,6 @@ struct BucangView: View {
                     }
                     .buttonStyle(.plain)
                 }
-            }
-            // 第二排：数字大、汉字小，同排不分行
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(store.fabrics.count)")
-                    .font(.system(size: 38, weight: .bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                Text("份布料")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.85))
-                    .lineLimit(1)
-                Spacer()
             }
             if statsExpanded {
                 if showOutbound {
