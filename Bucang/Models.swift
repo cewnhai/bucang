@@ -795,7 +795,7 @@ final class Store: ObservableObject {
             ("绿", "G", "#34C759"), ("蓝", "B", "#007AFF"), ("紫", "Z", "#AF52DE"),
             ("粉", "P", "#FF2D55"), ("白", "W", "#FFFFFF"), ("黑", "K", "#000000"),
             ("灰", "H", "#8E8E93"), ("棕", "BR", "#A2845E"), ("米", "M", "#E5D9B8"),
-            ("多彩", "D", "#C9A9E0"),
+            ("多彩", "D", "#C9A9E0"), ("其他", "Q", "rainbow"),
         ].map { CodeItem(name: $0.0, code: $0.1, icon: $0.2) }
     }
     static func defaultCodeLevels() -> [CodeLevel] {
@@ -844,6 +844,7 @@ final class Store: ObservableObject {
         patternOptions = decoded.patternOptions.isEmpty ? Self.defaultPatternOptions : decoded.patternOptions
         codeLevels = decoded.codeLevels.isEmpty ? Self.defaultCodeLevels() : decoded.codeLevels
         migrateColorDefaults()
+        ensureFixedOtherColor()
         // migrateColorWheel 已停用（2026-10-31）：旧逻辑删"米"/改名"多彩"，与新13色默认值冲突
         if decoded.visibleTabs.isEmpty {
             visibleTabs = Self.defaultVisibleTabs
@@ -1301,9 +1302,25 @@ final class Store: ObservableObject {
         // 如果已经是新13色（名称完全匹配），不处理
         let currentNames = Set(level.items.map { $0.name })
         if currentNames == newNames { return }
-        // 保留自定义项（不在新13色里的）
+        // 保留自定义项（不在新默认值里的）
         let customs = level.items.filter { !newNames.contains($0.name) }
         level.items = Self.defaultColorItems() + customs
+        save()
+    }
+    /// 确保颜色层级末尾有固定的"其他"项（2026-10-31）：rainbow图标，不可删除（UI层隐藏删除键）。
+    private func ensureFixedOtherColor() {
+        guard let level = codeLevels.first(where: { $0.kind == "color" }) else { return }
+        // 已有名为"其他"的项：确保图标为rainbow（旧版可能是wheel或emoji）
+        if let other = level.items.first(where: { $0.name == "其他" }) {
+            if other.icon != "rainbow" { other.icon = "rainbow" }
+            // 移到末尾
+            level.items.removeAll { $0.id == other.id }
+            level.items.append(other)
+            save()
+            return
+        }
+        // 没有：追加
+        level.items.append(CodeItem(name: "其他", code: "Q", icon: "rainbow"))
         save()
     }
     // 旧 nextCode（Build #12 颜色+纹样生成器）已被 V8 编号体系取代，

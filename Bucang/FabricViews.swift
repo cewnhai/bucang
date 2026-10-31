@@ -1252,7 +1252,8 @@ struct FabricDetailView: View {
                                             .offset(x: 16, y: -16)
                                     }
                                 }
-                                Text(item.name)
+                                let _code = item.code.trimmingCharacters(in: .whitespacesAndNewlines)
+                                Text(_code.isEmpty ? item.name : "\(item.name)/\(_code)")
                                     .font(.subheadline)
                                     .foregroundColor(.primary)
                                     .lineLimit(1)

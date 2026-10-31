@@ -330,6 +330,17 @@ struct CodeItemIconView: View {
         Group {
             if icon == "wheel" {
                 ColorWheelIcon(size: size)
+            } else if icon == "rainbow" {
+                // "其他"固定项：彩虹渐变圆
+                Circle()
+                    .fill(AngularGradient(
+                        gradient: Gradient(colors: [
+                            .red, .orange, .yellow, .green, .blue, .purple, .red
+                        ]),
+                        center: .center
+                    ))
+                    .frame(width: size, height: size)
+                    .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
             } else if let color = Color(hex: icon) {
                 // 16进制色值：渲染为圆色块（选色器取色存这里）
                 Circle()

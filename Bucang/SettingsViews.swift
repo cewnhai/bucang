@@ -1030,15 +1030,13 @@ struct ColorItemsSettingsView: View {
     @State private var deletingItem: CodeItem?
     @State private var pickedColor = Color.red
     @State private var suppressPickerChange = false
-    @State private var pickerCapHint = false
-
-    static let maxColors = 12
 
     private var colorLevel: CodeLevel? {
         store.codeLevels.first { $0.kind == "color" }
     }
     private var items: [CodeItem] { colorLevel?.items ?? [] }
-    private var isFull: Bool { items.count >= Self.maxColors }
+    // 颜色数量不限（2026-10-31 用户要求）
+    private var isOtherItem: (CodeItem) -> Bool = { $0.name == "其他" && $0.icon == "rainbow" }
 
     // 行显示：有代码 → "名/码"（如 红/R），无代码 → 只有名。
     private func displayText(_ item: CodeItem) -> String {
@@ -1049,24 +1047,29 @@ struct ColorItemsSettingsView: View {
     }
 
     private func addBlank() {
-        guard let level = colorLevel, !isFull else { return }
+        guard let level = colorLevel else { return }
         let item = CodeItem(name: "", code: "", icon: "")
-        level.items.append(item)
+        // "其他"固定项保持在末尾：新项插到它前面
+        if let otherIdx = level.items.firstIndex(where: { isOtherItem($0) }) {
+            level.items.insert(item, at: otherIdx)
+        } else {
+            level.items.append(item)
+        }
         store.save()
         editingItemId = item.id   // 新行直接展开行内编辑
     }
 
     private func addFromPicker() {
         guard let level = colorLevel else { return }
-        guard !isFull else {
-            pickerCapHint = true
-            return
-        }
-        pickerCapHint = false
         var n = 1
         let existing = Set(level.items.map { $0.name })
         while existing.contains("自定义\(n)") { n += 1 }
-        level.items.append(CodeItem(name: "自定义\(n)", code: "", icon: pickedColor.toHex()))
+        let item = CodeItem(name: "自定义\(n)", code: "", icon: pickedColor.toHex())
+        if let otherIdx = level.items.firstIndex(where: { isOtherItem($0) }) {
+            level.items.insert(item, at: otherIdx)
+        } else {
+            level.items.append(item)
+        }
         store.save()
         // 复位选色器：保证下次选相同颜色也能触发 onChange。
         suppressPickerChange = true
@@ -1084,7 +1087,7 @@ struct ColorItemsSettingsView: View {
         store.save()
     }
 
-    // 行内编辑器：名称 + 代码。
+    // 行内编辑器：名称 + 代码 + 选色器（改实色圆）。
     @ViewBuilder
     private func editRow(_ item: CodeItem) -> some View {
         VStack(spacing: 8) {
@@ -1095,6 +1098,15 @@ struct ColorItemsSettingsView: View {
                     set: { item.name = $0; store.save() }
                 ))
                 .textFieldStyle(.roundedBorder)
+                // 实色圆（hex图标）可用选色器自由改色；"其他"固定项不显示
+                if Color(hex: item.icon) != nil {
+                    ColorPicker("", selection: Binding(
+                        get: { Color(hex: item.icon) ?? .red },
+                        set: { item.icon = $0.toHex(); store.save() }
+                    ))
+                    .labelsHidden()
+                    .frame(width: 44)
+                }
             }
             HStack(spacing: 10) {
                 TextField("代码（如 R，可空）", text: Binding(
@@ -1130,34 +1142,32 @@ struct ColorItemsSettingsView: View {
                                         }
                                     }
                                     .buttonStyle(.plain)
-                                    Button(role: .destructive, action: { deletingItem = item }) {
-                                        Image(systemName: "trash")
+                                    // "其他"为固定项，不可删除
+                                    if !isOtherItem(item) {
+                                        Button(role: .destructive, action: { deletingItem = item }) {
+                                            Image(systemName: "trash")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .foregroundColor(.red)
                                     }
-                                    .buttonStyle(.borderless)
-                                    .foregroundColor(.red)
                                 }
                             }
                         }
                         .onDelete { offsets in
                             let snapshot = items   // 先快照：按 id 删除，多选删除时下标不会错位
-                            for i in offsets { confirmDelete(snapshot[i]) }
+                            for i in offsets where !isOtherItem(snapshot[i]) { confirmDelete(snapshot[i]) }
                         }
                         .onMove(perform: moveItem)
                     } header: {
-                        Text("颜色列表（\(items.count)/\(Self.maxColors)）")
+                        Text("颜色列表（\(items.count)）")
                     } footer: {
-                        Text("点一行改名与代码；拖动排序后，编号生成器与布料表单里的颜色顺序同步变化。")
+                        Text("点一行改名、改代码、改颜色；拖动排序后，编号生成器与布料表单里的颜色顺序同步变化。“其他”为固定项，不可删除。")
                     }
 
                     Section {
                         Button("添加颜色", action: addBlank)
-                            .disabled(isFull)
-                        if isFull {
-                            Text("颜色已满 \(Self.maxColors) 条，删除一条后再添加。")
-                                .font(.caption).foregroundColor(.secondary)
-                        }
                     } footer: {
-                        Text("最多 \(Self.maxColors) 条。")
+                        Text("数量不限。")
                     }
 
                     Section {
@@ -1166,12 +1176,8 @@ struct ColorItemsSettingsView: View {
                                 if suppressPickerChange { suppressPickerChange = false; return }
                                 addFromPicker()
                             }
-                        Text("从系统选色器取色加入列表，名称默认为“自定义1、自定义2…”，点行可改；同样受 \(Self.maxColors) 条上限限制。")
+                        Text("从系统选色器取色加入列表，名称默认为“自定义1、自定义2…”，点行可改。")
                             .font(.caption).foregroundColor(.secondary)
-                        if pickerCapHint {
-                            Text("颜色已满 \(Self.maxColors) 条，删除一条后再用选色器添加。")
-                                .font(.caption).foregroundColor(.orange)
-                        }
                     }
                 }
                 .navigationTitle("颜色选项")
