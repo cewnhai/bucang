@@ -125,7 +125,7 @@ struct SettingsView: View {
 
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "全局设置", subtitle: "长度单位全库统一，内部按米存，显示时换算")
+                            SectionHeaderView(title: "全局设置", subtitle: "")
                             Picker("长度单位", selection: Binding(
                                 get: { store.lengthUnit },
                                 set: { store.lengthUnit = $0; store.save() }
@@ -139,19 +139,13 @@ struct SettingsView: View {
                                 get: { store.hideAmounts },
                                 set: { store.hideAmounts = $0; store.save() }
                             ))
-                            TextField("编号体系前缀（如 B、FAB，生成编号时用）", text: Binding(
-                                get: { store.codePrefix },
-                                set: { store.codePrefix = $0; store.save() }
-                            ))
-                            .textFieldStyle(.roundedBorder)
-                            Text("编号唯一且重复时禁止保存，保存时会提示与哪条档案冲突。")
-                                .font(.caption).foregroundColor(.secondary)
+
                         }
                     }
 
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "编号体系", subtitle: "多级编号的层级与条目配置，历史编号不受影响")
+                            SectionHeaderView(title: "编号体系", subtitle: "")
                             NavigationLink(destination: CodeLevelsEditorView()) {
                                 HStack {
                                     Text("编号体系层级设置")
@@ -176,8 +170,7 @@ struct SettingsView: View {
                                 .foregroundColor(.primary)
                                 .padding(.vertical, 6)
                             }
-                            Text("关闭或删除层级只影响之后生成的新编号；历史编号保留，仍可按原编号筛选、排序。")
-                                .font(.caption).foregroundColor(.secondary)
+
                         }
                     }
 
@@ -894,19 +887,27 @@ struct CodeLevelEditView: View {
     var body: some View {
         List {
             Section("基本信息") {
-                TextField("层级名称", text: Binding(
-                    get: { level.name },
-                    set: { level.name = $0; store.save() }
-                ))
-                HStack {
-                    Text("编号类别")
-                    Spacer()
-                    Text(CodeKindLabel.label(level.kind)).foregroundColor(.secondary)
+                HStack(spacing: 12) {
+                    Text("层级名称").frame(width: 80, alignment: .leading)
+                    TextField("请输入", text: Binding(
+                        get: { level.name },
+                        set: { level.name = $0; store.save() }
+                    ))
+                    .textFieldStyle(.roundedBorder)
                 }
-                TextField("段前分隔符（如 -）", text: Binding(
-                    get: { level.separatorBefore },
-                    set: { level.separatorBefore = $0; store.save() }
-                ))
+                HStack(spacing: 12) {
+                    Text("编号类别").frame(width: 80, alignment: .leading)
+                    Text(CodeKindLabel.label(level.kind)).foregroundColor(.secondary)
+                    Spacer()
+                }
+                HStack(spacing: 12) {
+                    Text("段前分隔符").frame(width: 80, alignment: .leading)
+                    TextField("如 -", text: Binding(
+                        get: { level.separatorBefore },
+                        set: { level.separatorBefore = $0; store.save() }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                }
                 if level.kind == "sequence" {
                     Stepper("序号位数：\(level.digits)", value: Binding(
                         get: { level.digits },
@@ -951,10 +952,22 @@ struct CodeLevelEditView: View {
                             .buttonStyle(.borderless)
                         }
                     }
-                    VStack(spacing: 8) {
-                        TextField("条目名称", text: $newItemName)
-                        TextField("条目代码", text: $newItemCode)
-                        TextField("图标（可选，如 🔴）", text: $newItemIcon)
+                    VStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Text("条目名称").frame(width: 80, alignment: .leading)
+                            TextField("请输入", text: $newItemName)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        HStack(spacing: 12) {
+                            Text("条目代码").frame(width: 80, alignment: .leading)
+                            TextField("请输入", text: $newItemCode)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        HStack(spacing: 12) {
+                            Text("图标").frame(width: 80, alignment: .leading)
+                            TextField("可选，如 🔴", text: $newItemIcon)
+                                .textFieldStyle(.roundedBorder)
+                        }
                         Button("添加条目", action: addItem)
                             .disabled(newItemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
@@ -1041,6 +1054,13 @@ struct ColorItemsSettingsView: View {
     private var items: [CodeItem] { colorLevel?.items ?? [] }
     // "其他"固定项：rainbow 图标，不可删除
     private func isOtherItem(_ item: CodeItem) -> Bool { item.name == "其他" && item.icon == "rainbow" }
+    // 编码唯一性（2026-10-31）：已使用的编码不能再用在别的颜色上
+    @State private var duplicateCodeHint: String? = nil
+    private func isCodeDuplicate(_ code: String, excluding: CodeItem?) -> Bool {
+        let c = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !c.isEmpty else { return false }
+        return items.contains { $0.code.trimmingCharacters(in: .whitespacesAndNewlines) == c && $0.id != excluding?.id }
+    }
 
     // 行显示：有代码 → "名/码"（如 红/R），无代码 → 只有名。
     private func displayText(_ item: CodeItem) -> String {
@@ -1052,6 +1072,12 @@ struct ColorItemsSettingsView: View {
 
     private func addFromInlinePicker() {
         guard let level = colorLevel else { return }
+        let codeTrimmed = newCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isCodeDuplicate(codeTrimmed, excluding: nil) {
+            duplicateCodeHint = "编码 \(codeTrimmed) 已被使用，请换一个"
+            return
+        }
+        duplicateCodeHint = nil
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalName: String
         if !name.isEmpty {
@@ -1114,12 +1140,23 @@ struct ColorItemsSettingsView: View {
             HStack(spacing: 10) {
                 TextField("代码（如 R，可空）", text: Binding(
                     get: { item.code },
-                    set: { item.code = $0; store.save() }
+                    set: {
+                        let v = $0
+                        if isCodeDuplicate(v, excluding: item) {
+                            duplicateCodeHint = "编码 \(v.trimmingCharacters(in: .whitespacesAndNewlines)) 已被使用"
+                        } else {
+                            duplicateCodeHint = nil
+                            item.code = v; store.save()
+                        }
+                    }
                 ))
                 .textFieldStyle(.roundedBorder)
                 Spacer()
-                Button("完成") { editingItemId = nil }
+                Button("完成") { editingItemId = nil; duplicateCodeHint = nil }
                     .buttonStyle(.borderedProminent).tint(Design.accent)
+            }
+            if let hint = duplicateCodeHint {
+                Text(hint).font(.caption).foregroundColor(.red)
             }
         }
         .padding(.vertical, 4)
@@ -1220,7 +1257,13 @@ struct ColorItemsSettingsView: View {
                     } header: {
                         Text("添加颜色")
                     } footer: {
-                        Text("选好颜色、填好名称点“添加”才会加入列表；数量不限。")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("选好颜色、填好名称点“添加”才会加入列表；数量不限。")
+                            if let hint = duplicateCodeHint {
+                                Text(hint).foregroundColor(.red)
+                            }
+                        }
+                        .font(.caption).foregroundColor(.secondary)
                     }
                 }
                 .navigationTitle("颜色选项")

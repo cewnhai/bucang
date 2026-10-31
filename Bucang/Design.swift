@@ -88,7 +88,21 @@ enum ThemeImageStore {
     static func save(_ image: UIImage) -> Bool {
         guard let url = fileURL() else { return false }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard let data = image.jpegData(compressionQuality: 0.85) else { return false }
+        // 降采样到最大800px（2026-10-31）：原图太大时统计卡背景渲染卡顿，会连带顶栏Tab滑动卡死
+        let maxSide: CGFloat = 800
+        let img: UIImage
+        let w = image.size.width, h = image.size.height
+        if max(w, h) > maxSide {
+            let scale = maxSide / max(w, h)
+            let newSize = CGSize(width: w * scale, height: h * scale)
+            UIGraphicsBeginImageContextWithOptions(newSize, true, 1.0)
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+            img = UIGraphicsGetImageFromCurrentImageContext() ?? image
+            UIGraphicsEndImageContext()
+        } else {
+            img = image
+        }
+        guard let data = img.jpegData(compressionQuality: 0.85) else { return false }
         do { try data.write(to: url, options: .atomic); return true } catch { return false }
     }
     static func clear() {
