@@ -372,28 +372,27 @@ struct BucangView: View {
     // MARK: - 布料 Tab：统计卡吸顶 + 内容滚动
 
     private var fabricTabView: some View {
-        // 工具栏放吸顶 header 里（不进懒加载内容区）：iOS 16 上 LazyVStack 内容重建后按钮触摸会失效，
-        // header 是即时渲染的不受影响；顺序按用户要求：统计卡在上，工具栏在下，一起吸顶。
-        ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
+        // 固定区：统计卡在上、工具栏在下（按用户要求的顺序），都不进滚动区。
+        // 不用 pinned header：iOS 16 上吸顶层的触摸区域会盖住下面的状态胶囊行导致点不动。
+        // 工具栏也不进 LazyVStack 内容区，避免懒加载重建后按钮触摸失效。
+        VStack(spacing: 0) {
+            fabricStatsCard
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+                .background(Design.background)
+            fabricToolbar
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+                .background(Design.background)
+            ScrollView {
+                LazyVStack(spacing: 0) {
                     statusCapsuleRow
                     if hasActiveFilter {
                         activeFilterRow
                             .padding(.bottom, 4)
                     }
                     fabricCards
-                } header: {
-                    VStack(spacing: 0) {
-                        fabricStatsCard
-                            .padding(.horizontal, 16)
-                            .padding(.top, 10)
-                            .padding(.bottom, 6)
-                        fabricToolbar
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
-                    }
-                    .background(Design.background)
                 }
             }
         }
