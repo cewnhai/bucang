@@ -514,3 +514,23 @@ struct TabIconButton: View {
         .buttonStyle(.plain)
     }
 }
+
+// 各1级Tab通用状态胶囊轴（2026-10-31）：横向可滑动，参考布料tab。
+struct StatusCapsuleAxis: View {
+    var options: [String]
+    @Binding var selected: String
+    var accent: Color = Design.accent
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(options, id: \.self) { opt in
+                    ChipButton(title: opt, selected: selected == opt, accent: accent) {
+                        selected = opt
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+}

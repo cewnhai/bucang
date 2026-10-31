@@ -12,14 +12,17 @@ struct WorksListView: View {
     @State private var searchText = ""
     @State private var showingSort = false
     @State private var sortNewestFirst = true
+    @State private var statusFilter = "全部"
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var making: [Work] {
+        guard statusFilter == "全部" || statusFilter == "制作中" else { return [] }
         var list = store.works.filter { !$0.isFinished }
         list = filterWorks(list)
         return sortWorks(list)
     }
     private var finished: [Work] {
+        guard statusFilter == "全部" || statusFilter == "已完成" else { return [] }
         var list = store.works.filter { $0.isFinished }
         list = filterWorks(list)
         return sortWorks(list)
@@ -140,6 +143,7 @@ struct WorksListView: View {
                         showingSort = true
                     }
                 }
+                StatusCapsuleAxis(options: ["全部", "制作中", "已完成"], selected: $statusFilter, accent: themeAccent)
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeaderView(title: "制作中")
                     if making.isEmpty { Text("暂无制作中的成品").font(.caption).foregroundColor(.secondary) }
@@ -340,7 +344,7 @@ struct WishlistListView: View {
     @State private var showingClearConfirm = false
     @State private var searchText = ""
     @State private var convertingItem: WishlistItem?
-    @State private var showPurchased = false
+    @State private var statusFilter = "全部"
     @State private var isSingleColumn = false
 
     private var totalEstimate: Double {
@@ -349,7 +353,8 @@ struct WishlistListView: View {
 
     private var filtered: [WishlistItem] {
         var list = store.wishlistItems.sorted { $0.createdAt > $1.createdAt }
-        list = list.filter { $0.isPurchased == showPurchased }
+        if statusFilter == "待购" { list = list.filter { !$0.isPurchased } }
+        else if statusFilter == "已购" { list = list.filter { $0.isPurchased } }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return list }
         return list.filter {
@@ -445,30 +450,15 @@ struct WishlistListView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // 心愿单统计卡（粘性在滚动区顶部）。
                 VStack(spacing: 8) {
-                    HStack {
-                        Picker("心愿视图", selection: $showPurchased) {
-                            Text("待购").tag(false)
-                            Text("已购").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 100)
-                        StatsBigNumberHeader(
-                            count: showPurchased ? store.wishlistItems.filter({ $0.isPurchased }).count : store.wishlistItems.filter({ !$0.isPurchased }).count,
-                            label: showPurchased ? "条已购" : "条待购"
-                        )
-                        .padding(.leading, 8)
-                        Spacer()
-                    }
+                    StatsBigNumberHeader(count: store.wishlistItems.count, label: "条心愿")
                     HStack(spacing: 0) {
-                        if showPurchased {
-                            wishlistStatColumn(label: "已购数", value: "\(store.wishlistItems.filter({ $0.isPurchased }).count)")
-                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                            wishlistStatColumn(label: "已购金额", value: "¥\(String(format: "%.2f", store.wishlistItems.filter({ $0.isPurchased && $0.hasEstimatedPrice }).reduce(0) { $0 + $1.estimatedPrice }))")
-                        } else {
-                            wishlistStatColumn(label: "待购数", value: "\(store.wishlistItems.filter({ !$0.isPurchased }).count)")
-                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                            wishlistStatColumn(label: "预估金额", value: "¥\(String(format: "%.2f", totalEstimate))")
-                        }
+                        wishlistStatColumn(label: "待购数", value: "\(store.wishlistItems.filter({ !$0.isPurchased }).count)")
+                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                        wishlistStatColumn(label: "预估金额", value: "¥\(String(format: "%.2f", totalEstimate))")
+                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                        wishlistStatColumn(label: "已购数", value: "\(store.wishlistItems.filter({ $0.isPurchased }).count)")
+                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                        wishlistStatColumn(label: "已购金额", value: "¥\(String(format: "%.2f", store.wishlistItems.filter({ $0.isPurchased && $0.hasEstimatedPrice }).reduce(0) { $0 + $1.estimatedPrice }))")
                     }
                 }
                 .padding(14)
@@ -485,12 +475,20 @@ struct WishlistListView: View {
                         isSingleColumn.toggle()
                     }
                 }
+                StatusCapsuleAxis(options: ["全部", "待购", "已购"], selected: $statusFilter)
                 if filtered.isEmpty {
                     EmptyPlaceholderView(icon: "heart", title: "心愿单是空的", subtitle: "逛店看中先丢进来，只当备忘；长按布料页右下 + 可以从心愿单转入库")
-                } else {
+                } else if isSingleColumn {
                     ForEach(filtered) { item in
                         wishlistRow(item)
                             .contextMenu { Button("删除", role: .destructive) { store.deleteWishlistItem(item) } }
+                    }
+                } else {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(filtered) { item in
+                            wishlistRow(item)
+                                .contextMenu { Button("删除", role: .destructive) { store.deleteWishlistItem(item) } }
+                        }
                     }
                 }
             }

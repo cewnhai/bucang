@@ -886,10 +886,14 @@ struct BrainstormListView: View {
     @State private var searchText = ""
     @State private var viewMode: FabricViewMode = .grid
     @State private var showingAddForm = false
+    @State private var statusFilter = "全部"
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var filtered: [Brainstorm] {
-        let list = store.brainstorms.sorted { $0.createdAt > $1.createdAt }
+        var list = store.brainstorms.sorted { $0.createdAt > $1.createdAt }
+        if statusFilter != "全部" {
+            list = list.filter { $0.status == statusFilter }
+        }
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return list }
         return list.filter {
@@ -905,6 +909,7 @@ struct BrainstormListView: View {
                     searchRow
                         .padding(.horizontal, 16)
                         .padding(.top, 10)
+                    StatusCapsuleAxis(options: ["全部", "想法中", "已完成", "已放弃"], selected: $statusFilter, accent: themeAccent)
                     cardsSection
                 } header: {
                     // 脑洞统计卡同样吸顶，固定在 Tab 栏正下方。

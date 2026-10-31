@@ -170,6 +170,16 @@ struct SettingsView: View {
                                 .foregroundColor(.primary)
                                 .padding(.vertical, 6)
                             }
+                            NavigationLink(destination: DictionaryManagementView()) {
+                                HStack {
+                                    Text("字典管理")
+                                    Spacer()
+                                    Text("渠道 / 材质").foregroundColor(.secondary).font(.caption)
+                                    Image(systemName: "chevron.right").foregroundColor(.secondary).font(.caption)
+                                }
+                                .foregroundColor(.primary)
+                                .padding(.vertical, 6)
+                            }
 
                         }
                     }
@@ -200,37 +210,6 @@ struct SettingsView: View {
 
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "渠道", subtitle: "布料渠道与出售渠道的选项；商家是渠道下二级自定义文本，在布料/出售表单里填")
-                            HStack {
-                                TextField("新增渠道", text: $newChannel)
-                                    .textFieldStyle(.roundedBorder)
-                                Button("添加") {
-                                    let name = newChannel.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    guard !name.isEmpty, !store.channelOptions.contains(name) else { return }
-                                    store.channelOptions.append(name); store.save(); newChannel = ""
-                                }
-                                .buttonStyle(.borderedProminent).tint(Design.accent)
-                            }
-                            ForEach(store.channelOptions, id: \.self) { option in
-                                HStack {
-                                    Text(option)
-                                    Spacer()
-                                    Button("改名") { renamingChannel = option; renameText = option }
-                                        .font(.caption)
-                                    Button("删除", role: .destructive) {
-                                        store.channelOptions.removeAll { $0 == option }; store.save()
-                                    }
-                                    .font(.caption)
-                                }
-                                .padding(.vertical, 2)
-                            }
-                            Text("筛选面板的渠道组读这里，外加数据里已有但不在选项里的渠道名，旧数据仍可筛选。")
-                                .font(.caption).foregroundColor(.secondary)
-                        }
-                    }
-
-                    CardView {
-                        VStack(alignment: .leading, spacing: 12) {
                             SectionHeaderView(title: "顶栏显示", subtitle: "布仓顶部一级 Tab 的可见性，布料始终显示、不可关闭")
                             ForEach([("fabric", "布料"), ("work", "成品"), ("brainstorm", "脑洞"), ("other", "其他"), ("wishlist", "心愿单")], id: \.0) { key, title in
                                 if key == "fabric" {
@@ -248,6 +227,21 @@ struct SettingsView: View {
                                         }
                                     ))
                                 }
+                            }
+                        }
+                    }
+
+                    CardView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            NavigationLink(destination: OtherSettingsView()) {
+                                HStack {
+                                    Text("其他设置")
+                                    Spacer()
+                                    Text("数据 / 备份 / 关于").foregroundColor(.secondary).font(.caption)
+                                    Image(systemName: "chevron.right").foregroundColor(.secondary).font(.caption)
+                                }
+                                .foregroundColor(.primary)
+                                .padding(.vertical, 6)
                             }
                         }
                     }
@@ -296,35 +290,6 @@ struct SettingsView: View {
 
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "材质选项", subtitle: "布料材质单选的选项，筛选面板直接读这里")
-                            HStack {
-                                TextField("新增材质", text: $newMaterial)
-                                    .textFieldStyle(.roundedBorder)
-                                Button("添加") {
-                                    let name = newMaterial.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    guard !name.isEmpty, !store.materialOptions.contains(name) else { return }
-                                    store.materialOptions.append(name); store.save(); newMaterial = ""
-                                }
-                                .buttonStyle(.borderedProminent).tint(Design.accent)
-                            }
-                            ForEach(store.materialOptions, id: \.self) { option in
-                                HStack {
-                                    Text(option)
-                                    Spacer()
-                                    Button("改名") { renamingMaterial = option; renameText = option }
-                                        .font(.caption)
-                                    Button("删除", role: .destructive) {
-                                        store.materialOptions.removeAll { $0 == option }; store.save()
-                                    }
-                                    .font(.caption)
-                                }
-                                .padding(.vertical, 2)
-                            }
-                        }
-                    }
-
-                    CardView {
-                        VStack(alignment: .leading, spacing: 12) {
                             SectionHeaderView(title: "其他分类", subtitle: "“其他” Tab 的分类，增删改名即时生效")
                             HStack {
                                 TextField("新增分类", text: $newCategory)
@@ -352,67 +317,8 @@ struct SettingsView: View {
                         }
                     }
 
-                    CardView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "数据管理", subtitle: "CSV 是原数据格式，导入按原 UUID 更新不重复建")
-                            Button("导入原数据（选多个 CSV）") { importKind = .csv; showingImporter = true }
-                                .buttonStyle(.borderedProminent).tint(Design.accent)
-                            Button("导出全部数据为 CSV") {
-                                exportURLs = CSVExporter.exportFiles(store: store); showingExporter = true
-                            }
-                            .buttonStyle(.bordered).tint(Design.accent)
-                            Button("导出全字段空模板（批量初始化用）") {
-                                exportURLs = CSVExporter.exportTemplateFiles(); showingExporter = true
-                            }
-                            .buttonStyle(.bordered).tint(Design.accent)
-                            Button("导出备份压缩包 (.zip)") {
-                                if let data = ZipBackup.buildExportData(store: store) {
-                                    zipDocument = ZipBackupDocument(data: data); showingZipExporter = true
-                                } else {
-                                    importSummary = "生成备份压缩包失败，请重试."; showingSummary = true
-                                }
-                            }
-                            .buttonStyle(.bordered).tint(Design.accent)
-                            Button("导入备份压缩包 (.zip)") { importKind = .zip; showingImporter = true }
-                                .buttonStyle(.borderedProminent).tint(Design.accent)
-                            Text("导入按原 UUID 匹配，重复导入会更新，不会重复建。压缩包导入会按原 zip 格式读 CSV + 图片，也能读自家备份（含 JSON 全量 + 图片）。如果选不到文件，可用下面本地压缩包列表导入。")
-                                .font(.caption).foregroundColor(.secondary)
-                            Divider()
-                            Button("清空全部本地数据", role: .destructive) { showingClearConfirm = true }
-                        }
-                    }
 
-                    CardView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "本地压缩包（无需选择器）", subtitle: "不走系统选择器，直接读布仓文件夹里的压缩包")
-                            Text("在文件 App 里，把压缩包移到 我的iPhone > Bucang 文件夹（或分享到布仓），然后回来点下面列表里的文件导入。")
-                                .font(.caption).foregroundColor(.secondary)
-                            Button("刷新列表") { refreshLocalZips() }
-                                .buttonStyle(.bordered).tint(Design.accent)
-                            if localZips.isEmpty {
-                                Text("Bucang 文件夹里还没有压缩包，请先在文件 App 里把压缩包移到 我的iPhone > Bucang")
-                                    .font(.subheadline).foregroundColor(.secondary)
-                            } else {
-                                ForEach(localZips) { file in
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(file.url.lastPathComponent).font(.subheadline).lineLimit(2)
-                                            Text("\(LocalZipHelper.formattedSize(file.size)) · \(LocalZipHelper.formattedDate(file.modified))")
-                                                .font(.caption).foregroundColor(.secondary)
-                                        }
-                                        Spacer()
-                                        Button("导入") { importLocalZip(file) }
-                                            .buttonStyle(.borderedProminent).tint(Design.accent)
-                                    }
-                                    .padding(.vertical, 4)
-                                }
-                            }
-                        }
-                    }
 
-                    CardView {
-                        WebDAVBackupView()
-                    }
 
                     CardView {
                         VStack(alignment: .leading, spacing: 8) {
@@ -433,15 +339,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    CardView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            SectionHeaderView(title: "关于")
-                            Text("布仓：本机存储，不做 iCloud 同步，不做订阅。")
-                            Text("目标 iOS 16，可用 TrollStore 安装自己编译的包。")
-                            Text("本机数据在 Documents/bucang-store.json，图片在 Documents/bucang-images/，WebDAV 备份文件默认 bucang-backup.json，包含全部数据和图片。")
-                                .font(.caption).foregroundColor(.secondary)
-                        }
-                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
