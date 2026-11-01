@@ -85,7 +85,20 @@ final class WebDAVManager: ObservableObject {
         username = defaults.string(forKey: DefaultsKey.username) ?? ""
         let savedName = defaults.string(forKey: DefaultsKey.fileName) ?? ""
         if !savedName.isEmpty { fileName = savedName }
-        remotePath = defaults.string(forKey: DefaultsKey.remotePath) ?? ""
+        var loadedPath = defaults.string(forKey: DefaultsKey.remotePath) ?? ""
+        // 迁移修复：旧版 bug 可能存了双重编码的路径（含 %25），自动解码
+        while loadedPath.contains("%25") {
+            if let decoded = loadedPath.removingPercentEncoding, decoded != loadedPath {
+                loadedPath = decoded
+            } else {
+                break
+            }
+        }
+        // 再解一次，确保存的是原始中文
+        if let decoded = loadedPath.removingPercentEncoding, loadedPath.contains("%") {
+            loadedPath = decoded
+        }
+        remotePath = loadedPath
         lastBackupAt = defaults.object(forKey: DefaultsKey.lastBackupAt) as? Date
         passwordInput = KeychainHelper.load() ?? ""
         if lastBackupAt != nil {

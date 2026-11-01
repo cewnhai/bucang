@@ -236,11 +236,22 @@ class QuarkManager: ObservableObject {
     private func getUploadAuth(taskId: String, uploadId: String, objKey: String, bucket: String, fileName: String, size: Int, token: String) async throws -> [String: Any] {
         // auth_meta 是 OSS 签名格式的字符串：
         // PUT\n{mime}\n{date}\nx-oss-date:{date}\nx-oss-user-agent:...\n/{bucket}/{obj_key}?partNumber=1&uploadId={upload_id}
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
-        dateFormatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-        let ossDate = dateFormatter.string(from: Date())
+        // HTTP 日期必须是 RFC1123 GMT 格式，手动构造避免 DateFormatter locale 问题
+        let now = Date()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        let comps = calendar.dateComponents([.weekday, .day, .month, .year, .hour, .minute, .second], from: now)
+        let weekdays = ["", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        let months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        let wd = weekdays[comps.weekday ?? 1]
+        let day = String(format: "%02d", comps.day ?? 1)
+        let mon = months[comps.month ?? 1]
+        let year = comps.year ?? 2026
+        let hh = String(format: "%02d", comps.hour ?? 0)
+        let mm = String(format: "%02d", comps.minute ?? 0)
+        let ss = String(format: "%02d", comps.second ?? 0)
+        let ossDate = "\(wd), \(day) \(mon) \(year) \(hh):\(mm):\(ss) GMT"
         let mimeType = "application/octet-stream"
         let userAgent = "aliyun-sdk-js/1.0.0 Chrome Mobile 139.0.0.0 on Google Nexus 5 (Android 6.0)"
         let authMeta = "PUT\n\(mimeType)\n\(ossDate)\nx-oss-date:\(ossDate)\nx-oss-user-agent:\(userAgent)\n/\(bucket)/\(objKey)?partNumber=1&uploadId=\(uploadId)"
