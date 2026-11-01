@@ -437,7 +437,12 @@ struct WebDAVBackupView: View {
                     .lineLimit(1)
                 Spacer()
                 Button("选择目录") {
-                    webdav.showingFolderPicker = true
+                    webdav.saveSettings()
+                    if webdav.trimmedBase().isEmpty {
+                        webdav.errorMessage = "请先填写服务器地址并保存"
+                    } else {
+                        webdav.showingFolderPicker = true
+                    }
                 }
                 .font(.subheadline)
             }

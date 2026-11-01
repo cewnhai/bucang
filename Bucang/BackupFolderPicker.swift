@@ -73,8 +73,13 @@ struct BackupFolderPickerView: View {
                     Button("取消") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingCreate = true }) {
-                        Image(systemName: "plus")
+                    HStack {
+                        Button(action: { loadFolders() }) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Button(action: { showingCreate = true }) {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {

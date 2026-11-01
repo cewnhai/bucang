@@ -151,14 +151,30 @@ class QuarkManager: ObservableObject {
                 return true
             }
 
-            // 4. 获取上传授权并直传 OSS
-            // 简化：小文件单分片上传
+            // 4. 获取上传授权并直传 OSS（单分片）
             let authResult = try await getUploadAuth(taskId: taskId, uploadId: uploadId, token: token)
-            // 实际上传到 OSS 的逻辑...
-            // 这里简化处理，实际需要实现 OSS 分片上传
+            // 从 preUpload 结果取 OSS 地址
+            let bucket = bucket
+            let objKey = objKey
+            // authResult 中包含 OSS 临时凭证，实际地址格式：
+            // https://{bucket}.oss-cn-zhangjiakou.aliyuncs.com/{obj_key}
+            let ossURLString = "https://\(bucket).oss-cn-zhangjiakou.aliyuncs.com/\(objKey)"
+            guard let ossURL = URL(string: ossURLString) else {
+                statusMessage = "OSS 地址无效"
+                return false
+            }
+            var ossRequest = URLRequest(url: ossURL)
+            ossRequest.httpMethod = "PUT"
+            ossRequest.httpBody = data
+            ossRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+            let (_, ossResponse) = try await URLSession.shared.data(for: ossRequest)
+            if let http = ossResponse as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                statusMessage = "OSS 上传失败（HTTP \(http.statusCode)）"
+                return false
+            }
 
             // 5. 完成上传
-            let finishResult = try await finishUpload(taskId: taskId, token: token)
+            _ = try await finishUpload(taskId: taskId, token: token)
             statusMessage = "上传成功"
             return true
         } catch {
@@ -178,7 +194,7 @@ class QuarkManager: ObservableObject {
         let body: [String: Any] = [
             "ccp_hash_update": true,
             "parallel_upload": true,
-            "pdir_fid": "0",
+            "pdir_fid": backupFolderFid,
             "dir_name": "",
             "file_name": fileName,
             "format_type": "application/zip",
@@ -255,13 +271,39 @@ class QuarkManager: ObservableObject {
 
     // MARK: - 备份/恢复
     func backup(store: Store) async {
-        // 生成备份 zip（复用现有逻辑）
-        // 这里简化，实际需要调用现有的备份生成代码
-        statusMessage = "备份功能开发中"
+        guard isAuthorized else {
+            statusMessage = "请先授权登录"
+            return
+        }
+        isBusy = true
+        statusMessage = "正在生成备份..."
+        defer { isBusy = false }
+        // 生成 StoreData JSON（与 WebDAV 一致）
+        let data = StoreData(
+            tags: store.tags, materials: store.materials, channels: store.channels,
+            fabrics: store.fabrics, usageRecords: store.usageRecords,
+            works: store.works, patterns: store.patterns, items: store.items,
+            saleRecords: store.saleRecords, otherItems: store.otherItems, wishlistItems: store.wishlistItems,
+            brainstorms: store.brainstorms,
+            materialOptions: store.materialOptions, otherCategories: store.otherCategories,
+            lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix,
+            channelOptions: store.channelOptions, patternOptions: store.patternOptions, codeLevels: store.codeLevels,
+            visibleTabs: store.visibleTabs, themeName: store.themeName
+        )
+        guard let json = try? JSONEncoder().encode(data) else {
+            statusMessage = "备份失败：数据编码失败"
+            return
+        }
+        statusMessage = "正在上传备份文件..."
+        let ok = await uploadBackup(data: json, fileName: "bucang-backup.json")
+        if ok {
+            statusMessage = "备份成功"
+        }
+        // 图片备份后续版本再加
     }
 
     func restore(store: Store) async {
-        statusMessage = "恢复功能开发中"
+        statusMessage = "恢复功能开发中（先用备份文件手动恢复）"
     }
 }
 
