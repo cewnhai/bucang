@@ -1687,19 +1687,17 @@ struct FabricDetailView: View {
         let width: CGFloat = 720
         let lineHeight: CGFloat = 44
         let padding: CGFloat = 40
-        // 布料照片（如果有）
-        var photo: UIImage? = nil
-        if let first = fabric.imageFileNames.first {
-            photo = FabricImageStore.loadImage(named: first)
-        }
-        let photoHeight: CGFloat = photo != nil ? 400 : 0
-        let height = padding * 2 + photoHeight + CGFloat(lines.count) * lineHeight
+        // 布料照片（全部）
+        let photos: [UIImage] = fabric.imageFileNames.compactMap { FabricImageStore.loadImage(named: $0) }
+        let photoHeight: CGFloat = 400
+        let totalPhotoHeight: CGFloat = CGFloat(photos.count) * (photoHeight + 16)
+        let height = padding * 2 + totalPhotoHeight + CGFloat(lines.count) * lineHeight
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height))
         let image = renderer.image { ctx in
             UIColor.white.setFill()
             ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
             var y = padding
-            if let photo = photo {
+            for photo in photos {
                 // 照片裁剪填充
                 let photoRect = CGRect(x: padding, y: y, width: width - padding * 2, height: photoHeight)
                 ctx.cgContext.saveGState()
@@ -1719,8 +1717,9 @@ struct FabricDetailView: View {
                 }
                 photo.draw(in: drawRect)
                 ctx.cgContext.restoreGState()
-                y += photoHeight + 20
+                y += photoHeight + 16
             }
+            if !photos.isEmpty { y += 4 }
             for (i, line) in lines.enumerated() {
                 let font = i == 0 ? UIFont.boldSystemFont(ofSize: 32) : UIFont.systemFont(ofSize: 28)
                 let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black]
