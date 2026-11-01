@@ -11,6 +11,9 @@ struct WorkDetailView: View {
     @State private var showingLongImage = false
     @State private var longImage: UIImage?
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private func brainstormRowTitle(_ bs: Brainstorm) -> String {
+        bs.title.isEmpty ? "未命名脑洞" : bs.title
+    }
     private var workSummary: String {
         var parts: [String] = []
         parts.append(work.name.isEmpty ? "未命名成品" : work.name)
@@ -96,7 +99,7 @@ struct WorkDetailView: View {
                         ForEach(linkedBrainstorms) { bs in
                             NavigationLink(destination: BrainstormDetailView(brainstorm: bs)) {
                                 HStack {
-                                    Text(bs.title.isEmpty ? "未命名脑洞" : bs.title).lineLimit(1)
+                                    Text(brainstormRowTitle(bs)).lineLimit(1)
                                     Spacer()
                                     Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
                                 }

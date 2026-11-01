@@ -13,7 +13,7 @@ struct OtherDetailView: View {
     private var itemSummary: String {
         var parts: [String] = []
         parts.append(item.name.isEmpty ? "未命名" : item.name)
-        if !item.categoryName.isEmpty { parts.append("分类：" + item.categoryName) }
+        if !item.category.isEmpty { parts.append("分类：" + item.category) }
         if !item.note.isEmpty { parts.append(item.note) }
         return parts.joined(separator: "\n")
     }
@@ -79,7 +79,7 @@ struct OtherDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("编辑", action: { showingEdit = true })
-                    ShareLink(item: itemSummary, preview: SharePreview(item.displayName)) {
+                    ShareLink(item: itemSummary, preview: SharePreview(item.name.isEmpty ? "未命名" : item.name)) {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
                     Button("生成长图", action: { generateLongImage() })
