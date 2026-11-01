@@ -121,9 +121,10 @@ struct WishlistDetailView: View {
                     .buttonStyle(.borderedProminent).tint(themeAccent)
                     Button("转入库") {
                         // 转入库逻辑：创建布料
-                        let fabric = Fabric(name: item.name, imageFileNames: item.imageFileNames,
+                        let fabric = Fabric(name: item.name,
                                           purchasePrice: item.hasEstimatedPrice ? item.estimatedPrice : 0,
                                           note: item.note,
+                                          imageFileNames: item.imageFileNames,
                                           hasTotalPrice: item.hasEstimatedPrice)
                         store.fabrics.append(fabric)
                         store.save()
