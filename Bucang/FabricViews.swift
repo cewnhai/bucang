@@ -352,6 +352,12 @@ struct FabricCardView: View {
 // 脑洞板块只展示关联的 Brainstorm 实体（经 BrainstormDetailView 进入）。
 // 本详情页不加任何悬浮 + 按钮（tab 的 FAB 由路径隐藏逻辑控制）。
 struct FabricDetailView: View {
+    /// 用于 .sheet(item:) 驱动 PDF 分享，避免 URL 与 Bool 两个状态不同步导致白屏
+    struct SharePDFItem: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
@@ -363,8 +369,7 @@ struct FabricDetailView: View {
     @State private var shareFileURL: URL?
     @State private var showingShareFile = false
     @State private var longImage: UIImage?
-    @State private var longPDFURL: URL?
-    @State private var showingSharePDF = false
+    @State private var sharePDFItem: SharePDFItem?
     // 子编号关联布料：linkingSubCode 为正在关联的子编号，sheet 里选布料。
     @State private var showingSubCodePicker = false
     @State private var linkingSubCode: String?
@@ -574,11 +579,7 @@ struct FabricDetailView: View {
                             }.buttonStyle(.borderedProminent).tint(themeAccent)
                             Button(action: {
                                 if let url = generateLongPDF() {
-                                    longPDFURL = url
-                                    // 延迟一帧再弹分享，避免与长图 sheet 的展示冲突
-                                    DispatchQueue.main.async {
-                                        showingSharePDF = true
-                                    }
+                                    sharePDFItem = SharePDFItem(url: url)
                                 }
                             }) {
                                 Label("分享PDF", systemImage: "doc.richtext")
@@ -588,10 +589,8 @@ struct FabricDetailView: View {
                     }
                     .navigationTitle("长图")
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showingLongImage = false } } }
-                    .sheet(isPresented: $showingSharePDF) {
-                        if let url = longPDFURL {
-                            ShareSheet(url: url)
-                        }
+                    .sheet(item: $sharePDFItem) { item in
+                        ShareSheet(url: item.url)
                     }
                 }
             }
