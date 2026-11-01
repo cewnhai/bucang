@@ -153,9 +153,7 @@ class QuarkManager: ObservableObject {
 
             // 4. 获取上传授权并直传 OSS（单分片）
             let authResult = try await getUploadAuth(taskId: taskId, uploadId: uploadId, token: token)
-            // 从 preUpload 结果取 OSS 地址
-            let bucket = bucket
-            let objKey = objKey
+            // bucket 和 objKey 已从 preUpload 结果解析
             // authResult 中包含 OSS 临时凭证，实际地址格式：
             // https://{bucket}.oss-cn-zhangjiakou.aliyuncs.com/{obj_key}
             let ossURLString = "https://\(bucket).oss-cn-zhangjiakou.aliyuncs.com/\(objKey)"
