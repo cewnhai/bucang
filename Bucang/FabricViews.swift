@@ -508,7 +508,43 @@ struct FabricDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("编辑", action: { onEdit(fabric) })
-                    ShareLink(item: fabricSummary, preview: SharePreview(fabric.displayName)) {
+                    Menu {
+                        Button(action: {
+                            if let url = FabricShare.exportFile(fabric: fabric, store: store) {
+                                shareFileURL = url
+                                showingShareFile = true
+                            }
+                        }) {
+                            Label("分享文件", systemImage: "doc.zipper")
+                        }
+                        Button(action: {
+                            // 确保长图已生成，存为文件后直接调系统分享
+                            let img: UIImage?
+                            if let existing = longImage {
+                                img = existing
+                            } else {
+                                generateLongImage(showSheet: false)
+                                img = longImage
+                            }
+                            if let img = img,
+                               let data = img.pngData() {
+                                let url = FileManager.default.temporaryDirectory
+                                    .appendingPathComponent("布料长图-\(fabric.code.isEmpty ? fabric.displayName : fabric.code)-\(Int(Date().timeIntervalSince1970)).png")
+                                try? data.write(to: url)
+                                shareFileURL = url
+                                showingShareFile = true
+                            }
+                        }) {
+                            Label("分享长图", systemImage: "photo")
+                        }
+                        Button(action: {
+                            if let url = generateLongPDF() {
+                                sharePDFItem = SharePDFItem(url: url)
+                            }
+                        }) {
+                            Label("分享PDF", systemImage: "doc.richtext")
+                        }
+                    } label: {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
                     Button("生成长图", action: {
@@ -516,12 +552,6 @@ struct FabricDetailView: View {
                             generateLongImage()
                         } else {
                             showingLongImage = true
-                        }
-                    })
-                    Button("分享文件", action: {
-                        if let url = FabricShare.exportFile(fabric: fabric, store: store) {
-                            shareFileURL = url
-                            showingShareFile = true
                         }
                     })
                     Button("删除", role: .destructive) { showingDelete = true }
