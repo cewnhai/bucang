@@ -153,10 +153,10 @@ class QuarkManager: ObservableObject {
 
             // 4. 获取上传授权并直传 OSS（单分片）
             let authResult = try await getUploadAuth(taskId: taskId, uploadId: uploadId, objKey: objKey, bucket: bucket, fileName: fileName, size: data.count, token: token)
-            // bucket 和 objKey 已从 preUpload 结果解析
-            // authResult 中包含 OSS 临时凭证，实际地址格式：
-            // https://{bucket}.oss-cn-zhangjiakou.aliyuncs.com/{obj_key}
-            let ossURLString = "https://\(bucket).oss-cn-zhangjiakou.aliyuncs.com/\(objKey)"
+            // authResult 包含 auth_key，用于 OSS 请求的 authorization header
+            let authKey = authResult["auth_key"] as? String ?? ""
+            // OSS 地址格式：https://{bucket}.pds.quark.cn/{obj_key}?partNumber=1&uploadId={upload_id}
+            let ossURLString = "https://\(bucket).pds.quark.cn/\(objKey)?partNumber=1&uploadId=\(uploadId)"
             guard let ossURL = URL(string: ossURLString) else {
                 statusMessage = "OSS 地址无效"
                 return false
@@ -165,6 +165,9 @@ class QuarkManager: ObservableObject {
             ossRequest.httpMethod = "PUT"
             ossRequest.httpBody = data
             ossRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+            if !authKey.isEmpty {
+                ossRequest.setValue(authKey, forHTTPHeaderField: "authorization")
+            }
             let (_, ossResponse) = try await URLSession.shared.data(for: ossRequest)
             if let http = ossResponse as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                 statusMessage = "OSS 上传失败（HTTP \(http.statusCode)）"
@@ -231,10 +234,16 @@ class QuarkManager: ObservableObject {
     }
 
     private func getUploadAuth(taskId: String, uploadId: String, objKey: String, bucket: String, fileName: String, size: Int, token: String) async throws -> [String: Any] {
-        // auth_meta 可能是 JSON 字符串格式
-        let metaDict: [String: Any] = ["bucket": bucket, "key": objKey]
-        let metaData = try JSONSerialization.data(withJSONObject: metaDict)
-        let metaString = String(data: metaData, encoding: .utf8) ?? "{}"
+        // auth_meta 是 OSS 签名格式的字符串：
+        // PUT\n{mime}\n{date}\nx-oss-date:{date}\nx-oss-user-agent:...\n/{bucket}/{obj_key}?partNumber=1&uploadId={upload_id}
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        dateFormatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+        let ossDate = dateFormatter.string(from: Date())
+        let mimeType = "application/octet-stream"
+        let userAgent = "aliyun-sdk-js/1.0.0 Chrome Mobile 139.0.0.0 on Google Nexus 5 (Android 6.0)"
+        let authMeta = "PUT\n\(mimeType)\n\(ossDate)\nx-oss-date:\(ossDate)\nx-oss-user-agent:\(userAgent)\n/\(bucket)/\(objKey)?partNumber=1&uploadId=\(uploadId)"
         let url = URL(string: "\(baseURL)/1/clouddrive/file/upload/auth?pr=ucpro&fr=pc&uc_param_str=")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -245,7 +254,7 @@ class QuarkManager: ObservableObject {
             "task_id": taskId,
             "upload_id": uploadId,
             "auth_type": "cos",
-            "auth_meta": metaString
+            "auth_meta": authMeta
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)

@@ -557,57 +557,78 @@ extension WebDAVManager: FolderService {
         if xml.isEmpty {
             throw NSError(domain: "WebDAV", code: -1, userInfo: [NSLocalizedDescriptionKey: "服务器返回空数据"])
         }
-        // 宽松解析：提取所有 href，不过滤 collection（Alist 的格式可能不标准）
-        // 用简单的字符串扫描，不依赖正则的命名空间
+        // 解析：按 response 块切分，只保留带 collection 标记的（真正的目录）
+        // 同时兼容 href 以 / 结尾的目录（WebDAV 目录通常以 / 结尾）
         var folders: [RemoteFolder] = []
         var seen = Set<String>()
-        // 找所有的 <href>...</href>（忽略命名空间前缀）
-        var searchFrom = xml.startIndex
-        var hrefs: [String] = []
-        while let openRange = xml.range(of: "<", range: searchFrom..<xml.endIndex),
-              let closeBracket = xml.range(of: ">", range: openRange.upperBound..<xml.endIndex) {
-            let tag = String(xml[openRange.upperBound..<closeBracket.lowerBound])
+        // 先按 response 块切分
+        var blocks: [String] = []
+        var searchIdx = xml.startIndex
+        while let startRange = xml.range(of: "<", range: searchIdx..<xml.endIndex) {
+            // 找 response 开始标签
+            guard let tagEnd = xml.range(of: ">", range: startRange.upperBound..<xml.endIndex) else { break }
+            let tag = String(xml[startRange.upperBound..<tagEnd.lowerBound])
             let tagName = tag.split(separator: " ").first.map(String.init) ?? tag
-            // 检查是否是 href 结束标签的开始
-            if tagName.hasSuffix("href") && !tag.hasPrefix("/") {
-                // 找到对应的结束标签
-                let contentStart = closeBracket.upperBound
-                // 找 </...href>
-                if let endOpen = xml.range(of: "</", range: contentStart..<xml.endIndex),
-                   let endClose = xml.range(of: ">", range: endOpen.upperBound..<xml.endIndex) {
-                    let endTag = String(xml[endOpen.upperBound..<endClose.lowerBound])
-                    if endTag.hasSuffix("href") {
-                        let href = String(xml[contentStart..<endOpen.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !href.isEmpty {
-                            hrefs.append(href)
-                        }
-                        searchFrom = endClose.upperBound
+            if tagName.hasSuffix("response") && !tag.hasPrefix("/") {
+                // 找到对应的 </...response>
+                if let endStart = xml.range(of: "</", range: tagEnd.upperBound..<xml.endIndex),
+                   let endTagEnd = xml.range(of: ">", range: endStart.upperBound..<xml.endIndex) {
+                    let endTag = String(xml[endStart.upperBound..<endTagEnd.lowerBound])
+                    if endTag.hasSuffix("response") {
+                        let block = String(xml[tagEnd.upperBound..<endStart.lowerBound])
+                        blocks.append(block)
+                        searchIdx = endTagEnd.upperBound
                         continue
                     }
                 }
             }
-            searchFrom = closeBracket.upperBound
+            searchIdx = tagEnd.upperBound
         }
-        // 第一项是当前目录本身，跳过
-        for (i, href) in hrefs.enumerated() {
+        // 第一块是当前目录，跳过
+        for (i, block) in blocks.enumerated() {
             if i == 0 { continue }
-            let decoded = href.removingPercentEncoding ?? href
+            // 检查是否是目录：包含 collection 标记，或 href 以 / 结尾
+            let lowerBlock = block.lowercased()
+            let hasCollection = lowerBlock.contains("collection")
+            // 提取 href
+            guard let hrefStart = block.range(of: ">", range: block.range(of: "href")!.upperBound..<block.endIndex) else { continue }
+            // 更简单：找 <*href> 和 </*href>
+            var href: String? = nil
+            var hSearch = block.startIndex
+            while let hOpen = block.range(of: "<", range: hSearch..<block.endIndex),
+                  let hClose = block.range(of: ">", range: hOpen.upperBound..<block.endIndex) {
+                let hTag = String(block[hOpen.upperBound..<hClose.lowerBound])
+                let hTagName = hTag.split(separator: " ").first.map(String.init) ?? hTag
+                if hTagName.hasSuffix("href") && !hTag.hasPrefix("/") {
+                    if let hEndOpen = block.range(of: "</", range: hClose.upperBound..<block.endIndex),
+                       let hEndClose = block.range(of: ">", range: hEndOpen.upperBound..<block.endIndex) {
+                        let hEndTag = String(block[hEndOpen.upperBound..<hEndClose.lowerBound])
+                        if hEndTag.hasSuffix("href") {
+                            href = String(block[hClose.upperBound..<hEndOpen.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            break
+                        }
+                    }
+                }
+                hSearch = hClose.upperBound
+            }
+            guard let hrefVal = href, !hrefVal.isEmpty else { continue }
+            // 判断是否为目录
+            let isDir = hasCollection || hrefVal.hasSuffix("/")
+            if !isDir { continue }
+            let decoded = hrefVal.removingPercentEncoding ?? hrefVal
             var name = decoded
             while name.hasSuffix("/") { name.removeLast() }
-            // 跳过文件（不以 / 结尾且包含 . 的可能是文件，但目录也可能有 .，所以只跳过明确的文件）
-            // 为了简单，全部显示，用户自己判断
             if let last = name.split(separator: "/").last {
                 name = String(last)
             }
             if name.isEmpty || seen.contains(name) { continue }
             seen.insert(name)
             var folderURL: String
-            if href.hasPrefix("http") {
-                folderURL = href
+            if hrefVal.hasPrefix("http") {
+                folderURL = hrefVal
             } else {
                 let baseStr = path.hasSuffix("/") ? String(path.dropLast()) : path
-                // href 可能已经编码，直接用
-                let cleanHref = href.hasPrefix("/") ? href : "/" + href
+                let cleanHref = hrefVal.hasPrefix("/") ? hrefVal : "/" + hrefVal
                 folderURL = baseStr + cleanHref
             }
             folders.append(RemoteFolder(id: folderURL, name: name, path: folderURL))
