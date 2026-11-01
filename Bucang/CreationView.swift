@@ -13,6 +13,9 @@ struct WorksListView: View {
     @State private var showingSort = false
     @State private var sortNewestFirst = true
     @State private var statusFilter = "全部"
+    @State private var isSelecting = false
+    @State private var selectedIds: Set<UUID> = []
+    @State private var showingBatchAction = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var making: [Work] {
@@ -66,6 +69,63 @@ struct WorksListView: View {
             Text(value).font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func workSelectableCard(_ work: Work) -> some View {
+        let selected = selectedIds.contains(work.id)
+        return Group {
+            if isSelecting {
+                Button(action: {
+                    if selected { selectedIds.remove(work.id) }
+                    else { selectedIds.insert(work.id) }
+                }) {
+                    ZStack(alignment: .topTrailing) {
+                        workRow(work)
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundColor(selected ? themeAccent : .gray)
+                            .background(Circle().fill(Color.white))
+                            .padding(8)
+                    }
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink(destination: WorkDetailView(work: work)) { workRow(work) }
+                    .contextMenu {
+                        Button("删除", role: .destructive) { store.deleteWork(work) }
+                    }
+            }
+        }
+    }
+
+    private func batchSetWorkStatus(_ status: String) {
+        for id in selectedIds {
+            if let w = store.works.first(where: { $0.id == id }) {
+                if status == "制作中" {
+                    w.finishedAt = nil
+                } else if status == "已完成" {
+                    if w.finishedAt == nil { w.finishedAt = Date() }
+                } else if status == "已出售" {
+                    w.isSold = true
+                    w.hasSalePrice = w.salePrice > 0
+                }
+            }
+        }
+        store.save()
+        selectedIds.removeAll()
+        isSelecting = false
+        showingBatchAction = false
+    }
+
+    private func batchDeleteWorks() {
+        for id in selectedIds {
+            if let w = store.works.first(where: { $0.id == id }) {
+                store.deleteWork(w)
+            }
+        }
+        selectedIds.removeAll()
+        isSelecting = false
+        showingBatchAction = false
     }
 
     private func workRow(_ work: Work) -> some View {
@@ -188,6 +248,10 @@ struct WorksListView: View {
                     TabIconButton(icon: "arrow.up.arrow.down", accent: themeAccent) {
                         showingSort = true
                     }
+                    TabIconButton(icon: isSelecting ? "checkmark.circle.fill" : "checkmark.circle", accent: themeAccent) {
+                        isSelecting.toggle()
+                        if !isSelecting { selectedIds.removeAll() }
+                    }
                 }
                 StatusCapsuleAxis(options: ["全部", "制作中", "已完成", "已出售"], selected: $statusFilter, accent: themeAccent)
                 if filteredWorks.isEmpty {
@@ -195,17 +259,41 @@ struct WorksListView: View {
                 } else {
                     LazyVGrid(columns: gridColumns, spacing: 12) {
                         ForEach(filteredWorks) { work in
-                            NavigationLink(destination: WorkDetailView(work: work)) { workRow(work) }
-                                .contextMenu {
-                                    Button("删除", role: .destructive) { store.deleteWork(work) }
-                                }
+                            workSelectableCard(work)
                         }
                     }
+                }
+                if isSelecting && !selectedIds.isEmpty {
+                    HStack(spacing: 12) {
+                        Text("已选 \(selectedIds.count) 项").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        Button("批量操作") { showingBatchAction = true }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    .padding()
+                    .background(Color(.systemBackground).shadow(radius: 5))
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .padding(.bottom, 80)
+        }
+        .sheet(isPresented: $showingBatchAction) {
+            NavigationStack {
+                Form {
+                    Section("批量修改状态") {
+                        Button("制作中") { batchSetWorkStatus("制作中") }.foregroundColor(.primary)
+                        Button("已完成") { batchSetWorkStatus("已完成") }.foregroundColor(.primary)
+                        Button("已出售") { batchSetWorkStatus("已出售") }.foregroundColor(.primary)
+                    }
+                    Section {
+                        Button("删除选中", role: .destructive) { batchDeleteWorks() }
+                    }
+                }
+                .navigationTitle("批量操作")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { showingBatchAction = false } } }
+            }
         }
         .sheet(isPresented: $showingAdd) { NavigationStack { WorkEditView(work: nil) } }
         .sheet(item: $editingWork) { work in NavigationStack { WorkEditView(work: work) } }
@@ -351,32 +439,38 @@ struct OtherListView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // 其他统计卡（粘性在滚动区顶部，类比成品统计栏）。
-                VStack(spacing: 8) {
-                    StatsBigNumberHeader(count: store.otherItems.count, label: "条其他")
-                    HStack(spacing: 0) {
-                        otherStatColumn(label: "条数", value: "\(store.otherItems.count)")
-                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                        otherStatColumn(label: "分类数", value: "\(store.otherCategories.count)")
-                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                        otherStatColumn(label: "合计金额", value: "¥\(String(format: "%.2f", totalAmount))")
-                    }
+        VStack(spacing: 0) {
+            // 固定区：统计卡 + 搜索栏 + 分类胶囊，不随滚动（同布料 tab）
+            VStack(spacing: 8) {
+                StatsBigNumberHeader(count: store.otherItems.count, label: "条其他")
+                HStack(spacing: 0) {
+                    otherStatColumn(label: "条数", value: "\(store.otherItems.count)")
+                    Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                    otherStatColumn(label: "分类数", value: "\(store.otherCategories.count)")
+                    Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                    otherStatColumn(label: "合计金额", value: "¥\(String(format: "%.2f", totalAmount))")
                 }
-                .padding(14)
-                .background(ThemeStatsBackground(themeName: store.themeName))
-                .cornerRadius(Design.corner)
-                .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
-                HStack(spacing: 8) {
-                    TabSearchField(placeholder: "搜索 名称 / 备注 / 分类 / 渠道", text: $searchText)
-                    TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
-                        isSingleColumn.toggle()
-                    }
-                    TabIconButton(icon: "arrow.up.arrow.down") {
-                        showingSort = true
-                    }
+            }
+            .padding(14)
+            .background(ThemeStatsBackground(themeName: store.themeName))
+            .cornerRadius(Design.corner)
+            .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            .background(Design.background)
+            HStack(spacing: 8) {
+                TabSearchField(placeholder: "搜索 名称 / 备注 / 分类 / 渠道", text: $searchText)
+                TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
+                    isSingleColumn.toggle()
                 }
+                TabIconButton(icon: "arrow.up.arrow.down") {
+                    showingSort = true
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+            .background(Design.background)
                 .sheet(isPresented: $showingSort) {
                     NavigationStack {
                         Form {
@@ -401,27 +495,36 @@ struct OtherListView: View {
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingSort = false } } }
                     }
                 }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(categoryNames, id: \.self) { cat in
-                            Button(action: { selectedCategory = cat }) {
-                                Text(cat)
-                                    .font(.caption)
-                                    .padding(.horizontal, 12).padding(.vertical, 6)
-                                    .background(selectedCategory == cat ? themeAccent : Color.gray.opacity(0.15))
-                                    .foregroundColor(selectedCategory == cat ? .white : .primary)
-                                    .cornerRadius(14)
-                            }
-                            .buttonStyle(.plain)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(categoryNames, id: \.self) { cat in
+                        Button(action: { selectedCategory = cat }) {
+                            Text(cat)
+                                .font(.caption)
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(selectedCategory == cat ? themeAccent : Color.gray.opacity(0.15))
+                                .foregroundColor(selectedCategory == cat ? .white : .primary)
+                                .cornerRadius(14)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
-                HStack {
-                    Text("\(filtered.count) 条").font(.caption).foregroundColor(.secondary)
-                    Spacer()
-                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+            .background(Design.background)
+            HStack {
+                Text("\(filtered.count) 条").font(.caption).foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+            .background(Design.background)
+            // 滚动区：只有卡片
+            ScrollView {
                 if filtered.isEmpty {
                     EmptyPlaceholderView(icon: "archivebox", title: "没有匹配的其他条目", subtitle: "其他是你自建分类的容器，最少填名称加照片就能存")
+                        .padding(.top, 40)
                 } else {
                     LazyVGrid(columns: gridColumns, spacing: 12) {
                         ForEach(filtered) { item in
@@ -429,12 +532,12 @@ struct OtherListView: View {
                                 .contextMenu { Button("删除", role: .destructive) { store.deleteOtherItem(item) } }
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 80)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .padding(.bottom, 80)
         }
+        .background(Design.background)
         .overlay(alignment: .bottomTrailing) {
             TabFAB(accent: themeAccent) { showingAdd = true }
         }
@@ -468,6 +571,9 @@ struct WishlistListView: View {
     @State private var sortMethod: WishlistSortMethod = .createdAt
     @State private var sortAscending = false
     @State private var showingSort = false
+    @State private var isSelecting = false
+    @State private var selectedIds: Set<UUID> = []
+    @State private var showingBatchAction = false
 
     private var totalEstimate: Double {
         store.wishlistItems.filter { $0.hasEstimatedPrice }.reduce(0) { $0 + $1.estimatedPrice }
@@ -499,6 +605,54 @@ struct WishlistListView: View {
             Text(value).font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func wishlistSelectableCard(_ item: WishlistItem) -> some View {
+        let selected = selectedIds.contains(item.id)
+        return Group {
+            if isSelecting {
+                Button(action: {
+                    if selected { selectedIds.remove(item.id) }
+                    else { selectedIds.insert(item.id) }
+                }) {
+                    ZStack(alignment: .topTrailing) {
+                        wishlistRow(item)
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundColor(selected ? themeAccent : .gray)
+                            .background(Circle().fill(Color.white))
+                            .padding(8)
+                    }
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink(destination: WishlistDetailView(item: item)) { wishlistRow(item) }
+                    .contextMenu { Button("删除", role: .destructive) { store.deleteWishlistItem(item) } }
+            }
+        }
+    }
+
+    private func batchSetPurchased(_ purchased: Bool) {
+        for id in selectedIds {
+            if let item = store.wishlistItems.first(where: { $0.id == id }) {
+                item.isPurchased = purchased
+            }
+        }
+        store.save()
+        selectedIds.removeAll()
+        isSelecting = false
+        showingBatchAction = false
+    }
+
+    private func batchDelete() {
+        for id in selectedIds {
+            if let item = store.wishlistItems.first(where: { $0.id == id }) {
+                store.deleteWishlistItem(item)
+            }
+        }
+        selectedIds.removeAll()
+        isSelecting = false
+        showingBatchAction = false
     }
 
     private func wishlistRow(_ item: WishlistItem) -> some View {
@@ -591,38 +745,51 @@ struct WishlistListView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // 心愿单统计卡（粘性在滚动区顶部）。
-                VStack(spacing: 8) {
-                    StatsBigNumberHeader(count: store.wishlistItems.count, label: "条心愿")
-                    HStack(spacing: 0) {
-                        wishlistStatColumn(label: "待购数", value: "\(store.wishlistItems.filter({ !$0.isPurchased }).count)")
-                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                        wishlistStatColumn(label: "预估金额", value: "¥\(String(format: "%.2f", totalEstimate))")
-                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                        wishlistStatColumn(label: "已购数", value: "\(store.wishlistItems.filter({ $0.isPurchased }).count)")
-                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
-                        wishlistStatColumn(label: "已购金额", value: "¥\(String(format: "%.2f", store.wishlistItems.filter({ $0.isPurchased && $0.hasEstimatedPrice }).reduce(0) { $0 + $1.estimatedPrice }))")
-                    }
+        VStack(spacing: 0) {
+            // 固定区：统计卡 + 搜索栏 + 状态胶囊，不随滚动（同布料 tab）
+            VStack(spacing: 8) {
+                StatsBigNumberHeader(count: store.wishlistItems.count, label: "条心愿")
+                HStack(spacing: 0) {
+                    wishlistStatColumn(label: "待购数", value: "\(store.wishlistItems.filter({ !$0.isPurchased }).count)")
+                    Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                    wishlistStatColumn(label: "预估金额", value: "¥\(String(format: "%.2f", totalEstimate))")
+                    Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                    wishlistStatColumn(label: "已购数", value: "\(store.wishlistItems.filter({ $0.isPurchased }).count)")
+                    Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                    wishlistStatColumn(label: "已购金额", value: "¥\(String(format: "%.2f", store.wishlistItems.filter({ $0.isPurchased && $0.hasEstimatedPrice }).reduce(0) { $0 + $1.estimatedPrice }))")
                 }
-                .padding(14)
-                .background(ThemeStatsBackground(themeName: store.themeName))
-                .cornerRadius(Design.corner)
-                .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
-                HStack {
-                    Button("清空心愿单", role: .destructive) { showingClearConfirm = true }
-                    Spacer()
+            }
+            .padding(14)
+            .background(ThemeStatsBackground(themeName: store.themeName))
+            .cornerRadius(Design.corner)
+            .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            .background(Design.background)
+            HStack {
+                Button("清空心愿单", role: .destructive) { showingClearConfirm = true }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+            .background(Design.background)
+            HStack(spacing: 8) {
+                TabSearchField(placeholder: "搜索 名称 / 想法备注", text: $searchText)
+                TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
+                    isSingleColumn.toggle()
                 }
-                HStack(spacing: 8) {
-                    TabSearchField(placeholder: "搜索 名称 / 想法备注", text: $searchText)
-                    TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
-                        isSingleColumn.toggle()
-                    }
-                    TabIconButton(icon: "arrow.up.arrow.down") {
-                        showingSort = true
-                    }
+                TabIconButton(icon: "arrow.up.arrow.down") {
+                    showingSort = true
                 }
+                TabIconButton(icon: isSelecting ? "checkmark.circle.fill" : "checkmark.circle") {
+                    isSelecting.toggle()
+                    if !isSelecting { selectedIds.removeAll() }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+            .background(Design.background)
                 .sheet(isPresented: $showingSort) {
                     NavigationStack {
                         Form {
@@ -647,26 +814,61 @@ struct WishlistListView: View {
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingSort = false } } }
                     }
                 }
-                StatusCapsuleAxis(options: ["全部", "待购", "已购"], selected: $statusFilter, accent: themeAccent)
+            StatusCapsuleAxis(options: ["全部", "待购", "已购"], selected: $statusFilter, accent: themeAccent)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+                .background(Design.background)
+            // 滚动区：只有卡片
+            ScrollView {
                 if filtered.isEmpty {
                     EmptyPlaceholderView(icon: "heart", title: "心愿单是空的", subtitle: "逛店看中先丢进来，只当备忘；长按布料页右下 + 可以从心愿单转入库")
+                        .padding(.top, 40)
                 } else if isSingleColumn {
                     ForEach(filtered) { item in
-                        NavigationLink(destination: WishlistDetailView(item: item)) { wishlistRow(item) }
-                            .contextMenu { Button("删除", role: .destructive) { store.deleteWishlistItem(item) } }
+                        wishlistSelectableCard(item)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 80)
                 } else {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(filtered) { item in
-                            NavigationLink(destination: WishlistDetailView(item: item)) { wishlistRow(item) }
-                                .contextMenu { Button("删除", role: .destructive) { store.deleteWishlistItem(item) } }
+                            wishlistSelectableCard(item)
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 80)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .padding(.bottom, 80)
+            // 批量操作栏
+            if isSelecting && !selectedIds.isEmpty {
+                HStack(spacing: 12) {
+                    Text("已选 \(selectedIds.count) 项").font(.subheadline).foregroundColor(.secondary)
+                    Spacer()
+                    Button("批量操作") { showingBatchAction = true }
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding()
+                .background(Color(.systemBackground).shadow(radius: 5))
+            }
+        }
+        .background(Design.background)
+        .sheet(isPresented: $showingBatchAction) {
+            NavigationStack {
+                Form {
+                    Section("批量修改状态") {
+                        Button("标记为待购") { batchSetPurchased(false) }
+                            .foregroundColor(.primary)
+                        Button("标记为已购") { batchSetPurchased(true) }
+                            .foregroundColor(.primary)
+                    }
+                    Section {
+                        Button("删除选中", role: .destructive) { batchDelete() }
+                    }
+                }
+                .navigationTitle("批量操作")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { showingBatchAction = false } } }
+            }
         }
         .sheet(isPresented: $showingAdd) { NavigationStack { WishlistEditView(item: nil, presetName: "") } }
         .sheet(item: $editingItem) { item in NavigationStack { WishlistEditView(item: item, presetName: "") } }

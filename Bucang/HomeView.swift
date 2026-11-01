@@ -951,6 +951,9 @@ struct BrainstormListView: View {
     @State private var sortMethod: BrainstormSortMethod = .createdAt
     @State private var sortAscending = false
     @State private var showingSort = false
+    @State private var isSelecting = false
+    @State private var selectedIds: Set<UUID> = []
+    @State private var showingBatchAction = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var filtered: [Brainstorm] {
@@ -1059,6 +1062,17 @@ struct BrainstormListView: View {
                     .cornerRadius(10)
             }
             .buttonStyle(.plain)
+            Button(action: {
+                isSelecting.toggle()
+                if !isSelecting { selectedIds.removeAll() }
+            }) {
+                Image(systemName: isSelecting ? "checkmark.circle.fill" : "checkmark.circle")
+                    .foregroundColor(isSelecting ? themeAccent : .primary)
+                    .frame(width: 36, height: 36)
+                    .background(Design.card)
+                    .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
         }
         .sheet(isPresented: $showingSort) {
             NavigationStack {
@@ -1098,10 +1112,7 @@ struct BrainstormListView: View {
             } else if viewMode == .list {
                 LazyVStack(spacing: 12) {
                     ForEach(filtered) { brainstorm in
-                        NavigationLink(destination: BrainstormDetailView(brainstorm: brainstorm)) {
-                            BrainstormCardView(brainstorm: brainstorm)
-                        }
-                        .buttonStyle(.plain)
+                        brainstormSelectableCard(brainstorm)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1109,17 +1120,91 @@ struct BrainstormListView: View {
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(filtered) { brainstorm in
-                        NavigationLink(destination: BrainstormDetailView(brainstorm: brainstorm)) {
-                            BrainstormCardView(brainstorm: brainstorm)
-                        }
-                        .buttonStyle(.plain)
+                        brainstormSelectableCard(brainstorm)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
+            if isSelecting && !selectedIds.isEmpty {
+                HStack(spacing: 12) {
+                    Text("已选 \(selectedIds.count) 项").font(.subheadline).foregroundColor(.secondary)
+                    Spacer()
+                    Button("批量操作") { showingBatchAction = true }
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding()
+                .background(Color(.systemBackground).shadow(radius: 5))
+            }
         }
         .padding(.bottom, 80)
+        .sheet(isPresented: $showingBatchAction) {
+            NavigationStack {
+                Form {
+                    Section("批量修改状态") {
+                        Button("想法中") { batchSetStatus("想法中") }.foregroundColor(.primary)
+                        Button("已完成") { batchSetStatus("已完成") }.foregroundColor(.primary)
+                        Button("已放弃") { batchSetStatus("已放弃") }.foregroundColor(.primary)
+                    }
+                    Section {
+                        Button("删除选中", role: .destructive) { batchDelete() }
+                    }
+                }
+                .navigationTitle("批量操作")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { showingBatchAction = false } } }
+            }
+        }
+    }
+
+    private func brainstormSelectableCard(_ brainstorm: Brainstorm) -> some View {
+        let selected = selectedIds.contains(brainstorm.id)
+        return Group {
+            if isSelecting {
+                Button(action: {
+                    if selected { selectedIds.remove(brainstorm.id) }
+                    else { selectedIds.insert(brainstorm.id) }
+                }) {
+                    ZStack(alignment: .topTrailing) {
+                        BrainstormCardView(brainstorm: brainstorm)
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundColor(selected ? themeAccent : .gray)
+                            .background(Circle().fill(Color.white))
+                            .padding(8)
+                    }
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink(destination: BrainstormDetailView(brainstorm: brainstorm)) {
+                    BrainstormCardView(brainstorm: brainstorm)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func batchSetStatus(_ status: String) {
+        for id in selectedIds {
+            if let b = store.brainstorms.first(where: { $0.id == id }) {
+                b.status = status
+            }
+        }
+        store.save()
+        selectedIds.removeAll()
+        isSelecting = false
+        showingBatchAction = false
+    }
+
+    private func batchDelete() {
+        for id in selectedIds {
+            if let b = store.brainstorms.first(where: { $0.id == id }) {
+                store.deleteBrainstorm(b)
+            }
+        }
+        selectedIds.removeAll()
+        isSelecting = false
+        showingBatchAction = false
     }
 }
 
