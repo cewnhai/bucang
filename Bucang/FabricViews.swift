@@ -620,6 +620,9 @@ struct FabricDetailView: View {
                 }
             }
         }
+        .sheet(item: $sharePDFItem) { item in
+            ShareSheet(url: item.url)
+        }
         .sheet(isPresented: Binding(
             get: { playingURL != nil },
             set: { if !$0 { playingURL = nil } }
