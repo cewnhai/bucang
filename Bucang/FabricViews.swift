@@ -172,6 +172,7 @@ struct FabricCardView: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(maxWidth: .infinity)
                         .frame(height: compact ? 110 : 150)
+                        .scaleEffect(1.05)
                         .clipped()
                 } else {
                     // 无图占位：剪刀图标，占位高度大于照片高度（列表约 220 / 两列约 140），

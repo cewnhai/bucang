@@ -298,6 +298,7 @@ struct OtherListView: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(maxWidth: .infinity)
                         .frame(height: 150)
+                        .scaleEffect(1.05)
                         .clipped()
                 } else {
                     Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
@@ -435,6 +436,7 @@ struct WishlistListView: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(maxWidth: .infinity)
                         .frame(height: 150)
+                        .scaleEffect(1.05)
                         .clipped()
                 } else {
                     Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
