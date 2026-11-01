@@ -529,7 +529,7 @@ struct BucangView: View {
             .background(Design.card)
             .cornerRadius(12)
             Button(action: { showingSimilar = true }) {
-                Image(systemName: "camera").foregroundColor(Design.accent)
+                Image(systemName: "camera").foregroundColor(themeAccent)
                     .frame(width: 36, height: 36).background(Design.card).cornerRadius(10)
             }
             .buttonStyle(.plain)
@@ -597,7 +597,7 @@ struct BucangView: View {
                         Text("家里没有匹配的布，可以买")
                             .font(.headline)
                         Button("加入心愿单") { showingWishlistAdd = true }
-                            .buttonStyle(.borderedProminent).tint(Design.accent)
+                            .buttonStyle(.borderedProminent).tint(themeAccent)
                     } else {
                         EmptyPlaceholderView(icon: "scissors", title: "还没有布料", subtitle: "点右下 + 新增，或去设置里导入原数据")
                     }
@@ -676,9 +676,9 @@ struct BucangView: View {
                 Text(label).font(.caption)
                 Image(systemName: "xmark").font(.caption2)
             }
-            .foregroundColor(Design.accent)
+            .foregroundColor(themeAccent)
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Design.accentSoft)
+            .background(ThemeHelper.accentSoft(store.themeName))
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
@@ -1105,9 +1105,9 @@ struct BrainstormCardView: View {
                         ForEach(capsules, id: \.self) { capsule in
                             Text(capsule)
                                 .font(.caption)
-                                .foregroundColor(Design.accent)
+                                .foregroundColor(themeAccent)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Design.accentSoft)
+                                .background(ThemeHelper.accentSoft(store.themeName))
                                 .cornerRadius(10)
                         }
                     }
@@ -1251,7 +1251,7 @@ struct BrainstormDetailView: View {
 
     private func linkedRow(icon: String, title: String, sub: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: icon).foregroundColor(Design.accent).frame(width: 24)
+            Image(systemName: icon).foregroundColor(themeAccent).frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.subheadline).foregroundColor(.primary)
                 if !sub.isEmpty {
@@ -1456,6 +1456,8 @@ struct BrainstormFormView: View {
 
 // 通用多选器：脑洞表单里关联布料 / 成品 / 其他用。
 struct BrainstormLinkPickerView: View {
+    @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     var title: String
     var options: [(id: UUID, label: String, sub: String)]
     @Binding var selection: Set<UUID>
@@ -1479,7 +1481,7 @@ struct BrainstormLinkPickerView: View {
                             }
                             Spacer()
                             if selection.contains(option.id) {
-                                Image(systemName: "checkmark").foregroundColor(Design.accent)
+                                Image(systemName: "checkmark").foregroundColor(themeAccent)
                             }
                         }
                     }

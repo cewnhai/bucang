@@ -56,7 +56,7 @@ struct ContentView: View {
             SettingsView()
                 .tabItem { Label("设置", systemImage: "gearshape") }
         }
-        .tint(Design.accent)
+        .tint(ThemeHelper.accent(store.themeName))
         .onOpenURL { url in
             guard url.pathExtension.lowercased() == "zip" else { return }
             pendingShareZipURL = url

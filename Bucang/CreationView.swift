@@ -519,7 +519,7 @@ struct WishlistListView: View {
                         isSingleColumn.toggle()
                     }
                 }
-                StatusCapsuleAxis(options: ["全部", "待购", "已购"], selected: $statusFilter)
+                StatusCapsuleAxis(options: ["全部", "待购", "已购"], selected: $statusFilter, accent: themeAccent)
                 if filtered.isEmpty {
                     EmptyPlaceholderView(icon: "heart", title: "心愿单是空的", subtitle: "逛店看中先丢进来，只当备忘；长按布料页右下 + 可以从心愿单转入库")
                 } else if isSingleColumn {
