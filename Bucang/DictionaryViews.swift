@@ -26,6 +26,13 @@ struct DictionaryManagementView: View {
                     Text("\(store.materialOptions.count) 条").foregroundColor(.secondary).font(.caption)
                 }
             }
+            NavigationLink(destination: OtherCategorySettingsView()) {
+                HStack {
+                    Text("其他分类")
+                    Spacer()
+                    Text("\(store.otherCategoryTree.filter { $0.parentId == nil }.count) 个一级").foregroundColor(.secondary).font(.caption)
+                }
+            }
         }
         .navigationTitle("字典管理")
         .navigationBarTitleDisplayMode(.inline)

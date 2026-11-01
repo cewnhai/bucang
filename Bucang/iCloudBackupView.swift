@@ -37,7 +37,7 @@ struct iCloudBackupView: View {
                 works: store.works, patterns: store.patterns, items: store.items,
                 saleRecords: store.saleRecords, otherItems: store.otherItems, wishlistItems: store.wishlistItems,
                 brainstorms: store.brainstorms,
-                materialOptions: store.materialOptions, otherCategories: store.otherCategories,
+                materialOptions: store.materialOptions, otherCategories: store.otherCategories, otherCategoryItems: store.otherCategoryTree,
                 lengthUnit: store.lengthUnit, hideAmounts: store.hideAmounts, codePrefix: store.codePrefix,
                 channelOptions: store.channelOptions, patternOptions: store.patternOptions, codeLevels: store.codeLevels,
                 visibleTabs: store.visibleTabs, themeName: store.themeName

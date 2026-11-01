@@ -247,12 +247,28 @@ struct OtherListView: View {
             ? [GridItem(.flexible())]
             : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     }
-    private var categoryNames: [String] { ["全部"] } // 2026-10-31：胶囊轴只显示内置，自定义分类仅卡片右上角
+    private var categoryNames: [String] {
+        // 2026-11-01：胶囊轴显示一级分类
+        let tops = store.otherCategoryTree.filter { $0.parentId == nil }.sorted { $0.order < $1.order }.map { $0.name }
+        return ["全部"] + (tops.isEmpty ? ["其他"] : tops)
+    }
+    // 某一级分类下属的所有分类名（含自身和子分类）
+    private func categoryNamesUnder(_ topName: String) -> Set<String> {
+        guard let top = store.otherCategoryTree.first(where: { $0.parentId == nil && $0.name == topName }) else {
+            return [topName]
+        }
+        var names: Set<String> = [top.name]
+        for child in store.otherCategoryTree where child.parentId == top.id {
+            names.insert(child.name)
+        }
+        return names
+    }
 
     private var filtered: [OtherItem] {
         var list = store.otherItems
         if selectedCategory != "全部" {
-            list = list.filter { ($0.category.isEmpty ? "未分类" : $0.category) == selectedCategory }
+            let allowed = categoryNamesUnder(selectedCategory)
+            list = list.filter { allowed.contains($0.category.isEmpty ? "其他" : $0.category) }
         }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !q.isEmpty {
@@ -352,8 +368,7 @@ struct OtherListView: View {
                 } else {
                     LazyVGrid(columns: gridColumns, spacing: 12) {
                         ForEach(filtered) { item in
-                            Button(action: { editingItem = item }) { otherRow(item) }
-                                .buttonStyle(.plain)
+                            NavigationLink(destination: OtherDetailView(item: item)) { otherRow(item) }
                                 .contextMenu { Button("删除", role: .destructive) { store.deleteOtherItem(item) } }
                         }
                     }
@@ -464,7 +479,6 @@ struct WishlistListView: View {
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
-        .onTapGesture { editingItem = item }
     }
 
     /// 心愿单 → 布料入库：把首张照片复制成新的独立文件（避免与心愿单共用
@@ -524,13 +538,13 @@ struct WishlistListView: View {
                     EmptyPlaceholderView(icon: "heart", title: "心愿单是空的", subtitle: "逛店看中先丢进来，只当备忘；长按布料页右下 + 可以从心愿单转入库")
                 } else if isSingleColumn {
                     ForEach(filtered) { item in
-                        wishlistRow(item)
+                        NavigationLink(destination: WishlistDetailView(item: item)) { wishlistRow(item) }
                             .contextMenu { Button("删除", role: .destructive) { store.deleteWishlistItem(item) } }
                     }
                 } else {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(filtered) { item in
-                            wishlistRow(item)
+                            NavigationLink(destination: WishlistDetailView(item: item)) { wishlistRow(item) }
                                 .contextMenu { Button("删除", role: .destructive) { store.deleteWishlistItem(item) } }
                         }
                     }

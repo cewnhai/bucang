@@ -733,7 +733,8 @@ struct StoreData: Codable {
     var wishlistItems: [WishlistItem] = []
     var brainstorms: [Brainstorm] = []
     var materialOptions: [String] = []
-    var otherCategories: [String] = []
+    var otherCategories: [String]
+    var otherCategoryItems: [OtherCategory] = []
     var lengthUnit: String = "米"
     var hideAmounts: Bool = false
     var codePrefix: String = ""
@@ -765,6 +766,7 @@ final class Store: ObservableObject {
     @Published var brainstorms: [Brainstorm] = []
     @Published var materialOptions: [String] = []
     @Published var otherCategories: [String] = []
+    @Published var otherCategoryTree: [OtherCategory] = []
     @Published var lengthUnit: String = "米"
     @Published var hideAmounts: Bool = false
     @Published var codePrefix: String = ""
@@ -855,6 +857,14 @@ final class Store: ObservableObject {
         brainstorms = decoded.brainstorms
         materialOptions = decoded.materialOptions.isEmpty ? Self.defaultMaterialOptions : decoded.materialOptions
         otherCategories = decoded.otherCategories.isEmpty ? Self.defaultOtherCategories : decoded.otherCategories
+        // 多级分类迁移：老数据只有扁平 otherCategories，转成一级分类
+        if decoded.otherCategoryItems.isEmpty && !otherCategories.isEmpty {
+            otherCategoryTree = otherCategories.enumerated().map { idx, name in
+                OtherCategory(name: name, parentId: nil, order: idx)
+            }
+        } else {
+            otherCategoryTree = decoded.otherCategoryItems
+        }
         lengthUnit = ["米", "厘米", "码"].contains(decoded.lengthUnit) ? decoded.lengthUnit : "米"
         hideAmounts = decoded.hideAmounts; codePrefix = decoded.codePrefix
         channelOptions = decoded.channelOptions.isEmpty ? Self.defaultChannelOptions : decoded.channelOptions
@@ -1130,7 +1140,7 @@ final class Store: ObservableObject {
             works: works, patterns: patterns, items: items,
             saleRecords: saleRecords, otherItems: otherItems, wishlistItems: wishlistItems,
             brainstorms: brainstorms,
-            materialOptions: materialOptions, otherCategories: otherCategories,
+            materialOptions: materialOptions, otherCategories: otherCategories, otherCategoryItems: otherCategoryTree,
             lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix,
             channelOptions: channelOptions, patternOptions: patternOptions, codeLevels: codeLevels,
             visibleTabs: visibleTabs, themeName: themeName, cardDisplayFields: cardDisplayFields

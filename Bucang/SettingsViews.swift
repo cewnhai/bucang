@@ -275,34 +275,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    CardView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeaderView(title: "其他分类", subtitle: "“其他” Tab 的分类，增删改名即时生效")
-                            HStack {
-                                TextField("新增分类", text: $newCategory)
-                                    .textFieldStyle(.roundedBorder)
-                                Button("添加") {
-                                    let name = newCategory.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    guard !name.isEmpty, !store.otherCategories.contains(name) else { return }
-                                    store.otherCategories.append(name); store.save(); newCategory = ""
-                                }
-                                .buttonStyle(.borderedProminent).tint(Design.accent)
-                            }
-                            ForEach(store.otherCategories, id: \.self) { option in
-                                HStack {
-                                    Text(option)
-                                    Spacer()
-                                    Button("改名") { renamingCategory = option; renameText = option }
-                                        .font(.caption)
-                                    Button("删除", role: .destructive) {
-                                        store.otherCategories.removeAll { $0 == option }; store.save()
-                                    }
-                                    .font(.caption)
-                                }
-                                .padding(.vertical, 2)
-                            }
-                        }
-                    }
+
 
 
 
