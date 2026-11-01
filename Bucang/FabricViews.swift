@@ -208,7 +208,6 @@ struct FabricCardView: View {
                         .padding(8)
                 }
             }
-            .offset(y: -10)
             VStack(alignment: .leading, spacing: 8) {
                 // 名称不再显示；编号小字在照片下方左对齐。
                 // 主编号为空时显示第一个子编号（被关联的布料）。
@@ -248,7 +247,7 @@ struct FabricCardView: View {
             }
             .padding(12)
         }
-        .frame(height: 260)
+        .frame(height: 260, alignment: .top)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)

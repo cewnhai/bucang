@@ -95,7 +95,6 @@ struct WorksListView: View {
                     .cornerRadius(10)
                     .padding(8)
             }
-            .offset(y: -10)
             VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(work.name.isEmpty ? "未命名成品" : work.name).font(.headline).lineLimit(1)
@@ -135,7 +134,7 @@ struct WorksListView: View {
             }
             .padding(12)
         }
-        .frame(height: 260)
+        .frame(height: 260, alignment: .top)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
@@ -320,7 +319,7 @@ struct OtherListView: View {
             }
             .padding(12)
         }
-        .frame(height: 260)
+        .frame(height: 260, alignment: .top)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
@@ -449,7 +448,6 @@ struct WishlistListView: View {
                     .background(Color.black.opacity(0.45)).cornerRadius(10)
                     .padding(8)
             }
-            .offset(y: -20)
             VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -489,7 +487,7 @@ struct WishlistListView: View {
             }
             .padding(12)
         }
-        .frame(height: 260)
+        .frame(height: 260, alignment: .top)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
