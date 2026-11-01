@@ -280,10 +280,30 @@ Color.gray.opacity(0.15)
 }
 }
 }
+// 颜色搭配（基本信息上方）
+if !work.colorCodes.isEmpty {
+    let colorItems = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
+    let selected = colorItems.filter { work.colorCodes.contains($0.code) }
+    if !selected.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("颜色搭配").font(.subheadline).foregroundColor(.secondary)
+            HStack(spacing: 12) {
+                ForEach(selected) { item in
+                    VStack(spacing: 4) {
+                        CodeItemIconView(icon: item.icon, size: 36)
+                        Text(item.name).font(.caption).foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+}
 // 基本信息
 collapsibleSection(key: "info", title: "基本信息") {
 VStack(alignment:.leading, spacing: 8) {
-if !work.colorName.isEmpty {
+if !work.colorName.isEmpty && work.colorCodes.isEmpty {
 Text("颜色：\(work.colorName)").font(.subheadline)
 }
 if let s = work.startedAt {
@@ -444,32 +464,117 @@ generateLongImage(showSheet: false)
 }
 }
 
-// 脑洞选择器：关联脑洞到成品
+// 脑洞选择器：关联脑洞到成品（带搜索+单双列切换+首图）
 struct BrainstormPickerView: View {
 @EnvironmentObject private var store: Store
 @Environment(\.dismiss) private var dismiss
 var work: Work
+private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+@State private var searchText = ""
+@State private var isGrid = false
+
+private var filtered: [Brainstorm] {
+    var list = store.brainstorms.sorted { $0.createdAt > $1.createdAt }
+    let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !kw.isEmpty {
+        list = list.filter { ($0.title.isEmpty ? "未命名脑洞" : $0.title).localizedCaseInsensitiveContains(kw) }
+    }
+    return list
+}
+
+private func toggle(_ bs: Brainstorm) {
+    if bs.linkedWorkIds.contains(work.id) {
+        bs.linkedWorkIds.removeAll { $0 == work.id }
+    } else {
+        bs.linkedWorkIds.append(work.id)
+    }
+    store.save()
+}
 
 var body: some View {
-List(store.brainstorms.sorted { $0.createdAt > $1.createdAt}) { bs in
-Button(action: {
-if !bs.linkedWorkIds.contains(work.id) {
-bs.linkedWorkIds.append(work.id)
-store.save()
-}
-dismiss()
-}) {
-HStack {
-Text(bs.title.isEmpty ? "未命名脑洞": bs.title).lineLimit(1)
-Spacer()
-if bs.linkedWorkIds.contains(work.id) {
-Image(systemName: "checkmark").foregroundColor(.green)
-}
-}
-}
+VStack(spacing: 0) {
+    HStack(spacing: 8) {
+        HStack {
+            Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+            TextField("搜索", text: $searchText)
+        }
+        .padding(8)
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+        Button(action: { isGrid.toggle() }) {
+            Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                .font(.title3)
+                .foregroundColor(themeAccent)
+        }
+    }
+    .padding(.horizontal)
+    .padding(.vertical, 8)
+    .background(Color(.systemBackground))
+    if filtered.isEmpty {
+        Text("暂无脑洞").foregroundColor(.secondary).padding()
+        Spacer()
+    } else if isGrid {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(filtered) { bs in gridCard(bs) }
+            }
+            .padding()
+        }
+    } else {
+        List { ForEach(filtered) { bs in listRow(bs) } }
+        .listStyle(.plain)
+    }
 }
 .navigationTitle("关联脑洞")
 .navigationBarTitleDisplayMode(.inline)
+}
+
+private func thumb(_ bs: Brainstorm) -> some View {
+    Group {
+        if let name = bs.imageFileNames.first, let uiImage = FabricImageStore.loadImage(named: name) {
+            Image(uiImage: uiImage).resizable().scaledToFill()
+        } else {
+            Rectangle().fill(ThemeHelper.accentSoft(store.themeName))
+                .overlay(Image(systemName: "photo").foregroundColor(themeAccent))
+        }
+    }
+}
+
+private func listRow(_ bs: Brainstorm) -> some View {
+    let linked = bs.linkedWorkIds.contains(work.id)
+    return Button(action: { toggle(bs) }) {
+        HStack(spacing: 12) {
+            thumb(bs).frame(width: 56, height: 56).cornerRadius(8).clipped()
+            Text(bs.title.isEmpty ? "未命名脑洞" : bs.title).foregroundColor(.primary).lineLimit(1)
+            Spacer()
+            if linked { Image(systemName: "checkmark.circle.fill").foregroundColor(themeAccent) }
+        }
+    }
+    .buttonStyle(.plain)
+}
+
+private func gridCard(_ bs: Brainstorm) -> some View {
+    let linked = bs.linkedWorkIds.contains(work.id)
+    return Button(action: { toggle(bs) }) {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                thumb(bs).frame(height: 120).clipped()
+                if linked {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(themeAccent)
+                        .background(Circle().fill(Color.white))
+                        .padding(8)
+                }
+            }
+            Text(bs.title.isEmpty ? "未命名脑洞" : bs.title)
+                .font(.subheadline).foregroundColor(.primary).lineLimit(1)
+                .padding(8)
+        }
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(linked ? themeAccent : Color.gray.opacity(0.2), lineWidth: linked ? 2 : 1))
+    }
+    .buttonStyle(.plain)
 }
 }
 

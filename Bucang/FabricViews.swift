@@ -1896,39 +1896,126 @@ struct SubCodeFabricPickerView: View {
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
     var subCode: String
+    @State private var searchText = ""
+    @State private var isGrid = false
+
+    private var filtered: [Fabric] {
+        var list = store.fabrics.filter { $0.id != fabric.id }
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !kw.isEmpty {
+            list = list.filter {
+                $0.displayName.localizedCaseInsensitiveContains(kw)
+                || $0.code.localizedCaseInsensitiveContains(kw)
+            }
+        }
+        return list
+    }
+
+    private func toggle(_ other: Fabric) {
+        if !subCode.isEmpty && !other.subCodes.contains(subCode) {
+            other.subCodes.append(subCode)
+            other.updatedAt = Date()
+        }
+        fabric.updatedAt = Date()
+        store.save()
+        dismiss()
+    }
 
     var body: some View {
-        List {
-            ForEach(store.fabrics.filter { $0.id != fabric.id }) { other in
-                Button(action: {
-                    if !subCode.isEmpty && !other.subCodes.contains(subCode) {
-                        other.subCodes.append(subCode)
-                        other.updatedAt = Date()
-                    }
-                    fabric.updatedAt = Date()
-                    store.save()
-                    dismiss()
-                }) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(other.displayName).foregroundColor(.primary)
-                            if !other.code.isEmpty {
-                                Text(other.code).font(.caption).foregroundColor(.secondary)
-                            }
-                        }
-                        Spacer()
-                        if !subCode.isEmpty && other.subCodes.contains(subCode) {
-                            Image(systemName: "checkmark").foregroundColor(themeAccent)
-                        }
-                    }
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                    TextField("搜索", text: $searchText)
                 }
-                .buttonStyle(.plain)
+                .padding(8)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                Button(action: { isGrid.toggle() }) {
+                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                        .font(.title3)
+                        .foregroundColor(themeAccent)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.systemBackground))
+            if filtered.isEmpty {
+                Text("暂无布料").foregroundColor(.secondary).padding()
+                Spacer()
+            } else if isGrid {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(filtered) { other in gridCard(other) }
+                    }
+                    .padding()
+                }
+            } else {
+                List { ForEach(filtered) { other in listRow(other) } }
+                .listStyle(.plain)
             }
         }
         .navigationTitle("关联布料")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
         }
+    }
+
+    private func thumb(_ other: Fabric) -> some View {
+        Group {
+            if let name = other.imageFileNames.first, let uiImage = FabricImageStore.loadImage(named: name) {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+            } else {
+                Rectangle().fill(ThemeHelper.accentSoft(store.themeName))
+                    .overlay(Image(systemName: "photo").foregroundColor(themeAccent))
+            }
+        }
+    }
+
+    private func listRow(_ other: Fabric) -> some View {
+        let linked = !subCode.isEmpty && other.subCodes.contains(subCode)
+        return Button(action: { toggle(other) }) {
+            HStack(spacing: 12) {
+                thumb(other).frame(width: 56, height: 56).cornerRadius(8).clipped()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(other.displayName).foregroundColor(.primary).lineLimit(1)
+                    if !other.code.isEmpty {
+                        Text(other.code).font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                if linked { Image(systemName: "checkmark.circle.fill").foregroundColor(themeAccent) }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func gridCard(_ other: Fabric) -> some View {
+        let linked = !subCode.isEmpty && other.subCodes.contains(subCode)
+        return Button(action: { toggle(other) }) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topTrailing) {
+                    thumb(other).frame(height: 120).clipped()
+                    if linked {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(themeAccent)
+                            .background(Circle().fill(Color.white))
+                            .padding(8)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(other.displayName).font(.subheadline).foregroundColor(.primary).lineLimit(1)
+                    if !other.code.isEmpty {
+                        Text(other.code).font(.caption).foregroundColor(.secondary).lineLimit(1)
+                    }
+                }
+                .padding(8)
+            }
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(linked ? themeAccent : Color.gray.opacity(0.2), lineWidth: linked ? 2 : 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 

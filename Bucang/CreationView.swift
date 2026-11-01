@@ -102,6 +102,12 @@ struct WorksListView: View {
                     CodeItemIconView(icon: cItem.icon, size: 18)
                 }
                 Spacer()
+                Button(action: { addingMaterialWork = work }) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(themeAccent)
+                }
+                .buttonStyle(.plain)
             }
             if let start = work.startedAt {
                 Text("开始：\(CSVValues.dateString(start))").font(.caption).foregroundColor(.secondary)
@@ -129,8 +135,6 @@ struct WorksListView: View {
                 Text("已售出\(work.hasSalePrice ? " ¥\(String(format: "%.2f", work.salePrice))" : "")\(work.saleDate.map { " · \(CSVValues.dateString($0))" } ?? "")")
                     .font(.caption).foregroundColor(.secondary)
             }
-            Button("加用料") { addingMaterialWork = work }
-                .font(.caption)
             }
             .padding(12)
         }

@@ -557,6 +557,7 @@ final class Work: Identifiable, Codable {
     var hasLaborCost: Bool
     // 2026-10-31：成品颜色
     var colorName: String
+    var colorCodes: [String]   // 颜色搭配（多选）
     var isFinished: Bool { finishedAt != nil }
     init(
         id: UUID = UUID(), name: String = "", progress: Double = 0,
@@ -566,7 +567,8 @@ final class Work: Identifiable, Codable {
         imageFileNames: [String] = [], materials: [WorkMaterial] = [],
         isSold: Bool = false, salePrice: Double = 0, hasSalePrice: Bool = false,
         saleDate: Date? = nil, saleChannel: String = "", isUsed: Bool = false, usageCount: Int = 0,
-        laborCost: Double = 0, hasLaborCost: Bool = false, colorName: String = ""
+        laborCost: Double = 0, hasLaborCost: Bool = false, colorName: String = "",
+        colorCodes: [String] = []
     ) {
         self.id = id; self.name = name; self.progress = progress
         self.startedAt = startedAt; self.finishedAt = finishedAt
@@ -576,11 +578,12 @@ final class Work: Identifiable, Codable {
         self.isSold = isSold; self.salePrice = salePrice; self.hasSalePrice = hasSalePrice
         self.saleDate = saleDate; self.saleChannel = saleChannel; self.isUsed = isUsed; self.usageCount = usageCount
         self.laborCost = laborCost; self.hasLaborCost = hasLaborCost; self.colorName = colorName
+        self.colorCodes = colorCodes
     }
     private enum CodingKeys: String, CodingKey {
         case id, name, progress, startedAt, finishedAt, costPrice, sellPrice, timeHours, note, createdAt, imageFileNames, materials
         case isSold, salePrice, hasSalePrice, saleDate, saleChannel, isUsed, usageCount
-        case laborCost, hasLaborCost, colorName
+        case laborCost, hasLaborCost, colorName, colorCodes
     }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -605,7 +608,8 @@ final class Work: Identifiable, Codable {
         usageCount = try c.decodeIfPresent(Int.self, forKey: .usageCount) ?? 0
         laborCost = try c.decodeIfPresent(Double.self, forKey: .laborCost) ?? 0
         hasLaborCost = try c.decodeIfPresent(Bool.self, forKey: .hasLaborCost) ?? (laborCost > 0)
-        colorName = try c.decodeIfPresent(String.self, forKey: .colorName) ?? "" 
+        colorName = try c.decodeIfPresent(String.self, forKey: .colorName) ?? ""
+        colorCodes = try c.decodeIfPresent([String].self, forKey: .colorCodes) ?? []
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -620,6 +624,7 @@ final class Work: Identifiable, Codable {
         try c.encode(saleChannel, forKey: .saleChannel); try c.encode(isUsed, forKey: .isUsed)
         try c.encode(usageCount, forKey: .usageCount)
         try c.encode(laborCost, forKey: .laborCost); try c.encode(hasLaborCost, forKey: .hasLaborCost)
+        try c.encode(colorName, forKey: .colorName); try c.encode(colorCodes, forKey: .colorCodes)
     }
 }
 

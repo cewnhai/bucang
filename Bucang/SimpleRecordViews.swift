@@ -25,7 +25,7 @@ struct WorkEditView: View {
     @State private var usageCount: Int
     @State private var laborCostText: String
     @State private var hasLaborCost: Bool
-    @State private var colorName: String
+    @State private var selColors: Set<String>
     private let originalImageNames: [String]
 
     init(work: Work?) {
@@ -48,7 +48,7 @@ struct WorkEditView: View {
         _usageCount = State(initialValue: work?.usageCount ?? 0)
         _laborCostText = State(initialValue: work == nil || !work!.hasLaborCost ? "" : String(work!.laborCost))
         _hasLaborCost = State(initialValue: work?.hasLaborCost ?? false)
-        _colorName = State(initialValue: work?.colorName ?? "")
+        _selColors = State(initialValue: Set(work?.colorCodes ?? []))
     }
 
     private func save() {
@@ -68,7 +68,14 @@ struct WorkEditView: View {
             existing.usageCount = usageCount
             existing.laborCost = labor
             existing.hasLaborCost = laborFilled
-            existing.colorName = colorName
+            existing.colorCodes = Array(selColors)
+            // 兼容旧 colorName：取第一个选中色的名称
+            if let firstCode = selColors.first,
+               let item = store.levelOrder().first(where: { $0.kind == "color" })?.items.first(where: { $0.code == firstCode }) {
+                existing.colorName = item.name
+            } else {
+                existing.colorName = ""
+            }
             for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
             existing.imageFileNames = imageNames
             store.save()
@@ -82,7 +89,7 @@ struct WorkEditView: View {
                 hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 saleDate: (isSold && hasSaleDate) ? saleDate : nil,
                 saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
-                laborCost: labor, hasLaborCost: laborFilled, colorName: colorName
+                laborCost: labor, hasLaborCost: laborFilled, colorCodes: Array(selColors)
             )
             store.addWork(newWork)
         }
@@ -114,16 +121,46 @@ struct WorkEditView: View {
             }
             Section("成品（全部可留空）") {
                 LabeledTextField(label: "成品名称", placeholder: "选填", text: $name)
-                HStack {
-                    Text("颜色")
-                    Spacer()
-                    Picker("颜色", selection: $colorName) {
-                        Text("未选").tag("")
-                        ForEach(store.levelOrder().first(where: { $0.kind == "color" })?.items.filter({ $0.enabled }) ?? []) { item in
-                            Text(item.name).tag(item.name)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("颜色搭配").font(.subheadline).foregroundColor(.secondary)
+                    let items = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
+                        .filter { $0.enabled }
+                    if items.isEmpty {
+                        Text("暂无颜色选项").foregroundColor(.secondary).font(.caption)
+                    } else {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 16) {
+                            ForEach(items) { item in
+                                let selected = selColors.contains(item.code)
+                                Button(action: {
+                                    if selected { selColors.remove(item.code) }
+                                    else { selColors.insert(item.code) }
+                                }) {
+                                    VStack(spacing: 6) {
+                                        ZStack {
+                                            CodeItemIconView(icon: item.icon, size: 44)
+                                            if selected {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .font(.title3)
+                                                    .foregroundColor(.white)
+                                                    .background(Circle().fill(ThemeHelper.accent(store.themeName)).frame(width: 20, height: 20))
+                                                    .offset(x: 16, y: -16)
+                                            }
+                                        }
+                                        let _code = item.code.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        Text(_code.isEmpty ? item.name : "\(item.name)/\(_code)")
+                                            .font(.subheadline)
+                                            .foregroundColor(.primary)
+                                            .lineLimit(1)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(selected ? ThemeHelper.accent(store.themeName).opacity(0.12) : Color.clear)
+                                    .cornerRadius(12)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
-                    .pickerStyle(.menu)
                 }
                 Toggle("填写开始创作时间", isOn: $hasStartDate)
                 if hasStartDate { DatePicker("开始创作时间", selection: Binding(get: { startDate ?? Date() }, set: { startDate = $0 }), displayedComponents: .date) }
@@ -214,9 +251,24 @@ struct WorkMaterialAddView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var work: Work
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     @State private var selectedFabricId: UUID?
     @State private var amountText = ""
     @State private var errorMessage: String?
+    @State private var searchText = ""
+    @State private var isGrid = false
+
+    private var filteredFabrics: [Fabric] {
+        var list = store.fabrics
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !kw.isEmpty {
+            list = list.filter {
+                $0.displayName.localizedCaseInsensitiveContains(kw)
+                || $0.code.localizedCaseInsensitiveContains(kw)
+            }
+        }
+        return list
+    }
 
     var body: some View {
         Form {
@@ -226,19 +278,29 @@ struct WorkMaterialAddView: View {
                     .font(.caption).foregroundColor(.secondary)
             }
             Section("选布料") {
-                if store.fabrics.isEmpty { Text("还没有布料").foregroundColor(.secondary) }
-                else {
-                    ForEach(store.fabrics) { fabric in
-                        Button(action: { selectedFabricId = fabric.id }) {
-                            HStack {
-                                Text(fabric.displayName)
-                                Spacer()
-                                Text("剩余 \(LengthUnitHelper.format(store.remaining(for: fabric), unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))").font(.caption).foregroundColor(.secondary)
-                                if selectedFabricId == fabric.id { Image(systemName: "checkmark") }
-                            }
-                        }
-                        .foregroundColor(.primary)
+                // 置顶搜索栏 + 单双列切换
+                HStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                        TextField("搜索", text: $searchText)
                     }
+                    .padding(8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    Button(action: { isGrid.toggle() }) {
+                        Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                            .font(.title3)
+                            .foregroundColor(themeAccent)
+                    }
+                }
+                if filteredFabrics.isEmpty {
+                    Text("还没有布料").foregroundColor(.secondary)
+                } else if isGrid {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(filteredFabrics) { fabric in gridCard(fabric) }
+                    }
+                } else {
+                    ForEach(filteredFabrics) { fabric in listRow(fabric) }
                 }
             }
             Section {
@@ -264,6 +326,61 @@ struct WorkMaterialAddView: View {
                 }
             }
         }
+    }
+
+    private func thumb(_ fabric: Fabric) -> some View {
+        Group {
+            if let name = fabric.imageFileNames.first, let uiImage = FabricImageStore.loadImage(named: name) {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+            } else {
+                Rectangle().fill(ThemeHelper.accentSoft(store.themeName))
+                    .overlay(Image(systemName: "photo").foregroundColor(themeAccent))
+            }
+        }
+    }
+
+    private func listRow(_ fabric: Fabric) -> some View {
+        let selected = selectedFabricId == fabric.id
+        return Button(action: { selectedFabricId = fabric.id }) {
+            HStack(spacing: 12) {
+                thumb(fabric).frame(width: 56, height: 56).cornerRadius(8).clipped()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fabric.displayName).foregroundColor(.primary).lineLimit(1)
+                    Text("剩余 \(LengthUnitHelper.format(store.remaining(for: fabric), unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+                if selected { Image(systemName: "checkmark.circle.fill").foregroundColor(themeAccent) }
+            }
+        }
+        .foregroundColor(.primary)
+    }
+
+    private func gridCard(_ fabric: Fabric) -> some View {
+        let selected = selectedFabricId == fabric.id
+        return Button(action: { selectedFabricId = fabric.id }) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topTrailing) {
+                    thumb(fabric).frame(height: 100).clipped()
+                    if selected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(themeAccent)
+                            .background(Circle().fill(Color.white))
+                            .padding(6)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fabric.displayName).font(.subheadline).foregroundColor(.primary).lineLimit(1)
+                    Text("剩余 \(LengthUnitHelper.format(store.remaining(for: fabric), unit: store.lengthUnit))")
+                        .font(.caption).foregroundColor(.secondary).lineLimit(1)
+                }
+                .padding(8)
+            }
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? themeAccent : Color.gray.opacity(0.2), lineWidth: selected ? 2 : 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 
