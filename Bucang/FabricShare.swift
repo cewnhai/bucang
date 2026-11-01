@@ -48,6 +48,7 @@ enum FabricShare {
     }
 
     /// 导入分享文件，返回导入结果说明
+    @MainActor
     static func importFile(from url: URL, store: Store) -> String {
         guard let data = try? Data(contentsOf: url) else {
             return "读取文件失败"
