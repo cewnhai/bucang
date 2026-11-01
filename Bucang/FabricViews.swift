@@ -363,6 +363,8 @@ struct FabricDetailView: View {
     @State private var shareFileURL: URL?
     @State private var showingShareFile = false
     @State private var longImage: UIImage?
+    @State private var longPDFURL: URL?
+    @State private var showingSharePDF = false
     // 子编号关联布料：linkingSubCode 为正在关联的子编号，sheet 里选布料。
     @State private var showingSubCodePicker = false
     @State private var linkingSubCode: String?
@@ -566,14 +568,29 @@ struct FabricDetailView: View {
                 NavigationStack {
                     VStack {
                         Image(uiImage: longImage).resizable().scaledToFit().padding()
-                        ShareLink(item: Image(uiImage: longImage), preview: SharePreview("布料长图")) {
-                            Label("分享长图", systemImage: "square.and.arrow.up")
-                        }.buttonStyle(.borderedProminent).tint(themeAccent)
-                        Text("从分享表里可保存到相册或发给朋友。").font(.caption).foregroundColor(.secondary)
+                        HStack(spacing: 12) {
+                            ShareLink(item: Image(uiImage: longImage), preview: SharePreview("布料长图")) {
+                                Label("分享长图", systemImage: "square.and.arrow.up")
+                            }.buttonStyle(.borderedProminent).tint(themeAccent)
+                            Button(action: {
+                                if let url = generateLongPDF() {
+                                    longPDFURL = url
+                                    showingSharePDF = true
+                                }
+                            }) {
+                                Label("分享PDF", systemImage: "doc.richtext")
+                            }.buttonStyle(.bordered).tint(themeAccent)
+                        }
+                        Text("长图分享为图片；PDF 里的文字可复制。从分享表里可保存或发给朋友。").font(.caption).foregroundColor(.secondary)
                     }
                     .navigationTitle("长图")
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showingLongImage = false } } }
                 }
+            }
+        }
+        .sheet(isPresented: $showingSharePDF) {
+            if let url = longPDFURL {
+                ShareSheet(url: url)
             }
         }
         .sheet(isPresented: Binding(
@@ -1657,13 +1674,18 @@ struct FabricDetailView: View {
         generateLongImage(showSheet: false)
     }
 
-    private func generateLongImage(showSheet: Bool = true) {
-        // 2026-11-01：纯 UIKit 绘制，不依赖 SwiftUI 渲染
+    // MARK: - 长图 / PDF 共享内容
+    private struct LongContent {
+        var lines: [String]
+        var photos: [UIImage]
+        var qrImage: UIImage?
+    }
+
+    private func buildLongContent() -> LongContent {
         let lines: [String] = {
             var l: [String] = []
             l.append("喵了个咪 · 布料详情")
             l.append("")
-            // 基础信息
             if !fabric.code.isEmpty { l.append("编号：" + fabric.code) }
             if !fabric.subCodes.isEmpty { l.append("子编号：" + fabric.subCodes.joined(separator: "、")) }
             l.append("名称：" + fabric.displayName)
@@ -1674,7 +1696,6 @@ struct FabricDetailView: View {
                 l.append("布长：" + String(format: "%.2f", fabric.length) + "米")
             }
             if fabric.width > 0 { l.append("幅宽：" + String(format: "%.0f", fabric.widthCm) + "厘米") }
-            // 来源信息
             l.append("")
             l.append("【来源信息】")
             if !fabric.channelName.isEmpty { l.append("渠道：" + fabric.channelName) }
@@ -1685,7 +1706,6 @@ struct FabricDetailView: View {
             }
             if fabric.hasTotalPrice { l.append(String(format: "总价：¥%.2f", fabric.purchasePrice)) }
             if fabric.pricePerMeter > 0 { l.append(String(format: "单价：¥%.2f/米", fabric.pricePerMeter)) }
-            // 布料信息
             l.append("")
             l.append("【布料信息】")
             if !fabric.materialName.isEmpty { l.append("材质：" + fabric.materialName) }
@@ -1695,18 +1715,14 @@ struct FabricDetailView: View {
             if let s = fabric.shrinkagePct { l.append(String(format: "缩水率：%.1f%%", s)) }
             if !fabric.washing.isEmpty { l.append("洗涤：" + fabric.washing.joined(separator: "、")) }
             if !fabric.usageNotes.isEmpty { l.append("用途备注：" + fabric.usageNotes) }
-            // 其他信息
             let tagNames = store.tags(for: fabric).map { $0.name }
             if !tagNames.isEmpty || !fabric.note.isEmpty || !fabric.notes.isEmpty {
                 l.append("")
                 l.append("【其他信息】")
                 if !tagNames.isEmpty { l.append("标签：" + tagNames.joined(separator: "、")) }
                 if !fabric.note.isEmpty { l.append("备注：" + fabric.note) }
-                for n in fabric.notes {
-                    l.append("· " + n.text)
-                }
+                for n in fabric.notes { l.append("· " + n.text) }
             }
-            // 消耗记录
             let usages = store.usageRecords(for: fabric.id)
             if !usages.isEmpty {
                 l.append("")
@@ -1716,7 +1732,6 @@ struct FabricDetailView: View {
                     l.append(String(format: "· %@ %.2f米 %@", df.string(from: u.date), u.length, u.note))
                 }
             }
-            // 出售记录
             let sales = store.saleRecords(for: fabric.id)
             if !sales.isEmpty {
                 l.append("")
@@ -1726,7 +1741,6 @@ struct FabricDetailView: View {
                     l.append(String(format: "· %@ %.2f米 ¥%.2f %@", df.string(from: s.date), s.length, s.price, s.note))
                 }
             }
-            // 脑洞与备注
             if !fabric.brainstorm.isEmpty {
                 l.append("")
                 l.append("【脑洞与备注】")
@@ -1734,57 +1748,100 @@ struct FabricDetailView: View {
             }
             return l
         }()
+        let photos: [UIImage] = fabric.imageFileNames.compactMap { FabricImageStore.loadImage(named: $0) }
+        return LongContent(lines: lines, photos: photos, qrImage: makeParamQRCode())
+    }
+
+    private func longContentSize(for content: LongContent) -> CGSize {
         let width: CGFloat = 720
         let lineHeight: CGFloat = 44
         let padding: CGFloat = 40
-        // 布料照片（全部）
-        let photos: [UIImage] = fabric.imageFileNames.compactMap { FabricImageStore.loadImage(named: $0) }
         let photoHeight: CGFloat = 400
-        let totalPhotoHeight: CGFloat = CGFloat(photos.count) * (photoHeight + 16)
+        let totalPhotoHeight: CGFloat = CGFloat(content.photos.count) * (photoHeight + 16)
         let qrSize: CGFloat = 220
-        let height = padding * 2 + totalPhotoHeight + CGFloat(lines.count) * lineHeight + qrSize + 40
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height))
+        let height = padding * 2 + totalPhotoHeight + CGFloat(content.lines.count) * lineHeight + qrSize + 40
+        return CGSize(width: width, height: height)
+    }
+
+    /// 在给定的 CGContext 上绘制长图内容。用于 UIImage（位图）和 PDF（文字可复制）两种输出。
+    private func drawLongContent(_ content: LongContent, in cg: CGContext, size: CGSize) {
+        let padding: CGFloat = 40
+        let lineHeight: CGFloat = 44
+        let photoHeight: CGFloat = 400
+        let qrSize: CGFloat = 220
+        UIColor.white.setFill()
+        cg.fill(CGRect(origin: .zero, size: size))
+        var y = padding
+        for photo in content.photos {
+            let photoRect = CGRect(x: padding, y: y, width: size.width - padding * 2, height: photoHeight)
+            let imgAspect = photo.size.width / photo.size.height
+            let rectAspect = photoRect.width / photoRect.height
+            var drawRect: CGRect
+            if imgAspect > rectAspect {
+                let h = photoRect.height
+                let w = h * imgAspect
+                drawRect = CGRect(x: photoRect.minX - (w - photoRect.width) / 2, y: photoRect.minY, width: w, height: h)
+            } else {
+                let w = photoRect.width
+                let h = w / imgAspect
+                drawRect = CGRect(x: photoRect.minX, y: photoRect.minY - (h - photoRect.height) / 2, width: w, height: h)
+            }
+            // 用 UIKit 方式绘制（自动处理坐标系），clip 在 push 的上下文中生效
+            UIGraphicsPushContext(cg)
+            let uictx = UIGraphicsGetCurrentContext()
+            uictx?.saveGState()
+            uictx?.addRect(photoRect)
+            uictx?.clip()
+            photo.draw(in: drawRect)
+            uictx?.restoreGState()
+            UIGraphicsPopContext()
+            y += photoHeight + 16
+        }
+        if !content.photos.isEmpty { y += 4 }
+        UIGraphicsPushContext(cg)
+        for (i, line) in content.lines.enumerated() {
+            let font = i == 0 ? UIFont.boldSystemFont(ofSize: 32) : UIFont.systemFont(ofSize: 28)
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black]
+            (line as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: attrs)
+            y += lineHeight
+        }
+        y += 20
+        ("扫码导入参数" as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: [.font: UIFont.systemFont(ofSize: 24), .foregroundColor: UIColor.gray])
+        y += 36
+        if let qrImage = content.qrImage {
+            let qrRect = CGRect(x: padding, y: y, width: qrSize, height: qrSize)
+            qrImage.draw(in: qrRect)
+        }
+        UIGraphicsPopContext()
+    }
+
+    /// 生成文字可复制的 PDF，返回文件 URL
+    private func generateLongPDF() -> URL? {
+        let content = buildLongContent()
+        let size = longContentSize(for: content)
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: size))
+        let data = renderer.pdfData { ctx in
+            ctx.beginPage()
+            drawLongContent(content, in: ctx.cgContext, size: size)
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("布料长图-\(fabric.code.isEmpty ? fabric.displayName : fabric.code)-\(Int(Date().timeIntervalSince1970)).pdf")
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    private func generateLongImage(showSheet: Bool = true) {
+        // 2026-11-01：纯 UIKit 绘制，不依赖 SwiftUI 渲染
+        // 2026-11-01：改用共享的 buildLongContent / drawLongContent（与 PDF 共用）
+        let content = buildLongContent()
+        let size = longContentSize(for: content)
+        let renderer = UIGraphicsImageRenderer(size: size)
         let image = renderer.image { ctx in
-            UIColor.white.setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
-            var y = padding
-            for photo in photos {
-                // 照片裁剪填充
-                let photoRect = CGRect(x: padding, y: y, width: width - padding * 2, height: photoHeight)
-                ctx.cgContext.saveGState()
-                ctx.cgContext.addRect(photoRect)
-                ctx.cgContext.clip()
-                let imgAspect = photo.size.width / photo.size.height
-                let rectAspect = photoRect.width / photoRect.height
-                var drawRect: CGRect
-                if imgAspect > rectAspect {
-                    let h = photoRect.height
-                    let w = h * imgAspect
-                    drawRect = CGRect(x: photoRect.minX - (w - photoRect.width) / 2, y: photoRect.minY, width: w, height: h)
-                } else {
-                    let w = photoRect.width
-                    let h = w / imgAspect
-                    drawRect = CGRect(x: photoRect.minX, y: photoRect.minY - (h - photoRect.height) / 2, width: w, height: h)
-                }
-                photo.draw(in: drawRect)
-                ctx.cgContext.restoreGState()
-                y += photoHeight + 16
-            }
-            if !photos.isEmpty { y += 4 }
-            for (i, line) in lines.enumerated() {
-                let font = i == 0 ? UIFont.boldSystemFont(ofSize: 32) : UIFont.systemFont(ofSize: 28)
-                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black]
-                (line as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: attrs)
-                y += lineHeight
-            }
-            // 参数二维码（不含图片）
-            y += 20
-            ("扫码导入参数" as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: [.font: UIFont.systemFont(ofSize: 24), .foregroundColor: UIColor.gray])
-            y += 36
-            if let qrImage = makeParamQRCode() {
-                let qrRect = CGRect(x: padding, y: y, width: qrSize, height: qrSize)
-                qrImage.draw(in: qrRect)
-            }
+            drawLongContent(content, in: ctx.cgContext, size: size)
         }
         self.longImage = image
         if showSheet {
