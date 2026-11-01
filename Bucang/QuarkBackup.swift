@@ -58,6 +58,9 @@ class QuarkManager: ObservableObject {
     @Published var isBusy = false
     @Published var statusMessage = ""
     @Published var userNickname = ""
+    @Published var backupFolderName = "喵了个咪备份"
+    @Published var backupFolderFid = "0"
+    @Published var showingFolderPicker = false
 
     private let baseURL = "https://drive-pc.quark.cn"
     private var authCookie: String? { QuarkKeychain.load() }
@@ -300,6 +303,18 @@ struct QuarkBackupView: View {
                     Text("已登录：\(quark.userNickname)")
                         .font(.subheadline)
                 }
+                HStack {
+                    Text("备份目录：")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text(quark.backupFolderName)
+                        .font(.subheadline)
+                    Spacer()
+                    Button("选择目录") {
+                        quark.showingFolderPicker = true
+                    }
+                    .font(.subheadline)
+                }
                 HStack(spacing: 10) {
                     Button("立即备份") {
                         Task { await quark.backup(store: store) }
@@ -339,6 +354,16 @@ struct QuarkBackupView: View {
         .sheet(isPresented: $quark.showingLoginWeb) {
             QuarkLoginWebView()
                 .environmentObject(quark)
+        }
+        .sheet(isPresented: $quark.showingFolderPicker) {
+            BackupFolderPickerView(
+                service: quark,
+                currentPath: quark.backupFolderFid,
+                onSelect: { folder in
+                    quark.backupFolderFid = folder.id
+                    quark.backupFolderName = folder.name
+                }
+            )
         }
     }
 }
@@ -388,4 +413,59 @@ struct QuarkWebViewRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+
+// MARK: - Quark 目录服务
+extension QuarkManager: FolderService {
+    var displayName: String { "夸克网盘" }
+
+    func listFolders(path: String) async throws -> [RemoteFolder] {
+        guard let cookie = authCookie else {
+            throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "未授权"])
+        }
+        let fid = path.isEmpty ? "0" : path
+        let urlString = "https://drive-pc.quark.cn/1/clouddrive/file/sort?pr=ucpro&fr=pc&uc_param_str=&pdir_fid=\(fid)&_page=1&_size=100&_fetch_total=1&_fetch_sub_dirs=0&_sort=file_type:asc,updated_at:desc"
+        guard let url = URL(string: urlString) else {
+            throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "URL 无效"])
+        }
+        var request = URLRequest(url: url)
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        request.setValue("https://pan.quark.cn/", forHTTPHeaderField: "Referer")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let dataDict = json["data"] as? [String: Any],
+              let list = dataDict["list"] as? [[String: Any]] else {
+            throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "解析失败"])
+        }
+        return list.compactMap { item -> RemoteFolder? in
+            guard let fid = item["fid"] as? String,
+                  let name = item["file_name"] as? String,
+                  let type = item["file_type"] as? Int, type == 0 else { return nil }
+            return RemoteFolder(id: fid, name: name, path: fid)
+        }
+    }
+
+    func createFolder(name: String, in path: String) async throws {
+        guard let cookie = authCookie else {
+            throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "未授权"])
+        }
+        let fid = path.isEmpty ? "0" : path
+        let url = URL(string: "https://drive-pc.quark.cn/1/clouddrive/file?pr=ucpro&fr=pc&uc_param_str=")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        request.setValue("https://pan.quark.cn/", forHTTPHeaderField: "Referer")
+        let body: [String: Any] = [
+            "pdir_fid": fid,
+            "file_name": name,
+            "dir_init_lock": false
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let status = json["status"] as? Int, status == 200 else {
+            throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "创建失败"])
+        }
+    }
 }

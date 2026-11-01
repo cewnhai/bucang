@@ -30,6 +30,7 @@
 		EEEA4483E6CA68BE79F97903 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 643EEEAD302E1AEC385580D4 /* zh-Hans */; };
 		6D8E2F1A8C9D0E1F2A3B4C5D = {isa = PBXBuildFile; fileRef = 7E9F3A2B9D0E1F2A3B4C5D6E; };
 		8F1A2B3C4D5E6F7A8B9C0D1E = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F7A8B9C0D1E2F; };
+		7A1B2C3D4E5F6A7B8C9D0E1F /* BackupFolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B2C3D4E5F6A7B8C9D0E1F2A /* BackupFolderPicker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +59,7 @@
 		F5BF48AA40CAD7891EB709FC /* Bucang.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bucang.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E9F3A2B9D0E1F2A3B4C5D6E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuarkBackup.swift; sourceTree = "<group>"; };
 		9A2B3C4D5E6F7A8B9C0D1E2F = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Splash.storyboard; sourceTree = "<group>"; };
+		8B2C3D4E5F6A7B8C9D0E1F2A /* BackupFolderPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupFolderPicker.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +108,7 @@
 				0683ECD9B7328DE45FCA9153 /* Info.plist */, 
 				671E5B54412D9F8033A8454C /* Assets.xcassets */,
 				643EEEAD302E1AEC385580D4 /* zh-Hans */,
+				8B2C3D4E5F6A7B8C9D0E1F2A /* BackupFolderPicker.swift */,
 			);
 			name = Bucang;
 			path = Bucang;
@@ -206,6 +209,7 @@
 				BD6ECAF590AB4ED3BDD9FD65 /* HomeView.swift in Sources */,
 				5C7ECD0DF7FA13FEBF0D26C8 /* FabricImages.swift in Sources */,
 				EEC4281D8B7E5E7A241B7FEE /* FabricShare.swift in Sources */,
+				7A1B2C3D4E5F6A7B8C9D0E1F /* BackupFolderPicker.swift in Sources */,
 				6D8E2F1A8C9D0E1F2A3B4C5D /* QuarkBackup.swift in Sources */,
 				E5A45BAAFF4CD7CFC8325BC0 /* WebDAVBackup.swift in Sources */,
 				75047C771595BFDEA3CAA7EE /* Design.swift in Sources */,

@@ -64,6 +64,8 @@ final class WebDAVManager: ObservableObject {
     @Published var username: String = ""
     @Published var passwordInput: String = ""
     @Published var fileName: String = "bucang-backup.json"
+    @Published var remotePath: String = ""
+    @Published var showingFolderPicker = false
     @Published var statusMessage: String = "尚未备份"
     @Published var errorMessage: String?
     @Published var lastBackupAt: Date?
@@ -73,6 +75,7 @@ final class WebDAVManager: ObservableObject {
         static let server = "bucang.webdav.serverURL"
         static let username = "bucang.webdav.username"
         static let fileName = "bucang.webdav.fileName"
+        static let remotePath = "bucang.webdav.remotePath"
         static let lastBackupAt = "bucang.webdav.lastBackupAt"
     }
 
@@ -82,6 +85,7 @@ final class WebDAVManager: ObservableObject {
         username = defaults.string(forKey: DefaultsKey.username) ?? ""
         let savedName = defaults.string(forKey: DefaultsKey.fileName) ?? ""
         if !savedName.isEmpty { fileName = savedName }
+        remotePath = defaults.string(forKey: DefaultsKey.remotePath) ?? ""
         lastBackupAt = defaults.object(forKey: DefaultsKey.lastBackupAt) as? Date
         passwordInput = KeychainHelper.load() ?? ""
         if lastBackupAt != nil {
@@ -104,6 +108,7 @@ final class WebDAVManager: ObservableObject {
         if name.isEmpty { name = "bucang-backup.json" }
         fileName = name
         defaults.set(name, forKey: DefaultsKey.fileName)
+        defaults.set(remotePath.trimmingCharacters(in: .whitespacesAndNewlines), forKey: DefaultsKey.remotePath)
         if passwordInput.isEmpty {
             KeychainHelper.delete()
         } else {
@@ -127,7 +132,22 @@ final class WebDAVManager: ObservableObject {
         var name = fileName.trimmingCharacters(in: .whitespacesAndNewlines)
         while name.hasPrefix("/") { name.removeFirst() }
         if name.isEmpty { name = "bucang-backup.json" }
-        return URL(string: base + "/" + name)
+        var path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        while path.hasPrefix("/") { path.removeFirst() }
+        while path.hasSuffix("/") { path.removeLast() }
+        if path.isEmpty {
+            return URL(string: base + "/" + name)
+        } else {
+            return URL(string: base + "/" + path + "/" + name)
+        }
+    }
+
+    var fullBaseURL: String {
+        let base = trimmedBase()
+        var path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        while path.hasPrefix("/") { path.removeFirst() }
+        while path.hasSuffix("/") { path.removeLast() }
+        return path.isEmpty ? base : base + "/" + path
     }
 
     private func imagesBaseURL() -> URL? {
@@ -408,6 +428,19 @@ struct WebDAVBackupView: View {
                 .textFieldStyle(.roundedBorder)
             TextField("备份文件名", text: $webdav.fileName, prompt: Text("bucang-backup.json"))
                 .textFieldStyle(.roundedBorder)
+            HStack {
+                Text("备份目录：")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text(webdav.remotePath.isEmpty ? "根目录" : webdav.remotePath)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer()
+                Button("选择目录") {
+                    webdav.showingFolderPicker = true
+                }
+                .font(.subheadline)
+            }
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
             Text("图片会存在服务器上的 bucang-images/ 目录里，和备份 JSON 在同一服务器地址下。")
@@ -456,6 +489,94 @@ struct WebDAVBackupView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("恢复会覆盖本机全部数据，恢复前请先导出 CSV 或先备份本机数据")
+        }
+        .sheet(isPresented: $webdav.showingFolderPicker) {
+            BackupFolderPickerView(
+                service: webdav,
+                currentPath: webdav.fullBaseURL,
+                onSelect: { folder in
+                    // 计算相对于服务器地址的路径
+                    let base = webdav.trimmedBase()
+                    var rel = folder.path
+                    if rel.hasPrefix(base) {
+                        rel = String(rel.dropFirst(base.count))
+                    }
+                    while rel.hasPrefix("/") { rel.removeFirst() }
+                    while rel.hasSuffix("/") { rel.removeLast() }
+                    webdav.remotePath = rel
+                    webdav.saveSettings()
+                }
+            )
+        }
+    }
+}
+
+// MARK: - WebDAV 目录服务
+extension WebDAVManager: FolderService {
+    var displayName: String { "WebDAV" }
+
+    private func authedRequest(url: URL, method: String) -> URLRequest {
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        if !username.isEmpty {
+            let cred = "\(username):\(passwordInput)"
+            if let data = cred.data(using: .utf8) {
+                req.setValue("Basic " + data.base64EncodedString(), forHTTPHeaderField: "Authorization")
+            }
+        }
+        return req
+    }
+
+    func listFolders(path: String) async throws -> [RemoteFolder] {
+        guard let url = URL(string: path) else {
+            throw NSError(domain: "WebDAV", code: -1, userInfo: [NSLocalizedDescriptionKey: "地址无效"])
+        }
+        var req = authedRequest(url: url, method: "PROPFIND")
+        req.setValue("1", forHTTPHeaderField: "Depth")
+        req.setValue("text/xml", forHTTPHeaderField: "Content-Type")
+        req.httpBody = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>
+        """.data(using: .utf8)
+        let (data, _) = try await URLSession.shared.data(for: req)
+        let xml = String(data: data, encoding: .utf8) ?? ""
+        // 简单解析：找 <D:href> 和 collection 标记
+        var folders: [RemoteFolder] = []
+        let hrefPattern = "<(?:D:)?href>([^<]+)</(?:D:)?href>"
+        let hrefRegex = try NSRegularExpression(pattern: hrefPattern, options: .caseInsensitive)
+        let nsXml = xml as NSString
+        let matches = hrefRegex.matches(in: xml, range: NSRange(location: 0, length: nsXml.length))
+        // 第一项是当前目录本身，跳过
+        for (i, m) in matches.enumerated() {
+            if i == 0 { continue }
+            let href = nsXml.substring(with: m.range(at: 1))
+            let decoded = href.removingPercentEncoding ?? href
+            // 只保留目录（以 / 结尾）
+            guard decoded.hasSuffix("/") else { continue }
+            var name = decoded
+            while name.hasSuffix("/") { name.removeLast() }
+            if let last = name.split(separator: "/").last {
+                name = String(last)
+            }
+            if name.isEmpty { continue }
+            // 构建完整 URL
+            let baseURL = URL(string: path)!
+            let folderURL = URL(string: decoded, relativeTo: baseURL)?.absoluteString ?? path + "/" + name
+            folders.append(RemoteFolder(id: folderURL, name: name, path: folderURL))
+        }
+        return folders
+    }
+
+    func createFolder(name: String, in path: String) async throws {
+        let base = path.hasSuffix("/") ? String(path.dropLast()) : path
+        guard let url = URL(string: base + "/" + name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
+            throw NSError(domain: "WebDAV", code: -1, userInfo: [NSLocalizedDescriptionKey: "地址无效"])
+        }
+        let req = authedRequest(url: url, method: "MKCOL")
+        let (_, response) = try await URLSession.shared.data(for: req)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) && http.statusCode != 405 {
+            // 405 = 已存在，视为成功
+            throw NSError(domain: "WebDAV", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "创建失败（\(http.statusCode)）"])
         }
     }
 }
