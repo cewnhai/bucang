@@ -352,8 +352,8 @@ struct FabricCardView: View {
 // 脑洞板块只展示关联的 Brainstorm 实体（经 BrainstormDetailView 进入）。
 // 本详情页不加任何悬浮 + 按钮（tab 的 FAB 由路径隐藏逻辑控制）。
 struct FabricDetailView: View {
-    /// 用于 .sheet(item:) 驱动 PDF 分享，避免 URL 与 Bool 两个状态不同步导致白屏
-    struct SharePDFItem: Identifiable {
+    /// 用于 .sheet(item:) 驱动分享（文件/长图/PDF），避免 URL 与 Bool 两个状态不同步导致白屏
+    struct ShareURLItem: Identifiable {
         let id = UUID()
         let url: URL
     }
@@ -366,10 +366,9 @@ struct FabricDetailView: View {
     @State private var showingDelete = false
     @State private var showingSimilar = false
     @State private var showingLongImage = false
-    @State private var shareFileURL: URL?
-    @State private var showingShareFile = false
+    @State private var shareFileItem: ShareURLItem?
     @State private var longImage: UIImage?
-    @State private var sharePDFItem: SharePDFItem?
+    @State private var sharePDFItem: ShareURLItem?
     // 子编号关联布料：linkingSubCode 为正在关联的子编号，sheet 里选布料。
     @State private var showingSubCodePicker = false
     @State private var linkingSubCode: String?
@@ -511,8 +510,7 @@ struct FabricDetailView: View {
                     Menu {
                         Button(action: {
                             if let url = FabricShare.exportFile(fabric: fabric, store: store) {
-                                shareFileURL = url
-                                showingShareFile = true
+                                shareFileItem = ShareURLItem(url: url)
                             }
                         }) {
                             Label("分享文件", systemImage: "doc.zipper")
@@ -531,15 +529,14 @@ struct FabricDetailView: View {
                                 let url = FileManager.default.temporaryDirectory
                                     .appendingPathComponent("布料长图-\(fabric.code.isEmpty ? fabric.displayName : fabric.code)-\(Int(Date().timeIntervalSince1970)).png")
                                 try? data.write(to: url)
-                                shareFileURL = url
-                                showingShareFile = true
+                                shareFileItem = ShareURLItem(url: url)
                             }
                         }) {
                             Label("分享长图", systemImage: "photo")
                         }
                         Button(action: {
                             if let url = generateLongPDF() {
-                                sharePDFItem = SharePDFItem(url: url)
+                                sharePDFItem = ShareURLItem(url: url)
                             }
                         }) {
                             Label("分享PDF", systemImage: "doc.richtext")
@@ -593,10 +590,8 @@ struct FabricDetailView: View {
                 generateLongImageSilent()
             }
         }
-        .sheet(isPresented: $showingShareFile) {
-            if let url = shareFileURL {
-                ShareSheet(url: url)
-            }
+        .sheet(item: $shareFileItem) { item in
+            ShareSheet(url: item.url)
         }
         .sheet(isPresented: $showingLongImage) {
             if let longImage {
@@ -609,7 +604,7 @@ struct FabricDetailView: View {
                             }.buttonStyle(.borderedProminent).tint(themeAccent)
                             Button(action: {
                                 if let url = generateLongPDF() {
-                                    sharePDFItem = SharePDFItem(url: url)
+                                    sharePDFItem = ShareURLItem(url: url)
                                 }
                             }) {
                                 Label("分享PDF", systemImage: "doc.richtext")
