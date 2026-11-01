@@ -202,6 +202,7 @@
 				BD6ECAF590AB4ED3BDD9FD65 /* HomeView.swift in Sources */,
 				5C7ECD0DF7FA13FEBF0D26C8 /* FabricImages.swift in Sources */,
 				EEC4281D8B7E5E7A241B7FEE /* FabricShare.swift in Sources */,
+				6D8E2F1A8C9D0E1F2A3B4C5D /* QuarkBackup.swift in Sources */,
 				E5A45BAAFF4CD7CFC8325BC0 /* WebDAVBackup.swift in Sources */,
 				75047C771595BFDEA3CAA7EE /* Design.swift in Sources */,
 			);
