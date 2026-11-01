@@ -71,27 +71,27 @@ Text("\(headerPhotoIndex + 1) / \(work.imageFileNames.count)")
 private var summaryCard: some View {
 VStack(alignment:.leading, spacing: 8) {
 HStack {
-Text("编号：\(work.code.isEmpty? "—": work.code)")
+Text("编号：\(work.code.isEmpty ? "—": work.code)")
 .font(.caption).foregroundColor(.secondary)
 Spacer()
-Text(work.isFinished? "已完成": "制作中")
+Text(work.isFinished ? "已完成": "制作中")
 .font(.caption).fontWeight(.semibold)
 .foregroundColor(.white)
 .padding(.horizontal, 8).padding(.vertical, 4)
 .background(work.isFinished? Color.green: themeAccent)
 .cornerRadius(10)
 }
-Text(work.name.isEmpty? "未命名成品": work.name)
+Text(work.name.isEmpty ? "未命名成品": work.name)
 .font(.title3).fontWeight(.bold)
 HStack(spacing: 16) {
-if!work.colorName.isEmpty {
+if !work.colorName.isEmpty {
 Text("颜色：\(work.colorName)").font(.subheadline).foregroundColor(.secondary)
 }
 Text("总成本 ¥\(String(format: "%.2f", store.workTotalCost(for: work)))")
 .font(.subheadline).foregroundColor(.orange)
 }
 if work.isSold {
-Text("已售出\(work.hasSalePrice? " ¥\(String(format: "%.2f", work.salePrice))": "")")
+Text("已售出\(work.hasSalePrice ? " ¥\(String(format: "%.2f", work.salePrice))": "")")
 .font(.subheadline).foregroundColor(.green)
 }
 }
@@ -111,13 +111,13 @@ if collapsed { collapsedSections.remove(key)} else { collapsedSections.insert(ke
 HStack {
 Text(title).font(.headline)
 Spacer()
-Image(systemName: collapsed? "chevron.down": "chevron.up")
+Image(systemName: collapsed ? "chevron.down": "chevron.up")
 .foregroundColor(.secondary).font(.caption)
 }
 .padding(.vertical, 12)
 }
 .buttonStyle(.plain)
-if!collapsed {
+if !collapsed {
 content()
 .padding(.bottom, 12)
 }
@@ -140,21 +140,21 @@ private func buildLongContent() -> LongContent {
 var l: [String] = []
 l.append("喵了个咪 · 成品详情")
 l.append("")
-l.append("名称：" + (work.name.isEmpty? "未命名成品": work.name))
-if!work.code.isEmpty { l.append("编号：" + work.code)}
-l.append("状态：" + (work.isFinished? "已完成": "制作中"))
-if!work.colorName.isEmpty { l.append("颜色：" + work.colorName)}
+l.append("名称：" + (work.name.isEmpty ? "未命名成品": work.name))
+if !work.code.isEmpty { l.append("编号：" + work.code)}
+l.append("状态：" + (work.isFinished ? "已完成": "制作中"))
+if !work.colorName.isEmpty { l.append("颜色：" + work.colorName)}
 if let s = work.startedAt { l.append("开始：" + CSVValues.dateString(s))}
 if let f = work.finishedAt { l.append("完成：" + CSVValues.dateString(f))}
 l.append(String(format: "总成本：¥%.2f", store.workTotalCost(for: work)))
 if work.hasLaborCost { l.append(String(format: "工费：¥%.2f", work.laborCost))}
 if work.isSold { l.append("已售出" + (work.hasSalePrice? String(format: " ¥%.2f", work.salePrice): ""))}
-if!work.note.isEmpty { l.append("备注：" + work.note)}
-if!linkedBrainstorms.isEmpty {
+if !work.note.isEmpty { l.append("备注：" + work.note)}
+if !linkedBrainstorms.isEmpty {
 l.append("")
 l.append("")
 for bs in linkedBrainstorms {
-l.append("· " + (bs.title.isEmpty? "未命名脑洞": bs.title))
+l.append("· " + (bs.title.isEmpty ? "未命名脑洞": bs.title))
 }
 }
 let photos: [UIImage] = work.imageFileNames.compactMap { FabricImageStore.loadImage(named: $0)}
@@ -200,10 +200,10 @@ uictx?.restoreGState()
 UIGraphicsPopContext()
 y += photoHeight + 16
 }
-if!content.photos.isEmpty { y += 4}
+if !content.photos.isEmpty { y += 4}
 UIGraphicsPushContext(cg)
 for (i, line) in content.lines.enumerated() {
-let font = i == 0? UIFont.boldSystemFont(ofSize: 32): UIFont.systemFont(ofSize: 28)
+let font = i == 0 ? UIFont.boldSystemFont(ofSize: 32): UIFont.systemFont(ofSize: 28)
 let attrs: [NSAttributedString.Key: Any] = [.font: font,.foregroundColor: UIColor.black]
 (line as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: attrs)
 y += lineHeight
@@ -231,7 +231,7 @@ ctx.beginPage()
 drawLongContent(content, in: ctx.cgContext, size: size)
 }
 let url = FileManager.default.temporaryDirectory
-.appendingPathComponent("成品长图-\(work.name.isEmpty? "未命名": work.name)-\(Int(Date().timeIntervalSince1970)).pdf")
+.appendingPathComponent("成品长图-\(work.name.isEmpty ? "未命名": work.name)-\(Int(Date().timeIntervalSince1970)).pdf")
 do {
 try data.write(to: url)
 return url
@@ -255,7 +255,7 @@ collapsedSections = ["images", "info", "brainstorm", "cost"]
 collapsedSections = []
 }
 }) {
-Label(collapsedSections.isEmpty? "全部收起": "全部展开", systemImage: "chevron.down.circle")
+Label(collapsedSections.isEmpty ? "全部收起": "全部展开", systemImage: "chevron.down.circle")
 .font(.subheadline).foregroundColor(themeAccent)
 }
 }
@@ -286,7 +286,7 @@ Color.gray.opacity(0.15)
 // 基本信息
 collapsibleSection(key: "info", title: "基本信息") {
 VStack(alignment:.leading, spacing: 8) {
-if!work.colorName.isEmpty {
+if !work.colorName.isEmpty {
 Text("颜色：\(work.colorName)").font(.subheadline)
 }
 if let s = work.startedAt {
@@ -295,7 +295,7 @@ Text("开始日期：\(CSVValues.dateString(s))").font(.subheadline).foregroundC
 if let f = work.finishedAt {
 Text("完成日期：\(CSVValues.dateString(f))").font(.subheadline).foregroundColor(.secondary)
 }
-if!work.note.isEmpty {
+if !work.note.isEmpty {
 Text("备注：\(work.note)").font(.subheadline)
 }
 }
@@ -326,7 +326,7 @@ if work.hasLaborCost {
 Text("工费 ¥\(String(format: "%.2f", work.laborCost))").font(.caption).foregroundColor(.secondary)
 }
 if work.isSold {
-Text("已售出\(work.hasSalePrice? " ¥\(String(format: "%.2f", work.salePrice))": "")")
+Text("已售出\(work.hasSalePrice ? " ¥\(String(format: "%.2f", work.salePrice))": "")")
 .font(.subheadline).foregroundColor(.green)
 }
 }
@@ -351,7 +351,7 @@ img = longImage
 }
 if let img = img, let data = img.pngData() {
 let url = FileManager.default.temporaryDirectory
-.appendingPathComponent("成品长图-\(work.name.isEmpty? "未命名": work.name)-\(Int(Date().timeIntervalSince1970)).png")
+.appendingPathComponent("成品长图-\(work.name.isEmpty ? "未命名": work.name)-\(Int(Date().timeIntervalSince1970)).png")
 try? data.write(to: url)
 shareFileItem = ShareURLItem(url: url)
 }
@@ -391,7 +391,7 @@ dismiss()
 }
 Button("取消", role:.cancel) {}
 } message: {
-Text("确定删除「\(work.name.isEmpty? "未命名成品": work.name)」吗？")
+Text("确定删除「\(work.name.isEmpty ? "未命名成品": work.name)」吗？")
 }
 .sheet(isPresented: $showingBrainstormPicker) {
 NavigationStack { BrainstormPickerView(work: work)}
@@ -456,14 +456,14 @@ var work: Work
 var body: some View {
 List(store.brainstorms.sorted { $0.createdAt > $1.createdAt}) { bs in
 Button(action: {
-if!bs.linkedWorkIds.contains(work.id) {
+if !bs.linkedWorkIds.contains(work.id) {
 bs.linkedWorkIds.append(work.id)
 store.save()
 }
 dismiss()
 }) {
 HStack {
-Text(bs.title.isEmpty? "未命名脑洞": bs.title).lineLimit(1)
+Text(bs.title.isEmpty ? "未命名脑洞": bs.title).lineLimit(1)
 Spacer()
 if bs.linkedWorkIds.contains(work.id) {
 Image(systemName: "checkmark").foregroundColor(.green)
@@ -482,7 +482,7 @@ var bs: Brainstorm
 var body: some View {
 NavigationLink(destination: BrainstormDetailView(brainstorm: bs)) {
 HStack {
-Text(bs.title.isEmpty? "未命名脑洞": bs.title).lineLimit(1)
+Text(bs.title.isEmpty ? "未命名脑洞": bs.title).lineLimit(1)
 Spacer()
 Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
 }
