@@ -170,17 +170,13 @@ struct FabricCardView: View {
                    let uiImage = FabricImageStore.loadImage(named: first) {
                     Image(uiImage: uiImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: compact ? 110 : 150)
-                        .scaleEffect(1.05)
+                        .scaledToFill()
+                        .frame(height: 120)
                         .clipped()
                 } else {
-                    // 无图占位：剪刀图标，占位高度大于照片高度（列表约 220 / 两列约 140），
-                    // 让无图卡片在视觉上占卡片高度的一半以上。
                     Rectangle()
                         .fill(ThemeHelper.accentSoft(store.themeName))
-                        .frame(height: compact ? 140 : 220)
+                        .frame(height: 120)
                         .overlay(Image(systemName: "scissors").foregroundColor(themeAccent).font(.title))
                 }
                 Button(action: {

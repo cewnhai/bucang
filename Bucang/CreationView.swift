@@ -77,12 +77,12 @@ struct WorksListView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 150)
+                        .frame(height: 120)
                         .clipped()
                 } else {
                     Rectangle()
                         .fill(ThemeHelper.accentSoft(store.themeName))
-                        .frame(height: 150)
+                        .frame(height: 120)
                         .overlay(Image(systemName: "hammer").foregroundColor(themeAccent).font(.title))
                 }
                 Text(work.isFinished ? "已完成" : "制作中")
@@ -295,13 +295,13 @@ struct OtherListView: View {
                    let uiImage = FabricImageStore.loadImage(named: first) {
                     Image(uiImage: uiImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 150)
-                        .scaleEffect(1.05)
+                        .scaledToFill()
+                        .frame(height: 120)
                         .clipped()
                 } else {
-                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
+                    Rectangle()
+                        .fill(ThemeHelper.accentSoft(store.themeName))
+                        .frame(height: 120)
                         .overlay(Image(systemName: "archivebox").foregroundColor(themeAccent).font(.title))
                 }
                 if !item.category.isEmpty {
@@ -433,13 +433,13 @@ struct WishlistListView: View {
                    let uiImage = FabricImageStore.loadImage(named: first) {
                     Image(uiImage: uiImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 150)
-                        .scaleEffect(1.05)
+                        .scaledToFill()
+                        .frame(height: 120)
                         .clipped()
                 } else {
-                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
+                    Rectangle()
+                        .fill(ThemeHelper.accentSoft(store.themeName))
+                        .frame(height: 120)
                         .overlay(Image(systemName: "heart").foregroundColor(themeAccent).font(.title))
                 }
                 Text(item.isPurchased ? "已购" : "待购")
