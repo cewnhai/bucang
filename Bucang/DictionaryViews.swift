@@ -1,4 +1,5 @@
 import SwiftUI
+// 2026-11-01 force refresh
 
 // 字典管理（2026-10-31）：渠道/标签/材质的子菜单入口，独立板块
 struct DictionaryManagementView: View {
