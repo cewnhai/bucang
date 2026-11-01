@@ -121,8 +121,9 @@ struct WishlistDetailView: View {
                     .buttonStyle(.borderedProminent).tint(themeAccent)
                     Button("转入库") {
                         // 转入库逻辑：创建布料
-                        let fabric = Fabric(name: item.name, imageFileNames: item.imageFileNames, note: item.note,
+                        let fabric = Fabric(name: item.name, imageFileNames: item.imageFileNames,
                                           purchasePrice: item.hasEstimatedPrice ? item.estimatedPrice : 0,
+                                          note: item.note,
                                           hasTotalPrice: item.hasEstimatedPrice)
                         store.fabrics.append(fabric)
                         store.save()
@@ -144,7 +145,7 @@ struct WishlistDetailView: View {
             }
         }
         .sheet(isPresented: $showingEdit) {
-            NavigationStack { WishlistEditView(item: item) }
+            NavigationStack { WishlistEditView(item: item, presetName: "") }
         }
         .alert("删除心愿", isPresented: $showingDelete) {
             Button("删除", role: .destructive) {
