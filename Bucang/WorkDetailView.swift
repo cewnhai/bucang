@@ -37,7 +37,9 @@ struct WorkDetailView: View {
                 hosting.view.drawHierarchy(in: hosting.view.bounds, afterScreenUpdates: true)
             }
             self.longImage = image
-            self.showingLongImage = true
+            DispatchQueue.main.async {
+                self.showingLongImage = true
+            }
         }
     }
     

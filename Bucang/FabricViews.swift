@@ -1658,7 +1658,10 @@ struct FabricDetailView: View {
             }
         }
         self.longImage = image
-        self.showingLongImage = true
+        // 2026-11-01：确保图片状态提交后再弹 sheet，避免第一次空白
+        DispatchQueue.main.async {
+            self.showingLongImage = true
+        }
     }
 }
 
