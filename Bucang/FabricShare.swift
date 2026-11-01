@@ -20,6 +20,7 @@ enum FabricShare {
     static let imagesPrefix = "images/"
 
     /// 导出分享文件，返回 ZIP 文件的临时 URL（调用方负责分享后清理）
+    @MainActor
     static func exportFile(fabric: Fabric, store: Store) -> URL? {
         let pkg = FabricSharePackage(
             fabric: fabric,
