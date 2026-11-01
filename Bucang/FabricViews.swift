@@ -505,7 +505,13 @@ struct FabricDetailView: View {
                     ShareLink(item: fabricSummary, preview: SharePreview(fabric.displayName)) {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
-                    Button("生成长图", action: { generateLongImage() })
+                    Button("生成长图", action: {
+                        if longImage == nil {
+                            generateLongImage()
+                        } else {
+                            showingLongImage = true
+                        }
+                    })
                     Button("删除", role: .destructive) { showingDelete = true }
                 } label: {
                     Image(systemName: "slider.horizontal.3")
@@ -539,6 +545,11 @@ struct FabricDetailView: View {
         }
         .sheet(isPresented: $showingBrainstormPicker) {
             NavigationStack { FabricBrainstormLinkPickerView(fabric: fabric) }
+        }
+        .onAppear {
+            if longImage == nil {
+                generateLongImageSilent()
+            }
         }
         .sheet(isPresented: $showingLongImage) {
             if let longImage {
@@ -1591,13 +1602,26 @@ struct FabricDetailView: View {
     }
 
     @MainActor
+    private func generateLongImageSilent() {
+        // 静默生成，不弹 sheet（用于 onAppear 预生成）
+        // 直接调用 generateLongImage 的绘制部分，但不设置 showingLongImage
+        // 为了复用，把绘制逻辑抽出来太麻烦，这里直接设一个标记
+        _isSilentGeneration = true
+        generateLongImage()
+        _isSilentGeneration = false
+    }
+
+    private var _isSilentGeneration = false
+
     private func generateLongImage() {
         // 2026-11-01：纯 UIKit 绘制，不依赖 SwiftUI 渲染
         let lines: [String] = {
             var l: [String] = []
             l.append("喵了个咪 · 布料详情")
             l.append("")
+            // 基础信息
             if !fabric.code.isEmpty { l.append("编号：" + fabric.code) }
+            if !fabric.subCodes.isEmpty { l.append("子编号：" + fabric.subCodes.joined(separator: "、")) }
             l.append("名称：" + fabric.displayName)
             l.append("已消耗：" + String(format: "%.2f", fabric.usedLength) + "米")
             l.append("已售出：" + String(format: "%.2f", sold) + "米")
@@ -1606,11 +1630,64 @@ struct FabricDetailView: View {
                 l.append("布长：" + String(format: "%.2f", fabric.length) + "米")
             }
             if fabric.width > 0 { l.append("幅宽：" + String(format: "%.0f", fabric.widthCm) + "厘米") }
-            if fabric.hasTotalPrice { l.append(String(format: "总价：¥%.2f", fabric.purchasePrice)) }
-            if !fabric.materialName.isEmpty { l.append("材质：" + fabric.materialName) }
+            // 来源信息
+            l.append("")
+            l.append("【来源信息】")
             if !fabric.channelName.isEmpty { l.append("渠道：" + fabric.channelName) }
+            if !fabric.merchantName.isEmpty { l.append("商家：" + fabric.merchantName) }
+            if let pd = fabric.purchaseDate {
+                let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+                l.append("购买日期：" + df.string(from: pd))
+            }
+            if fabric.hasTotalPrice { l.append(String(format: "总价：¥%.2f", fabric.purchasePrice)) }
+            if fabric.pricePerMeter > 0 { l.append(String(format: "单价：¥%.2f/米", fabric.pricePerMeter)) }
+            // 布料信息
+            l.append("")
+            l.append("【布料信息】")
+            if !fabric.materialName.isEmpty { l.append("材质：" + fabric.materialName) }
+            if !fabric.composition.isEmpty { l.append("成分：" + fabric.composition) }
+            if !fabric.colorName.isEmpty { l.append("颜色：" + fabric.colorName) }
+            if let w = fabric.weightGsm, w > 0 { l.append(String(format: "克重：%.0fg", w)) }
+            if let s = fabric.shrinkagePct { l.append(String(format: "缩水率：%.1f%%", s)) }
+            if !fabric.washing.isEmpty { l.append("洗涤：" + fabric.washing.joined(separator: "、")) }
+            if !fabric.usageNotes.isEmpty { l.append("用途备注：" + fabric.usageNotes) }
+            // 其他信息
             let tagNames = store.tags(for: fabric).map { $0.name }
-            if !tagNames.isEmpty { l.append("标签：" + tagNames.joined(separator: "、")) }
+            if !tagNames.isEmpty || !fabric.note.isEmpty || !fabric.notes.isEmpty {
+                l.append("")
+                l.append("【其他信息】")
+                if !tagNames.isEmpty { l.append("标签：" + tagNames.joined(separator: "、")) }
+                if !fabric.note.isEmpty { l.append("备注：" + fabric.note) }
+                for n in fabric.notes {
+                    l.append("· " + n.text)
+                }
+            }
+            // 消耗记录
+            let usages = store.usageRecords(for: fabric.id)
+            if !usages.isEmpty {
+                l.append("")
+                l.append("【消耗记录】")
+                let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+                for u in usages {
+                    l.append(String(format: "· %@ %.2f米 %@", df.string(from: u.date), u.length, u.note))
+                }
+            }
+            // 出售记录
+            let sales = store.saleRecords(for: fabric.id)
+            if !sales.isEmpty {
+                l.append("")
+                l.append("【出售记录】")
+                let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+                for s in sales {
+                    l.append(String(format: "· %@ %.2f米 ¥%.2f %@", df.string(from: s.date), s.length, s.price, s.note))
+                }
+            }
+            // 脑洞与备注
+            if !fabric.brainstorm.isEmpty {
+                l.append("")
+                l.append("【脑洞与备注】")
+                l.append(fabric.brainstorm)
+            }
             return l
         }()
         let width: CGFloat = 720
@@ -1658,9 +1735,11 @@ struct FabricDetailView: View {
             }
         }
         self.longImage = image
-        // 2026-11-01：确保图片状态提交后再弹 sheet，避免第一次空白
-        DispatchQueue.main.async {
-            self.showingLongImage = true
+        if !_isSilentGeneration {
+            // 2026-11-01：确保图片状态提交后再弹 sheet，避免第一次空白
+            DispatchQueue.main.async {
+                self.showingLongImage = true
+            }
         }
     }
 }
