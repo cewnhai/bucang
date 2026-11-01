@@ -138,7 +138,8 @@ final class WebDAVManager: ObservableObject {
         if path.isEmpty {
             return URL(string: base + "/" + name)
         } else {
-            return URL(string: base + "/" + path + "/" + name)
+            let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+            return URL(string: base + "/" + encoded + "/" + name)
         }
     }
 
@@ -147,7 +148,10 @@ final class WebDAVManager: ObservableObject {
         var path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
         while path.hasPrefix("/") { path.removeFirst() }
         while path.hasSuffix("/") { path.removeLast() }
-        return path.isEmpty ? base : base + "/" + path
+        if path.isEmpty { return base }
+        // 中文目录名需要 percent-encoding，否则 URL(string:) 返回 nil
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        return base + "/" + encoded
     }
 
     private func imagesBaseURL() -> URL? {

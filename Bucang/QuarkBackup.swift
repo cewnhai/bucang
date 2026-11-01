@@ -244,11 +244,19 @@ class QuarkManager: ObservableObject {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let dataDict = json["data"] as? [String: Any] else {
-            throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "上传授权响应解析失败"])
+        let raw = String(data: data, encoding: .utf8) ?? ""
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "上传授权非 JSON：\(raw.prefix(200))"])
         }
-        return dataDict
+        // 兼容：data 可能在顶层或嵌套
+        if let dataDict = json["data"] as? [String: Any] {
+            return dataDict
+        }
+        // 如果顶层就是数据，直接返回
+        if json["auth_info"] != nil || json["auth_key"] != nil {
+            return json
+        }
+        throw NSError(domain: "Quark", code: -1, userInfo: [NSLocalizedDescriptionKey: "上传授权格式未知：\(raw.prefix(200))"])
     }
 
     private func finishUpload(taskId: String, token: String) async throws -> [String: Any] {
