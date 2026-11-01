@@ -1614,12 +1614,40 @@ struct FabricDetailView: View {
         let width: CGFloat = 720
         let lineHeight: CGFloat = 44
         let padding: CGFloat = 40
-        let height = padding * 2 + CGFloat(lines.count) * lineHeight
+        // 布料照片（如果有）
+        var photo: UIImage? = nil
+        if let first = fabric.imageFileNames.first {
+            photo = FabricImageStore.loadImage(named: first)
+        }
+        let photoHeight: CGFloat = photo != nil ? 400 : 0
+        let height = padding * 2 + photoHeight + CGFloat(lines.count) * lineHeight
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height))
         let image = renderer.image { ctx in
             UIColor.white.setFill()
             ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
             var y = padding
+            if let photo = photo {
+                // 照片裁剪填充
+                let photoRect = CGRect(x: padding, y: y, width: width - padding * 2, height: photoHeight)
+                ctx.cgContext.saveGState()
+                ctx.cgContext.addRect(photoRect)
+                ctx.cgContext.clip()
+                let imgAspect = photo.size.width / photo.size.height
+                let rectAspect = photoRect.width / photoRect.height
+                var drawRect: CGRect
+                if imgAspect > rectAspect {
+                    let h = photoRect.height
+                    let w = h * imgAspect
+                    drawRect = CGRect(x: photoRect.minX - (w - photoRect.width) / 2, y: photoRect.minY, width: w, height: h)
+                } else {
+                    let w = photoRect.width
+                    let h = w / imgAspect
+                    drawRect = CGRect(x: photoRect.minX, y: photoRect.minY - (h - photoRect.height) / 2, width: w, height: h)
+                }
+                photo.draw(in: drawRect)
+                ctx.cgContext.restoreGState()
+                y += photoHeight + 20
+            }
             for (i, line) in lines.enumerated() {
                 let font = i == 0 ? UIFont.boldSystemFont(ofSize: 32) : UIFont.systemFont(ofSize: 28)
                 let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black]
