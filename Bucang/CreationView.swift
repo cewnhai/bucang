@@ -228,6 +228,18 @@ struct WorksListView: View {
     }
 }
 
+enum OtherSortMethod: String, CaseIterable, Identifiable {
+    case createdAt, name, price
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .createdAt: return "创建时间"
+        case .name: return "名称"
+        case .price: return "价格"
+        }
+    }
+}
+
 struct OtherListView: View {
     @EnvironmentObject private var store: Store
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
@@ -236,6 +248,9 @@ struct OtherListView: View {
     @State private var searchText = ""
     @State private var selectedCategory = "全部"
     @State private var isSingleColumn = false // 其他页本地二态：两列 ⇄ 整宽（无横向）
+    @State private var sortMethod: OtherSortMethod = .createdAt
+    @State private var sortAscending = false
+    @State private var showingSort = false
 
     private var totalAmount: Double {
         store.otherItems.filter { $0.hasPrice }.reduce(0) { $0 + $1.price }
@@ -277,7 +292,13 @@ struct OtherListView: View {
                 || $0.channel.localizedCaseInsensitiveContains(q)
             }
         }
-        return list.sorted { $0.createdAt > $1.createdAt }
+        let sorted: [OtherItem]
+        switch sortMethod {
+        case .createdAt: sorted = list.sorted { $0.createdAt > $1.createdAt }
+        case .name: sorted = list.sorted { ($0.name.isEmpty ? "未命名" : $0.name) < ($1.name.isEmpty ? "未命名" : $1.name) }
+        case .price: sorted = list.sorted { $0.price > $1.price }
+        }
+        return sortAscending ? sorted.reversed() : sorted
     }
 
     private func otherStatColumn(label: String, value: String) -> some View {
@@ -348,6 +369,33 @@ struct OtherListView: View {
                     TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
                         isSingleColumn.toggle()
                     }
+                    TabIconButton(icon: "arrow.up.arrow.down") {
+                        showingSort = true
+                    }
+                }
+                .sheet(isPresented: $showingSort) {
+                    NavigationStack {
+                        Form {
+                            Section("排序方式") {
+                                ForEach(OtherSortMethod.allCases) { method in
+                                    Button(action: { sortMethod = method }) {
+                                        HStack { Text(method.title); Spacer(); if sortMethod == method { Image(systemName: "checkmark") } }
+                                    }
+                                    .foregroundColor(.primary)
+                                }
+                            }
+                            Section("顺序") {
+                                Picker("顺序", selection: $sortAscending) {
+                                    Text("降序").tag(false)
+                                    Text("升序").tag(true)
+                                }
+                                .pickerStyle(.segmented)
+                            }
+                        }
+                        .navigationTitle("排序")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingSort = false } } }
+                    }
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -391,6 +439,18 @@ struct OtherListView: View {
     }
 }
 
+enum WishlistSortMethod: String, CaseIterable, Identifiable {
+    case createdAt, name, price
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .createdAt: return "创建时间"
+        case .name: return "名称"
+        case .price: return "预估价格"
+        }
+    }
+}
+
 struct WishlistListView: View {
     @EnvironmentObject private var store: Store
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
@@ -401,21 +461,32 @@ struct WishlistListView: View {
     @State private var convertingItem: WishlistItem?
     @State private var statusFilter = "全部"
     @State private var isSingleColumn = false
+    @State private var sortMethod: WishlistSortMethod = .createdAt
+    @State private var sortAscending = false
+    @State private var showingSort = false
 
     private var totalEstimate: Double {
         store.wishlistItems.filter { $0.hasEstimatedPrice }.reduce(0) { $0 + $1.estimatedPrice }
     }
 
     private var filtered: [WishlistItem] {
-        var list = store.wishlistItems.sorted { $0.createdAt > $1.createdAt }
+        var list = store.wishlistItems
         if statusFilter == "待购" { list = list.filter { !$0.isPurchased } }
         else if statusFilter == "已购" { list = list.filter { $0.isPurchased } }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return list }
-        return list.filter {
-            $0.name.localizedCaseInsensitiveContains(q)
-            || $0.note.localizedCaseInsensitiveContains(q)
+        if !q.isEmpty {
+            list = list.filter {
+                $0.name.localizedCaseInsensitiveContains(q)
+                || $0.note.localizedCaseInsensitiveContains(q)
+            }
         }
+        let sorted: [WishlistItem]
+        switch sortMethod {
+        case .createdAt: sorted = list.sorted { $0.createdAt > $1.createdAt }
+        case .name: sorted = list.sorted { ($0.name.isEmpty ? "未命名" : $0.name) < ($1.name.isEmpty ? "未命名" : $1.name) }
+        case .price: sorted = list.sorted { $0.estimatedPrice > $1.estimatedPrice }
+        }
+        return sortAscending ? sorted.reversed() : sorted
     }
 
     private func wishlistStatColumn(label: String, value: String) -> some View {
@@ -543,6 +614,33 @@ struct WishlistListView: View {
                     TabSearchField(placeholder: "搜索 名称 / 想法备注", text: $searchText)
                     TabIconButton(icon: isSingleColumn ? "square.grid.2x2" : "list.bullet") {
                         isSingleColumn.toggle()
+                    }
+                    TabIconButton(icon: "arrow.up.arrow.down") {
+                        showingSort = true
+                    }
+                }
+                .sheet(isPresented: $showingSort) {
+                    NavigationStack {
+                        Form {
+                            Section("排序方式") {
+                                ForEach(WishlistSortMethod.allCases) { method in
+                                    Button(action: { sortMethod = method }) {
+                                        HStack { Text(method.title); Spacer(); if sortMethod == method { Image(systemName: "checkmark") } }
+                                    }
+                                    .foregroundColor(.primary)
+                                }
+                            }
+                            Section("顺序") {
+                                Picker("顺序", selection: $sortAscending) {
+                                    Text("降序").tag(false)
+                                    Text("升序").tag(true)
+                                }
+                                .pickerStyle(.segmented)
+                            }
+                        }
+                        .navigationTitle("排序")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingSort = false } } }
                     }
                 }
                 StatusCapsuleAxis(options: ["全部", "待购", "已购"], selected: $statusFilter, accent: themeAccent)

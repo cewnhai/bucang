@@ -130,7 +130,8 @@ struct BucangView: View {
     }
     private var visibleTabs: [BucangTab] {
         let keys = store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs
-        var list = BucangTab.allCases.filter { keys.contains($0.rawValue) }
+        // 按用户在设置里的顺序排列，而不是 allCases 固定顺序
+        var list = keys.compactMap { BucangTab(rawValue: $0) }
         if !list.contains(.fabric) { list.insert(.fabric, at: 0) }
         return list
     }
@@ -930,25 +931,46 @@ struct SaleFlowSheetView: View {
 
 // MARK: - 脑洞 Tab（V8 新增）
 
+enum BrainstormSortMethod: String, CaseIterable, Identifiable {
+    case createdAt, title
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .createdAt: return "创建时间"
+        case .title: return "标题"
+        }
+    }
+}
+
 struct BrainstormListView: View {
     @EnvironmentObject private var store: Store
     @State private var searchText = ""
     @State private var viewMode: FabricViewMode = .grid
     @State private var showingAddForm = false
     @State private var statusFilter = "全部"
+    @State private var sortMethod: BrainstormSortMethod = .createdAt
+    @State private var sortAscending = false
+    @State private var showingSort = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var filtered: [Brainstorm] {
-        var list = store.brainstorms.sorted { $0.createdAt > $1.createdAt }
+        var list = store.brainstorms
         if statusFilter != "全部" {
             list = list.filter { $0.status == statusFilter }
         }
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else { return list }
-        return list.filter {
-            $0.title.localizedCaseInsensitiveContains(keyword)
-                || $0.content.localizedCaseInsensitiveContains(keyword)
+        if !keyword.isEmpty {
+            list = list.filter {
+                $0.title.localizedCaseInsensitiveContains(keyword)
+                    || $0.content.localizedCaseInsensitiveContains(keyword)
+            }
         }
+        let sorted: [Brainstorm]
+        switch sortMethod {
+        case .createdAt: sorted = list.sorted { $0.createdAt > $1.createdAt }
+        case .title: sorted = list.sorted { ($0.title.isEmpty ? "未命名脑洞" : $0.title) < ($1.title.isEmpty ? "未命名脑洞" : $1.title) }
+        }
+        return sortAscending ? sorted.reversed() : sorted
     }
 
     var body: some View {
@@ -1029,6 +1051,38 @@ struct BrainstormListView: View {
                     .cornerRadius(10)
             }
             .buttonStyle(.plain)
+            Button(action: { showingSort = true }) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .foregroundColor(.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Design.card)
+                    .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
+        }
+        .sheet(isPresented: $showingSort) {
+            NavigationStack {
+                Form {
+                    Section("排序方式") {
+                        ForEach(BrainstormSortMethod.allCases) { method in
+                            Button(action: { sortMethod = method }) {
+                                HStack { Text(method.title); Spacer(); if sortMethod == method { Image(systemName: "checkmark") } }
+                            }
+                            .foregroundColor(.primary)
+                        }
+                    }
+                    Section("顺序") {
+                        Picker("顺序", selection: $sortAscending) {
+                            Text("降序").tag(false)
+                            Text("升序").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+                .navigationTitle("排序")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingSort = false } } }
+            }
         }
     }
 
