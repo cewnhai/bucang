@@ -127,7 +127,7 @@ struct WorkDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("编辑", action: { showingEdit = true })
-                    ShareLink(item: workSummary, preview: SharePreview(work.displayName)) {
+                    ShareLink(item: workSummary, preview: SharePreview(work.name.isEmpty ? "未命名成品" : work.name)) {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
                     Button("生成长图", action: { generateLongImage() })
