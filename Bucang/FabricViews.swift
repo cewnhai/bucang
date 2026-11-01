@@ -3,6 +3,7 @@ import PhotosUI
 import UIKit
 import CoreImage
 import AVKit
+import AVFoundation
 
 // MARK: - V3 布料卡片 / 详情 / 编辑 / 使用 / 出售 / 拍照找相似
 // 卡片：无图时剪刀占位约占卡片一半高度；有图保持原高度。
@@ -3433,6 +3434,127 @@ struct SaleFormView: View {
     }
 }
 
+// MARK: - 二维码扫描（AVFoundation 原生实现，不依赖第三方库）
+
+/// 全屏二维码扫描器：扫到后回调字符串，取消回调 onCancel。
+struct QRScannerView: UIViewControllerRepresentable {
+    var onScanned: (String) -> Void
+    var onCancel: () -> Void
+
+    func makeUIViewController(context: Context) -> QRScannerViewController {
+        let vc = QRScannerViewController()
+        vc.onScanned = onScanned
+        vc.onCancel = onCancel
+        return vc
+    }
+    func updateUIViewController(_ uiViewController: QRScannerViewController, context: Context) {}
+}
+
+final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+    var onScanned: ((String) -> Void)?
+    var onCancel: (() -> Void)?
+    private var session: AVCaptureSession?
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var didFire = false
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+
+        let cancel = UIButton(type: .system)
+        cancel.setTitle("取消", for: .normal)
+        cancel.setTitleColor(.white, for: .normal)
+        cancel.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        cancel.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+        cancel.layer.cornerRadius = 8
+        cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+        cancel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(cancel)
+        NSLayoutConstraint.activate([
+            cancel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            cancel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            cancel.widthAnchor.constraint(equalToConstant: 72),
+            cancel.heightAnchor.constraint(equalToConstant: 40)
+        ])
+
+        let hint = UILabel()
+        hint.text = "将布料参数二维码放入框内"
+        hint.textColor = .white
+        hint.font = .systemFont(ofSize: 15)
+        hint.textAlignment = .center
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hint)
+        NSLayoutConstraint.activate([
+            hint.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64),
+            hint.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            hint.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
+        ])
+
+        let boxSize: CGFloat = 250
+        let box = UIView()
+        box.layer.borderColor = UIColor.white.cgColor
+        box.layer.borderWidth = 2
+        box.layer.cornerRadius = 12
+        box.backgroundColor = .clear
+        box.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(box)
+        NSLayoutConstraint.activate([
+            box.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            box.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            box.widthAnchor.constraint(equalToConstant: boxSize),
+            box.heightAnchor.constraint(equalToConstant: boxSize)
+        ])
+
+        startSession()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    private func startSession() {
+        let session = AVCaptureSession()
+        guard let device = AVCaptureDevice.default(for: .video),
+              let input = try? AVCaptureDeviceInput(device: device),
+              session.canAddInput(input) else { return }
+        session.addInput(input)
+        let output = AVCaptureMetadataOutput()
+        guard session.canAddOutput(output) else { return }
+        session.addOutput(output)
+        output.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+        output.metadataObjectTypes = [.qr]
+        let preview = AVCaptureVideoPreviewLayer(session: session)
+        preview.videoGravity = .resizeAspectFill
+        preview.frame = view.bounds
+        view.layer.insertSublayer(preview, at: 0)
+        previewLayer = preview
+        self.session = session
+        DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
+    }
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput,
+                        didOutput metadataObjects: [AVMetadataObject],
+                        from connection: AVCaptureConnection) {
+        guard !didFire,
+              let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+              let str = obj.stringValue, !str.isEmpty else { return }
+        didFire = true
+        session?.stopRunning()
+        // 回调里会写 @State、调 @MainActor 的 Store，切到 MainActor 再执行。
+        Task { @MainActor [weak self] in self?.onScanned?(str) }
+    }
+
+    @objc private func cancelTapped() {
+        Task { @MainActor [weak self] in self?.onCancel?() }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        session?.stopRunning()
+    }
+}
+
 // MARK: - 拍照找相似（纯本地粗比对，不声称精确识别）
 
 struct SimilarSearchView: View {
@@ -3443,6 +3565,13 @@ struct SimilarSearchView: View {
     @State private var referenceColor: String?
     @State private var referenceRGB: (Double, Double, Double)?
     @State private var didPick = false
+    // 扫码导入
+    @State private var showingScanner = false
+    @State private var cameraDenied = false
+    @State private var scanErrorMessage = ""
+    @State private var showScanError = false
+    @State private var importedName = ""
+    @State private var showImported = false
 
     private func averageColor(of image: UIImage) -> (Double, Double, Double)? {
         guard let cg = image.cgImage else { return nil }
@@ -3471,6 +3600,57 @@ struct SimilarSearchView: View {
         store.fabrics.map { ($0, rank($0)) }.sorted { $0.score > $1.score }
     }
 
+    // MARK: 扫码导入
+    private func startScan() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            showingScanner = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted { showingScanner = true } else { cameraDenied = true }
+                }
+            }
+        default:
+            cameraDenied = true
+        }
+    }
+
+    private func importFromQRCode(_ string: String) {
+        guard let data = string.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (json["type"] as? String) == "bucang-fabric" else {
+            scanErrorMessage = "这个二维码不是布仓布料参数码，请扫描布料长图里的参数二维码。"
+            showScanError = true
+            return
+        }
+        let rawName = (json["name"] as? String) ?? ""
+        var fabric = Fabric(
+            name: rawName == "未命名布料" ? "" : rawName,
+            length: (json["length"] as? Double) ?? 0,
+            width: (json["width"] as? Double) ?? 0,
+            purchasePrice: (json["purchasePrice"] as? Double) ?? 0,
+            pricePerMeter: (json["pricePerMeter"] as? Double) ?? 0,
+            usedLength: (json["usedLength"] as? Double) ?? 0,
+            note: (json["note"] as? String) ?? "",
+            code: (json["code"] as? String) ?? "",
+            materialName: (json["materialName"] as? String) ?? "",
+            composition: (json["composition"] as? String) ?? "",
+            colorName: (json["colorName"] as? String) ?? "",
+            washing: (json["washing"] as? [String]) ?? [],
+            usageNotes: (json["usageNotes"] as? String) ?? "",
+            channelName: (json["channelName"] as? String) ?? "",
+            merchantName: (json["merchantName"] as? String) ?? "",
+            brainstorm: (json["brainstorm"] as? String) ?? "",
+            subCodes: (json["subCodes"] as? [String]) ?? []
+        )
+        fabric.hasPurchaseLength = fabric.length > 0
+        fabric.hasTotalPrice = fabric.purchasePrice > 0
+        store.addFabric(fabric)
+        importedName = fabric.displayName
+        showImported = true
+    }
+
     var body: some View {
         List {
             Section {
@@ -3489,6 +3669,12 @@ struct SimilarSearchView: View {
                 if let refColor = referenceColor {
                     Text("参考主色（按照片平均色粗匹配）：\(refColor)").font(.subheadline)
                 }
+            }
+            Section("扫码导入") {
+                Text("扫描另一台设备上布料长图里的参数二维码，直接导入为一条新布料（不含照片，可随后补拍）。")
+                    .font(.caption).foregroundColor(.secondary)
+                Button(action: startScan) { Label("扫码", systemImage: "qrcode.viewfinder") }
+                    .buttonStyle(.bordered).tint(Design.accent)
             }
             if didPick {
                 Section("相似布料") {
@@ -3552,6 +3738,36 @@ struct SimilarSearchView: View {
                 },
                 onCancel: { showingCamera = false }
             )
+        }
+        .fullScreenCover(isPresented: $showingScanner) {
+            QRScannerView(
+                onScanned: { str in
+                    showingScanner = false
+                    importFromQRCode(str)
+                },
+                onCancel: { showingScanner = false }
+            )
+            .ignoresSafeArea()
+        }
+        .alert("无法使用相机", isPresented: $cameraDenied) {
+            Button("去设置", action: {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            })
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("请在 iPhone 设置中允许本 App 使用相机后再扫码。")
+        }
+        .alert("扫码失败", isPresented: $showScanError) {
+            Button("好的", role: .cancel) {}
+        } message: {
+            Text(scanErrorMessage)
+        }
+        .alert("导入成功", isPresented: $showImported) {
+            Button("好的", role: .cancel) {}
+        } message: {
+            Text("已导入布料「\(importedName)」（不含照片），可在布料列表查看。")
         }
     }
 }
