@@ -158,7 +158,7 @@ final class Brainstorm: Identifiable, Codable {
     var linkedFabricIds: [UUID]
     var linkedWorkIds: [UUID]
     var linkedOtherIds: [UUID]
-    var status: String   // 想法中 / 已立项 / 已放弃
+    var status: String   // 想法中 / 已完成 / 已放弃
     var createdAt: Date
     var convertedWorkId: UUID?
     init(id: UUID = UUID(), title: String = "", content: String = "", imageFileNames: [String] = [],
@@ -635,6 +635,17 @@ final class Item: Identifiable, Codable {
     init(id: UUID = UUID(), name: String = "", price: Double = 0, quantity: Int = 0, sizeDesc: String = "", purchasedAt: Date? = nil, note: String = "", createdAt: Date = Date()) {
         self.id = id; self.name = name; self.price = price; self.quantity = quantity
         self.sizeDesc = sizeDesc; self.purchasedAt = purchasedAt; self.note = note; self.createdAt = createdAt
+    }
+}
+
+// MARK: - 其他分类（多级，2026-11-01）
+struct OtherCategory: Identifiable, Codable, Hashable {
+    var id: UUID
+    var name: String
+    var parentId: UUID?   // nil = 一级分类
+    var order: Int
+    init(id: UUID = UUID(), name: String, parentId: UUID? = nil, order: Int = 0) {
+        self.id = id; self.name = name; self.parentId = parentId; self.order = order
     }
 }
 

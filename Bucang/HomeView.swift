@@ -70,14 +70,14 @@ enum FabricSortMethod: String, CaseIterable, Identifiable {
 
 // MARK: - 脑洞转成品（详情页与表单共用）：
 // 新建 Work（标题→名称，内容→备注），把新成品 id 追加进 linkedWorkIds，
-// 状态置 已立项，记录 convertedWorkId；已转过则直接返回。
+// 状态置 已完成，记录 convertedWorkId；已转过则直接返回。
 @MainActor
 private func brainstormConvertToWork(store: Store, brainstorm: Brainstorm) {
     guard brainstorm.convertedWorkId == nil else { return }
     let work = Work(name: brainstorm.title, note: brainstorm.content)
     store.addWork(work)
     if !brainstorm.linkedWorkIds.contains(work.id) { brainstorm.linkedWorkIds.append(work.id) }
-    brainstorm.status = "已立项"
+    brainstorm.status = "已完成"
     brainstorm.convertedWorkId = work.id
     store.save()
 }
@@ -939,7 +939,7 @@ struct BrainstormListView: View {
     private var brainstormStatsCard: some View {
         let total = store.brainstorms.count
         let thinking = store.brainstorms.filter { $0.status == "想法中" }.count
-        let approved = store.brainstorms.filter { $0.status == "已立项" }.count
+        let approved = store.brainstorms.filter { $0.status == "已完成" }.count
         let dropped = store.brainstorms.filter { $0.status == "已放弃" }.count
         return VStack(spacing: 10) {
             StatsBigNumberHeader(count: total, label: "条想法")
@@ -1033,7 +1033,7 @@ struct BrainstormCardView: View {
 
     private var statusColor: Color {
         switch brainstorm.status {
-        case "已立项": return Color.green
+        case "已完成": return Color.green
         case "已放弃": return Color.gray
         default: return Color.orange
         }
@@ -1131,7 +1131,7 @@ struct BrainstormDetailView: View {
 
     private var statusColor: Color {
         switch brainstorm.status {
-        case "已立项": return Color.green
+        case "已完成": return Color.green
         case "已放弃": return Color.gray
         default: return Color.orange
         }
@@ -1333,7 +1333,7 @@ struct BrainstormFormView: View {
             Section("状态") {
                 Picker("状态", selection: $statusSel) {
                     Text("想法中").tag("想法中")
-                    Text("已立项").tag("已立项")
+                    Text("已完成").tag("已完成")
                     Text("已放弃").tag("已放弃")
                 }
                 .pickerStyle(.segmented)
@@ -1343,7 +1343,7 @@ struct BrainstormFormView: View {
                     if editing.convertedWorkId == nil {
                         Button("转成品") {
                             brainstormConvertToWork(store: store, brainstorm: editing)
-                            statusSel = "已立项"
+                            statusSel = "已完成"
                         }
                     } else {
                         Button("已转成品") {}.disabled(true)

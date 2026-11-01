@@ -16,6 +16,7 @@
 		D3E4F5A6B7C8D9E0F1A2B3C4D5 /* OtherSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F5A6B7C8D9E0F1A2B3C4D5E6 /* OtherSettingsView.swift */; };
 		E5F6A7B8C9D0E1F2A3B4C5D6E7 /* DetailSettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A7B8C9D0E1F2A3B4C5D6E7F8 /* DetailSettingsViews.swift */; };
 		F7A8B9C0D1E2F3A4B5C6D7E8F9 /* iCloudBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8B9C0D1E2F3A4B5C6D7E8F9A0 /* iCloudBackupView.swift */; };
+		A9B0C1D2E3F4A5B6C7D8E9F0A1 /* WorkDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C1D2E3F4A5B6C7D8E9F0A1B2 /* WorkDetailView.swift */; };
 		0D228C0A95BD12EE25122C92 /* SettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1463850DC2EF884FE50D6BAD /* SettingsViews.swift */; };
 		75047C771595BFDEA3CAA7EE /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 216427EB6859DB51C5EC6C48 /* Design.swift */; };
 		E5A45BAAFF4CD7CFC8325BC0 /* WebDAVBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */; };
@@ -37,6 +38,7 @@
 		E4F5A6B7C8D9E0F1A2B3C4D5E6 /* OtherSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OtherSettingsView.swift; sourceTree = "<group>"; };
 		F6A7B8C9D0E1F2A3B4C5D6E7F8 /* DetailSettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailSettingsViews.swift; sourceTree = "<group>"; };
 		A8B9C0D1E2F3A4B5C6D7E8F9A0 /* iCloudBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iCloudBackupView.swift; sourceTree = "<group>"; };
+		B0C1D2E3F4A5B6C7D8E9F0A1B2 /* WorkDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkDetailView.swift; sourceTree = "<group>"; };
 		1463850DC2EF884FE50D6BAD /* SettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViews.swift; sourceTree = "<group>"; };
 		216427EB6859DB51C5EC6C48 /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
 		8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVBackup.swift; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				E4F5A6B7C8D9E0F1A2B3C4D5E6 /* OtherSettingsView.swift */,
 				F6A7B8C9D0E1F2A3B4C5D6E7F8 /* DetailSettingsViews.swift */,
 				A8B9C0D1E2F3A4B5C6D7E8F9A0 /* iCloudBackupView.swift */,
+				B0C1D2E3F4A5B6C7D8E9F0A1B2 /* WorkDetailView.swift */,
 				1463850DC2EF884FE50D6BAD /* SettingsViews.swift */,
 				216427EB6859DB51C5EC6C48 /* Design.swift */,
 				8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */,
@@ -180,6 +183,7 @@
 				D3E4F5A6B7C8D9E0F1A2B3C4D5 /* OtherSettingsView.swift in Sources */,
 				E5F6A7B8C9D0E1F2A3B4C5D6E7 /* DetailSettingsViews.swift in Sources */,
 				F7A8B9C0D1E2F3A4B5C6D7E8F9 /* iCloudBackupView.swift in Sources */,
+				A9B0C1D2E3F4A5B6C7D8E9F0A1 /* WorkDetailView.swift in Sources */,
 				0D228C0A95BD12EE25122C92 /* SettingsViews.swift in Sources */,
 				DAF753E8ACFB1472DEABD599 /* CreationView.swift in Sources */,
 				16BEC0643B3F67A9CE25D8C8 /* ZipBackup.swift in Sources */,

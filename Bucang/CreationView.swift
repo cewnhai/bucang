@@ -68,9 +68,9 @@ struct WorksListView: View {
                         .clipped()
                 } else {
                     Rectangle()
-                        .fill(Design.accentSoft)
+                        .fill(ThemeHelper.accentSoft(store.themeName))
                         .frame(height: 120)
-                        .overlay(Image(systemName: "hammer").foregroundColor(Design.accent).font(.title))
+                        .overlay(Image(systemName: "hammer").foregroundColor(themeAccent).font(.title))
                 }
                 Text(work.isFinished ? "已完成" : "制作中")
                     .font(.caption)
@@ -178,8 +178,7 @@ struct WorksListView: View {
                     else {
                         LazyVGrid(columns: gridColumns, spacing: 12) {
                             ForEach(making) { work in
-                                Button(action: { editingWork = work }) { workRow(work) }
-                                    .buttonStyle(.plain)
+                                NavigationLink(destination: WorkDetailView(work: work)) { workRow(work) }
                                     .contextMenu {
                                         Button("删除", role: .destructive) { store.deleteWork(work) }
                                     }
@@ -193,8 +192,7 @@ struct WorksListView: View {
                     else {
                         LazyVGrid(columns: gridColumns, spacing: 12) {
                             ForEach(finished) { work in
-                                Button(action: { editingWork = work }) { workRow(work) }
-                                    .buttonStyle(.plain)
+                                NavigationLink(destination: WorkDetailView(work: work)) { workRow(work) }
                                     .contextMenu {
                                         Button("删除", role: .destructive) { store.deleteWork(work) }
                                     }
@@ -234,6 +232,7 @@ struct WorksListView: View {
 
 struct OtherListView: View {
     @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     @State private var showingAdd = false
     @State private var editingItem: OtherItem?
     @State private var searchText = ""
@@ -282,8 +281,8 @@ struct OtherListView: View {
                    let uiImage = FabricImageStore.loadImage(named: first) {
                     Image(uiImage: uiImage).resizable().scaledToFill().frame(height: 120).clipped()
                 } else {
-                    Rectangle().fill(Design.accentSoft).frame(height: 120)
-                        .overlay(Image(systemName: "archivebox").foregroundColor(Design.accent).font(.title))
+                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(height: 120)
+                        .overlay(Image(systemName: "archivebox").foregroundColor(themeAccent).font(.title))
                 }
                 if !item.category.isEmpty {
                     Text(item.category)
@@ -336,7 +335,7 @@ struct OtherListView: View {
                                 Text(cat)
                                     .font(.caption)
                                     .padding(.horizontal, 12).padding(.vertical, 6)
-                                    .background(selectedCategory == cat ? Design.accent : Color.gray.opacity(0.15))
+                                    .background(selectedCategory == cat ? themeAccent : Color.gray.opacity(0.15))
                                     .foregroundColor(selectedCategory == cat ? .white : .primary)
                                     .cornerRadius(14)
                             }
@@ -347,12 +346,6 @@ struct OtherListView: View {
                 HStack {
                     Text("\(filtered.count) 条").font(.caption).foregroundColor(.secondary)
                     Spacer()
-                    Picker("视图", selection: $isSingleColumn) {
-                        Text("两列").tag(false)
-                        Text("单列").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 140)
                 }
                 if filtered.isEmpty {
                     EmptyPlaceholderView(icon: "archivebox", title: "没有匹配的其他条目", subtitle: "其他是你自建分类的容器，最少填名称加照片就能存")
@@ -371,7 +364,7 @@ struct OtherListView: View {
             .padding(.bottom, 80)
         }
         .overlay(alignment: .bottomTrailing) {
-            TabFAB(accent: Design.accent) { showingAdd = true }
+            TabFAB(accent: themeAccent) { showingAdd = true }
         }
         .sheet(isPresented: $showingAdd) { NavigationStack { OtherEditView(item: nil) } }
         .sheet(item: $editingItem) { item in NavigationStack { OtherEditView(item: item) } }
@@ -380,6 +373,7 @@ struct OtherListView: View {
 
 struct WishlistListView: View {
     @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     @State private var showingAdd = false
     @State private var editingItem: WishlistItem?
     @State private var showingClearConfirm = false
@@ -419,8 +413,8 @@ struct WishlistListView: View {
                    let uiImage = FabricImageStore.loadImage(named: first) {
                     Image(uiImage: uiImage).resizable().scaledToFill().frame(height: 120).clipped()
                 } else {
-                    Rectangle().fill(Design.accentSoft).frame(height: 120)
-                        .overlay(Image(systemName: "heart").foregroundColor(Design.accent).font(.title))
+                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(height: 120)
+                        .overlay(Image(systemName: "heart").foregroundColor(themeAccent).font(.title))
                 }
                 Text(item.isPurchased ? "已购" : "待购")
                     .font(.caption).fontWeight(.semibold).foregroundColor(.white)
@@ -447,9 +441,9 @@ struct WishlistListView: View {
                 }) {
                     Text(item.isPurchased ? "已购 ✓" : "标为已购")
                         .font(.caption).fontWeight(.semibold)
-                        .foregroundColor(item.isPurchased ? .white : Design.accent)
+                        .foregroundColor(item.isPurchased ? .white : themeAccent)
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(item.isPurchased ? Design.accent : Design.accentSoft)
+                        .background(item.isPurchased ? themeAccent : ThemeHelper.accentSoft(store.themeName))
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
@@ -459,7 +453,7 @@ struct WishlistListView: View {
                         .font(.caption).fontWeight(.semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(Design.accent)
+                        .background(themeAccent)
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
@@ -569,7 +563,7 @@ struct WishlistListView: View {
             Text("将「\(display)」转为布料入库（照片复制一份、预估价带入总价），心愿单条目会删除。")
         }
         .overlay(alignment: .bottomTrailing) {
-            TabFAB(accent: Design.accent) { showingAdd = true }
+            TabFAB(accent: themeAccent) { showingAdd = true }
         }
     }
 }
