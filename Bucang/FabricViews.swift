@@ -575,7 +575,10 @@ struct FabricDetailView: View {
                             Button(action: {
                                 if let url = generateLongPDF() {
                                     longPDFURL = url
-                                    showingSharePDF = true
+                                    // 延迟一帧再弹分享，避免与长图 sheet 的展示冲突
+                                    DispatchQueue.main.async {
+                                        showingSharePDF = true
+                                    }
                                 }
                             }) {
                                 Label("分享PDF", systemImage: "doc.richtext")
@@ -585,12 +588,12 @@ struct FabricDetailView: View {
                     }
                     .navigationTitle("长图")
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showingLongImage = false } } }
+                    .sheet(isPresented: $showingSharePDF) {
+                        if let url = longPDFURL {
+                            ShareSheet(url: url)
+                        }
+                    }
                 }
-            }
-        }
-        .sheet(isPresented: $showingSharePDF) {
-            if let url = longPDFURL {
-                ShareSheet(url: url)
             }
         }
         .sheet(isPresented: Binding(
