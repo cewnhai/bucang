@@ -170,7 +170,7 @@ struct FabricCardView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: compact ? 110 : 150)
+                        .frame(maxWidth: .infinity, minHeight: compact ? 110 : 150, maxHeight: compact ? 110 : 150)
                         .clipped()
                 } else {
                     // 无图占位：剪刀图标，占位高度大于照片高度（列表约 220 / 两列约 140），
@@ -1589,16 +1589,18 @@ struct FabricDetailView: View {
 
     @MainActor
     private func generateLongImage() {
-        let view = LongDetailSummaryView(fabric: fabric, store: store)
-            .frame(width: 360)
-            .background(Color.white)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        // 2026-11-01：给渲染器明确尺寸，避免白屏
-        renderer.proposedSize = .init(width: 360, height: 800)
-        if let image = renderer.uiImage {
-            longImage = image
-            showingLongImage = true
+        // 2026-11-01：延迟一帧再渲染，确保视图布局完成，避免首次白屏
+        DispatchQueue.main.async {
+            let view = LongDetailSummaryView(fabric: fabric, store: store)
+                .frame(width: 360)
+                .background(Color.white)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            renderer.proposedSize = .init(width: 360, height: 900)
+            if let image = renderer.uiImage {
+                self.longImage = image
+                self.showingLongImage = true
+            }
         }
     }
 }

@@ -20,19 +20,21 @@ struct WorkDetailView: View {
         return parts.joined(separator: "\n")
     }
     private func generateLongImage() {
-        let view = VStack(alignment: .leading, spacing: 10) {
-            Text("喵了个咪 · 成品详情").font(.headline)
-            Text(workSummary).font(.body)
-        }
-        .padding(24)
-        .frame(width: 360)
-        .background(Color.white)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        renderer.proposedSize = .init(width: 360, height: 600)
-        if let image = renderer.uiImage {
-            longImage = image
-            showingLongImage = true
+        DispatchQueue.main.async {
+            let view = VStack(alignment: .leading, spacing: 10) {
+                Text("喵了个咪 · 成品详情").font(.headline)
+                Text(self.workSummary).font(.body)
+            }
+            .padding(24)
+            .frame(width: 360)
+            .background(Color.white)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            renderer.proposedSize = .init(width: 360, height: 600)
+            if let image = renderer.uiImage {
+                self.longImage = image
+                self.showingLongImage = true
+            }
         }
     }
     
