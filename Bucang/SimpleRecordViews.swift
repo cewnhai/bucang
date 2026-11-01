@@ -91,6 +91,9 @@ struct WorkEditView: View {
 
     var body: some View {
         Form {
+            Section("成品照片") {
+                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
+            }
             // 成品页没有独立的详情页（列表直达编辑），只读的关联脑洞放编辑页最上方。
             if let work {
                 Section("关联脑洞") {
@@ -152,9 +155,6 @@ struct WorkEditView: View {
                 if hasLaborCost {
                     LabeledTextField(label: "工费", placeholder: "留空=未填", text: $laborCostText, keyboardType: .decimalPad, unit: "元")
                 }
-            }
-            Section("成品照片") {
-                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
             }
             if let work {
                 Section("用料清单") {
@@ -320,6 +320,9 @@ struct OtherEditView: View {
 
     var body: some View {
         Form {
+            Section("照片") {
+                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
+            }
             Section("其他条目（全部可留空，最少填名称加照片就能存）") {
                 Picker("所属分类", selection: $category) {
                     Text("未分类").tag("")
@@ -331,9 +334,6 @@ struct OtherEditView: View {
                 LabeledTextField(label: "价格", placeholder: "点击输入", text: $priceText, keyboardType: .decimalPad, unit: "元")
                 LabeledTextField(label: "渠道", placeholder: "选填", text: $channel)
                 LabeledMultilineField(label: "备注", text: $note)
-            }
-            Section("照片") {
-                FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
             }
             if let item {
                 Button("删除这个条目", role: .destructive) {

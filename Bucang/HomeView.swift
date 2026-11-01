@@ -1443,15 +1443,15 @@ struct BrainstormFormView: View {
 
     var body: some View {
         Form {
+            Section("参考图") {
+                photoEditor
+            }
             Section("标题") {
                 LabeledTextField(label: "标题", placeholder: "给这个想法起个标题", text: $title)
             }
             Section("灵感内容") {
                 TextEditor(text: $content)
                     .frame(minHeight: 120)
-            }
-            Section("参考图") {
-                photoEditor
             }
             Section("关联明细") {
                 NavigationLink(destination: BrainstormLinkPickerView(
