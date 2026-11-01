@@ -1029,6 +1029,7 @@ struct BrainstormListView: View {
 
 struct BrainstormCardView: View {
     @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     var brainstorm: Brainstorm
 
     private var statusColor: Color {
