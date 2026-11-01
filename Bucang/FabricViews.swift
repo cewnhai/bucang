@@ -1604,16 +1604,10 @@ struct FabricDetailView: View {
     @MainActor
     private func generateLongImageSilent() {
         // 静默生成，不弹 sheet（用于 onAppear 预生成）
-        // 直接调用 generateLongImage 的绘制部分，但不设置 showingLongImage
-        // 为了复用，把绘制逻辑抽出来太麻烦，这里直接设一个标记
-        _isSilentGeneration = true
-        generateLongImage()
-        _isSilentGeneration = false
+        generateLongImage(showSheet: false)
     }
 
-    private var _isSilentGeneration = false
-
-    private func generateLongImage() {
+    private func generateLongImage(showSheet: Bool = true) {
         // 2026-11-01：纯 UIKit 绘制，不依赖 SwiftUI 渲染
         let lines: [String] = {
             var l: [String] = []
@@ -1735,7 +1729,7 @@ struct FabricDetailView: View {
             }
         }
         self.longImage = image
-        if !_isSilentGeneration {
+        if showSheet {
             // 2026-11-01：确保图片状态提交后再弹 sheet，避免第一次空白
             DispatchQueue.main.async {
                 self.showingLongImage = true
