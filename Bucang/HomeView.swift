@@ -372,31 +372,40 @@ struct BucangView: View {
     private var tabBar: some View {
         HStack(spacing: 0) {
             // 一级 Tab 横向滚动：一次约显示 3 个（每按钮固定 110pt），左滑查看更多。
+            // 跟随滑动切换：tab 变化时自动滚动到选中项。
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(visibleTabs) { t in
-                        Button(action: { tab = t }) {
-                            VStack(spacing: 4) {
-                                HStack(spacing: 2) {
-                                    Text(t.title)
-                                        .fontWeight(tab == t ? .bold : .regular)
-                                        .foregroundColor(tab == t ? .primary : .secondary)
-                                    if t == .wishlist && !store.wishlistItems.isEmpty {
-                                        Text("\(store.wishlistItems.count)")
-                                            .font(.caption2).fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 6).padding(.vertical, 2)
-                                            .background(Color.orange)
-                                            .cornerRadius(10)
+                ScrollViewReader { proxy in
+                    HStack(spacing: 0) {
+                        ForEach(visibleTabs) { t in
+                            Button(action: { tab = t }) {
+                                VStack(spacing: 4) {
+                                    HStack(spacing: 2) {
+                                        Text(t.title)
+                                            .fontWeight(tab == t ? .bold : .regular)
+                                            .foregroundColor(tab == t ? .primary : .secondary)
+                                        if t == .wishlist && !store.wishlistItems.isEmpty {
+                                            Text("\(store.wishlistItems.count)")
+                                                .font(.caption2).fontWeight(.bold)
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                                .background(Color.orange)
+                                                .cornerRadius(10)
+                                        }
                                     }
+                                    Rectangle()
+                                        .fill(tab == t ? themeAccent : Color.clear)
+                                        .frame(height: 2)
                                 }
-                                Rectangle()
-                                    .fill(tab == t ? themeAccent : Color.clear)
-                                    .frame(height: 2)
                             }
+                            .buttonStyle(.plain)
+                            .frame(width: 110)
+                            .id(t)
                         }
-                        .buttonStyle(.plain)
-                        .frame(width: 110)
+                    }
+                    .onChange(of: tab) { newTab in
+                        withAnimation {
+                            proxy.scrollTo(newTab, anchor: .center)
+                        }
                     }
                 }
             }
@@ -1294,6 +1303,25 @@ struct BrainstormDetailView: View {
                     } else {
                         Text(brainstorm.content).font(.subheadline)
                     }
+                    // 颜色搭配
+                    if !brainstorm.colorCodes.isEmpty {
+                        let colorItems = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
+                        let selected = colorItems.filter { brainstorm.colorCodes.contains($0.code) }
+                        if !selected.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("颜色搭配").font(.subheadline).foregroundColor(.secondary)
+                                HStack(spacing: 12) {
+                                    ForEach(selected) { item in
+                                        VStack(spacing: 4) {
+                                            CodeItemIconView(icon: item.icon, size: 36)
+                                            Text(item.name).font(.caption).foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.top, 8)
+                        }
+                    }
                 }
                 // 参考图
                 collapsibleSection(key: "images", title: "参考图") {
@@ -1375,7 +1403,6 @@ struct BrainstormDetailView: View {
         let works = brainstorm.linkedWorkIds.compactMap { store.work(for: $0) }
         let others = brainstorm.linkedOtherIds.compactMap { id in store.otherItems.first { $0.id == id } }
         return VStack(alignment: .leading, spacing: 8) {
-            Text("关联明细").font(.headline)
             if fabrics.isEmpty && works.isEmpty && others.isEmpty {
                 Text("暂无关联").font(.subheadline).foregroundColor(.secondary)
             } else {
@@ -1386,10 +1413,16 @@ struct BrainstormDetailView: View {
                     .buttonStyle(.plain)
                 }
                 ForEach(works) { work in
-                    linkedRow(icon: "hammer", title: work.name.isEmpty ? "未命名成品" : work.name, sub: "")
+                    NavigationLink(destination: WorkDetailView(work: work)) {
+                        linkedRow(icon: "hammer", title: work.name.isEmpty ? "未命名成品" : work.name, sub: "")
+                    }
+                    .buttonStyle(.plain)
                 }
                 ForEach(others) { other in
-                    linkedRow(icon: "tag", title: other.name.isEmpty ? "未命名" : other.name, sub: other.category)
+                    NavigationLink(destination: OtherDetailView(item: other)) {
+                        linkedRow(icon: "tag", title: other.name.isEmpty ? "未命名" : other.name, sub: other.category)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -1426,6 +1459,7 @@ struct BrainstormFormView: View {
     @State private var selOthers: Set<UUID>
     @State private var statusSel: String
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var selColors: Set<String>
 
     init(brainstorm: Brainstorm?) {
         self.brainstorm = brainstorm
@@ -1436,6 +1470,7 @@ struct BrainstormFormView: View {
         _selWorks = State(initialValue: Set(brainstorm?.linkedWorkIds ?? []))
         _selOthers = State(initialValue: Set(brainstorm?.linkedOtherIds ?? []))
         _statusSel = State(initialValue: brainstorm?.status ?? "想法中")
+        _selColors = State(initialValue: Set(brainstorm?.colorCodes ?? []))
     }
 
     private var isNew: Bool { brainstorm == nil }
@@ -1453,24 +1488,64 @@ struct BrainstormFormView: View {
                 TextEditor(text: $content)
                     .frame(minHeight: 120)
             }
+            Section("颜色搭配") {
+                let items = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
+                    .filter { $0.enabled }
+                if items.isEmpty {
+                    Text("暂无颜色选项").foregroundColor(.secondary)
+                } else {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 16) {
+                        ForEach(items) { item in
+                            let selected = selColors.contains(item.code)
+                            Button(action: {
+                                if selected { selColors.remove(item.code) }
+                                else { selColors.insert(item.code) }
+                            }) {
+                                VStack(spacing: 6) {
+                                    ZStack {
+                                        CodeItemIconView(icon: item.icon, size: 44)
+                                        if selected {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.title3)
+                                                .foregroundColor(.white)
+                                                .background(Circle().fill(ThemeHelper.accent(store.themeName)).frame(width: 20, height: 20))
+                                                .offset(x: 16, y: -16)
+                                        }
+                                    }
+                                    let _code = item.code.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    Text(_code.isEmpty ? item.name : "\(item.name)/\(_code)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(selected ? ThemeHelper.accent(store.themeName).opacity(0.12) : Color.clear)
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
             Section("关联明细") {
                 NavigationLink(destination: BrainstormLinkPickerView(
                     title: "关联布料",
-                    options: store.fabrics.map { (id: $0.id, label: $0.displayName, sub: $0.code) },
+                    options: store.fabrics.map { LinkOption(id: $0.id, label: $0.displayName, sub: $0.code, imageName: $0.imageFileNames.first) },
                     selection: $selFabrics
                 )) {
                     linkRowLabel(title: "布料", count: selFabrics.count)
                 }
                 NavigationLink(destination: BrainstormLinkPickerView(
                     title: "关联成品",
-                    options: store.works.map { (id: $0.id, label: $0.name.isEmpty ? "未命名成品" : $0.name, sub: "") },
+                    options: store.works.map { LinkOption(id: $0.id, label: $0.name.isEmpty ? "未命名成品" : $0.name, sub: "", imageName: $0.imageFileNames.first) },
                     selection: $selWorks
                 )) {
                     linkRowLabel(title: "成品", count: selWorks.count)
                 }
                 NavigationLink(destination: BrainstormLinkPickerView(
                     title: "关联其他",
-                    options: store.otherItems.map { (id: $0.id, label: $0.name.isEmpty ? "未命名" : $0.name, sub: $0.category) },
+                    options: store.otherItems.map { LinkOption(id: $0.id, label: $0.name.isEmpty ? "未命名" : $0.name, sub: $0.category, imageName: $0.imageFileNames.first) },
                     selection: $selOthers
                 )) {
                     linkRowLabel(title: "其他", count: selOthers.count)
@@ -1587,12 +1662,14 @@ struct BrainstormFormView: View {
             editing.linkedWorkIds = Array(selWorks)
             editing.linkedOtherIds = Array(selOthers)
             editing.status = statusSel
+            editing.colorCodes = Array(selColors)
             store.save()
         } else {
             let created = Brainstorm(
                 title: trimmed, content: content, imageFileNames: imageNames,
                 linkedFabricIds: Array(selFabrics), linkedWorkIds: Array(selWorks),
-                linkedOtherIds: Array(selOthers), status: statusSel
+                linkedOtherIds: Array(selOthers), status: statusSel,
+                colorCodes: Array(selColors)
             )
             store.addBrainstorm(created)
         }
@@ -1601,41 +1678,138 @@ struct BrainstormFormView: View {
 }
 
 // 通用多选器：脑洞表单里关联布料 / 成品 / 其他用。
+struct LinkOption: Identifiable {
+    let id: UUID
+    let label: String
+    let sub: String
+    let imageName: String?
+}
+
 struct BrainstormLinkPickerView: View {
     @EnvironmentObject private var store: Store
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     var title: String
-    var options: [(id: UUID, label: String, sub: String)]
+    var options: [LinkOption]
     @Binding var selection: Set<UUID>
+    @State private var searchText = ""
+    @State private var isGrid = false
+
+    private var filtered: [LinkOption] {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return options }
+        let kw = searchText.lowercased()
+        return options.filter { $0.label.lowercased().contains(kw) || $0.sub.lowercased().contains(kw) }
+    }
+
+    private func toggle(_ id: UUID) {
+        if selection.contains(id) { selection.remove(id) }
+        else { selection.insert(id) }
+    }
 
     var body: some View {
-        List {
-            if options.isEmpty {
-                Text("暂无可选").foregroundColor(.secondary)
-            } else {
-                ForEach(options, id: \.id) { option in
-                    Button(action: {
-                        if selection.contains(option.id) { selection.remove(option.id) }
-                        else { selection.insert(option.id) }
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(option.label).foregroundColor(.primary)
-                                if !option.sub.isEmpty {
-                                    Text(option.sub).font(.caption).foregroundColor(.secondary)
-                                }
-                            }
-                            Spacer()
-                            if selection.contains(option.id) {
-                                Image(systemName: "checkmark").foregroundColor(themeAccent)
-                            }
+        VStack(spacing: 0) {
+            // 置顶搜索栏 + 视图切换
+            HStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                    TextField("搜索", text: $searchText)
+                }
+                .padding(8)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                Button(action: { isGrid.toggle() }) {
+                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                        .font(.title3)
+                        .foregroundColor(themeAccent)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.systemBackground))
+
+            if filtered.isEmpty {
+                Text("暂无可选").foregroundColor(.secondary).padding()
+                Spacer()
+            } else if isGrid {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(filtered) { option in
+                            gridCard(option)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .padding()
                 }
+            } else {
+                List {
+                    ForEach(filtered) { option in
+                        listRow(option)
+                    }
+                }
+                .listStyle(.plain)
             }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func thumb(_ option: LinkOption) -> some View {
+        Group {
+            if let name = option.imageName, let uiImage = FabricImageStore.loadImage(named: name) {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+            } else {
+                Rectangle().fill(ThemeHelper.accentSoft(store.themeName))
+                    .overlay(Image(systemName: "photo").foregroundColor(themeAccent))
+            }
+        }
+    }
+
+    private func listRow(_ option: LinkOption) -> some View {
+        Button(action: { toggle(option.id) }) {
+            HStack(spacing: 12) {
+                thumb(option)
+                    .frame(width: 56, height: 56)
+                    .cornerRadius(8)
+                    .clipped()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.label).foregroundColor(.primary)
+                    if !option.sub.isEmpty {
+                        Text(option.sub).font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                if selection.contains(option.id) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(themeAccent)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func gridCard(_ option: LinkOption) -> some View {
+        Button(action: { toggle(option.id) }) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topTrailing) {
+                    thumb(option)
+                        .frame(height: 120)
+                        .clipped()
+                    if selection.contains(option.id) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(themeAccent)
+                            .background(Circle().fill(Color.white))
+                            .padding(8)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.label).font(.subheadline).foregroundColor(.primary).lineLimit(1)
+                    if !option.sub.isEmpty {
+                        Text(option.sub).font(.caption).foregroundColor(.secondary).lineLimit(1)
+                    }
+                }
+                .padding(8)
+            }
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(selection.contains(option.id) ? themeAccent : Color.gray.opacity(0.2), lineWidth: selection.contains(option.id) ? 2 : 1))
+        }
+        .buttonStyle(.plain)
     }
 }

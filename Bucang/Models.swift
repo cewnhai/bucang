@@ -161,16 +161,19 @@ final class Brainstorm: Identifiable, Codable {
     var status: String   // 想法中 / 已完成 / 已放弃
     var createdAt: Date
     var convertedWorkId: UUID?
+    var colorCodes: [String]   // 颜色搭配（色码数组）
     init(id: UUID = UUID(), title: String = "", content: String = "", imageFileNames: [String] = [],
          linkedFabricIds: [UUID] = [], linkedWorkIds: [UUID] = [], linkedOtherIds: [UUID] = [],
-         status: String = "想法中", createdAt: Date = Date(), convertedWorkId: UUID? = nil) {
+         status: String = "想法中", createdAt: Date = Date(), convertedWorkId: UUID? = nil,
+         colorCodes: [String] = []) {
         self.id = id; self.title = title; self.content = content; self.imageFileNames = imageFileNames
         self.linkedFabricIds = linkedFabricIds; self.linkedWorkIds = linkedWorkIds
         self.linkedOtherIds = linkedOtherIds; self.status = status
         self.createdAt = createdAt; self.convertedWorkId = convertedWorkId
+        self.colorCodes = colorCodes
     }
     private enum CodingKeys: String, CodingKey {
-        case id, title, content, imageFileNames, linkedFabricIds, linkedWorkIds, linkedOtherIds, status, createdAt, convertedWorkId
+        case id, title, content, imageFileNames, linkedFabricIds, linkedWorkIds, linkedOtherIds, status, createdAt, convertedWorkId, colorCodes
     }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -184,6 +187,7 @@ final class Brainstorm: Identifiable, Codable {
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? "想法中"
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         convertedWorkId = try c.decodeIfPresent(UUID.self, forKey: .convertedWorkId)
+        colorCodes = try c.decodeIfPresent([String].self, forKey: .colorCodes) ?? []
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -192,6 +196,7 @@ final class Brainstorm: Identifiable, Codable {
         try c.encode(linkedFabricIds, forKey: .linkedFabricIds); try c.encode(linkedWorkIds, forKey: .linkedWorkIds)
         try c.encode(linkedOtherIds, forKey: .linkedOtherIds); try c.encode(status, forKey: .status)
         try c.encode(createdAt, forKey: .createdAt); try c.encodeIfPresent(convertedWorkId, forKey: .convertedWorkId)
+        try c.encode(colorCodes, forKey: .colorCodes)
     }
 }
 

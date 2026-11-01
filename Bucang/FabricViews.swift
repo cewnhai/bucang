@@ -1939,41 +1939,114 @@ struct FabricBrainstormLinkPickerView: View {
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    @State private var searchText = ""
+    @State private var isGrid = false
+
+    private var filtered: [Brainstorm] {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return store.brainstorms }
+        let kw = searchText.lowercased()
+        return store.brainstorms.filter { ($0.title.isEmpty ? "未命名脑洞" : $0.title).lowercased().contains(kw) }
+    }
 
     var body: some View {
-        List {
-            if store.brainstorms.isEmpty {
-                Text("还没有脑洞，去脑洞 Tab 先记一条").foregroundColor(.secondary)
-            } else {
-                ForEach(store.brainstorms) { b in
-                    let linked = b.linkedFabricIds.contains(fabric.id)
-                    Button(action: {
-                        if linked {
-                            b.linkedFabricIds.removeAll { $0 == fabric.id }
-                        } else {
-                            b.linkedFabricIds.append(fabric.id)
-                        }
-                        store.save()
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(b.title.isEmpty ? "未命名脑洞" : b.title).foregroundColor(.primary)
-                                Text(b.status).font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if linked {
-                                Image(systemName: "checkmark").foregroundColor(themeAccent)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                    TextField("搜索", text: $searchText)
                 }
+                .padding(8)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                Button(action: { isGrid.toggle() }) {
+                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                        .font(.title3)
+                        .foregroundColor(themeAccent)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.systemBackground))
+
+            if filtered.isEmpty {
+                Text("还没有脑洞，去脑洞 Tab 先记一条").foregroundColor(.secondary).padding()
+                Spacer()
+            } else if isGrid {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(filtered) { b in gridCard(b) }
+                    }
+                    .padding()
+                }
+            } else {
+                List { ForEach(filtered) { b in listRow(b) } }
+                .listStyle(.plain)
             }
         }
         .navigationTitle("关联脑洞")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
         }
+    }
+
+    private func toggle(_ b: Brainstorm) {
+        if b.linkedFabricIds.contains(fabric.id) {
+            b.linkedFabricIds.removeAll { $0 == fabric.id }
+        } else {
+            b.linkedFabricIds.append(fabric.id)
+        }
+        store.save()
+    }
+
+    private func thumb(_ b: Brainstorm) -> some View {
+        Group {
+            if let name = b.imageFileNames.first, let uiImage = FabricImageStore.loadImage(named: name) {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+            } else {
+                Rectangle().fill(ThemeHelper.accentSoft(store.themeName))
+                    .overlay(Image(systemName: "photo").foregroundColor(themeAccent))
+            }
+        }
+    }
+
+    private func listRow(_ b: Brainstorm) -> some View {
+        let linked = b.linkedFabricIds.contains(fabric.id)
+        return Button(action: { toggle(b) }) {
+            HStack(spacing: 12) {
+                thumb(b).frame(width: 56, height: 56).cornerRadius(8).clipped()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(b.title.isEmpty ? "未命名脑洞" : b.title).foregroundColor(.primary)
+                    Text(b.status).font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+                if linked { Image(systemName: "checkmark.circle.fill").foregroundColor(themeAccent) }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func gridCard(_ b: Brainstorm) -> some View {
+        let linked = b.linkedFabricIds.contains(fabric.id)
+        return Button(action: { toggle(b) }) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topTrailing) {
+                    thumb(b).frame(height: 120).clipped()
+                    if linked {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(themeAccent)
+                            .background(Circle().fill(Color.white))
+                            .padding(8)
+                    }
+                }
+                Text(b.title.isEmpty ? "未命名脑洞" : b.title)
+                    .font(.subheadline).foregroundColor(.primary).lineLimit(1)
+                    .padding(8)
+            }
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(linked ? themeAccent : Color.gray.opacity(0.2), lineWidth: linked ? 2 : 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -272,7 +272,8 @@ struct OtherEditView: View {
     @Environment(\.dismiss) private var dismiss
     var item: OtherItem?
     @State private var category: String
-    @State private var customCategory: String
+    @State private var subCategory: String
+    @State private var customSubCategory: String
     @State private var name: String
     @State private var quantityText: String
     @State private var priceText: String
@@ -284,8 +285,12 @@ struct OtherEditView: View {
     init(item: OtherItem?) {
         self.item = item
         self.originalImageNames = item?.imageFileNames ?? []
-        _category = State(initialValue: item?.category ?? "")
-        _customCategory = State(initialValue: "")
+        // 已存的 category 可能是子分类名，反查父级
+        let savedCat = item?.category ?? ""
+        // 注意：init 时 store 还未注入，用默认值；body 首次渲染时通过 onAppear 校正
+        _category = State(initialValue: savedCat)
+        _subCategory = State(initialValue: "")
+        _customSubCategory = State(initialValue: "")
         _name = State(initialValue: item?.name ?? "")
         _quantityText = State(initialValue: item?.quantityText ?? "")
         _priceText = State(initialValue: item == nil || !item!.hasPrice ? "" : String(item!.price))
@@ -294,8 +299,29 @@ struct OtherEditView: View {
         _imageNames = State(initialValue: item?.imageFileNames ?? [])
     }
 
+    // 当前一级分类的子分类列表
+    private var childCategories: [OtherCategory] {
+        guard let parent = store.otherCategoryTree.first(where: { $0.name == category && $0.parentId == nil }) else { return [] }
+        return store.otherCategoryTree.filter { $0.parentId == parent.id }.sorted { $0.order < $1.order }
+    }
+
     private func save() {
-        let categoryValue = customCategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? category.trimmingCharacters(in: .whitespacesAndNewlines) : customCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        var categoryValue = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 处理子分类
+        let customSub = customSubCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        if subCategory == "__custom__" && !customSub.isEmpty {
+            // 自定义子分类：自动加入设置
+            if let parent = store.otherCategoryTree.first(where: { $0.name == category && $0.parentId == nil }) {
+                if !store.otherCategoryTree.contains(where: { $0.name == customSub && $0.parentId == parent.id }) {
+                    let maxOrder = store.otherCategoryTree.filter { $0.parentId == parent.id }.map { $0.order }.max() ?? -1
+                    store.otherCategoryTree.append(OtherCategory(name: customSub, parentId: parent.id, order: maxOrder + 1))
+                    store.saveCategoryTree()
+                }
+            }
+            categoryValue = customSub
+        } else if !subCategory.isEmpty && subCategory != "__custom__" {
+            categoryValue = subCategory
+        }
         if !categoryValue.isEmpty && !store.otherCategories.contains(categoryValue) {
             store.otherCategories.append(categoryValue)
         }
@@ -326,9 +352,17 @@ struct OtherEditView: View {
             Section("其他条目（全部可留空，最少填名称加照片就能存）") {
                 Picker("所属分类", selection: $category) {
                     Text("未分类").tag("")
-                    ForEach(store.otherCategories, id: \.self) { Text($0).tag($0) }
+                    ForEach(store.otherCategoryTree.filter { $0.parentId == nil }.sorted { $0.order < $1.order }) { Text($0.name).tag($0.name) }
                 }
-                LabeledTextField(label: "自定义分类", placeholder: "填了就用这个", text: $customCategory)
+                .onChange(of: category) { _ in subCategory = ""; customSubCategory = "" }
+                Picker("子分类", selection: $subCategory) {
+                    Text("无").tag("")
+                    ForEach(childCategories) { Text($0.name).tag($0.name) }
+                    Text("自定义…").tag("__custom__")
+                }
+                if subCategory == "__custom__" {
+                    LabeledTextField(label: "自定义子分类", placeholder: "输入新子分类名称", text: $customSubCategory)
+                }
                 LabeledTextField(label: "名称", placeholder: "选填", text: $name)
                 LabeledTextField(label: "数量或长度", placeholder: "选填", text: $quantityText)
                 LabeledTextField(label: "价格", placeholder: "点击输入", text: $priceText, keyboardType: .decimalPad, unit: "元")
@@ -342,6 +376,14 @@ struct OtherEditView: View {
             }
         }
         .navigationTitle(item == nil ? "新增其他条目" : "编辑其他条目")
+        .onAppear {
+            // 若已存分类是子分类，拆成父级+子级
+            if let sub = store.otherCategoryTree.first(where: { $0.name == category && $0.parentId != nil }),
+               let parent = store.otherCategoryTree.first(where: { $0.id == sub.parentId }) {
+                category = parent.name
+                subCategory = sub.name
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("取消") {
