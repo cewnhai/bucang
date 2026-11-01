@@ -1590,18 +1590,21 @@ struct FabricDetailView: View {
 
     @MainActor
     private func generateLongImage() {
-        // 2026-11-01：延迟 0.3 秒再渲染，确保视图布局完成，避免首次白屏
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        // 2026-11-01：用 UIHostingController 渲染，确保有内容
+        DispatchQueue.main.async {
             let view = LongDetailSummaryView(fabric: fabric, store: store)
                 .frame(width: 360)
                 .background(Color.white)
-            let renderer = ImageRenderer(content: view)
-            renderer.scale = 2
-            renderer.proposedSize = .init(width: 360, height: 900)
-            if let image = renderer.uiImage {
-                self.longImage = image
-                self.showingLongImage = true
+            // 用 UIHostingController 确保视图有内容
+            let hosting = UIHostingController(rootView: view)
+            hosting.view.frame = CGRect(x: 0, y: 0, width: 360, height: 900)
+            hosting.view.layoutIfNeeded()
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 360, height: 900))
+            let image = renderer.image { _ in
+                hosting.view.drawHierarchy(in: hosting.view.bounds, afterScreenUpdates: true)
             }
+            self.longImage = image
+            self.showingLongImage = true
         }
     }
 }

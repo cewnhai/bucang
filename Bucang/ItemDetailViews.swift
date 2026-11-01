@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // 其他详情页（2026-11-01）：参考布料详情，右上角齿轮菜单
 struct OtherDetailView: View {
@@ -26,13 +27,15 @@ struct OtherDetailView: View {
             .padding(24)
             .frame(width: 360)
             .background(Color.white)
-            let renderer = ImageRenderer(content: view)
-            renderer.scale = 2
-            renderer.proposedSize = .init(width: 360, height: 600)
-            if let image = renderer.uiImage {
-                self.longImage = image
-                self.showingLongImage = true
+            let hosting = UIHostingController(rootView: view)
+            hosting.view.frame = CGRect(x: 0, y: 0, width: 360, height: 600)
+            hosting.view.layoutIfNeeded()
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 360, height: 600))
+            let image = renderer.image { _ in
+                hosting.view.drawHierarchy(in: hosting.view.bounds, afterScreenUpdates: true)
             }
+            self.longImage = image
+            self.showingLongImage = true
         }
     }
     
