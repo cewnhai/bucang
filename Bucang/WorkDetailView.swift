@@ -71,7 +71,6 @@ Text("\(headerPhotoIndex + 1) / \(work.imageFileNames.count)")
 private var summaryCard: some View {
 VStack(alignment:.leading, spacing: 8) {
 HStack {
-Text("编号：\(work.code.isEmpty ? "—": work.code)")
 .font(.caption).foregroundColor(.secondary)
 Spacer()
 Text(work.isFinished ? "已完成": "制作中")
@@ -141,7 +140,6 @@ var l: [String] = []
 l.append("喵了个咪 · 成品详情")
 l.append("")
 l.append("名称：" + (work.name.isEmpty ? "未命名成品" : work.name))
-if !work.code.isEmpty { l.append("编号：" + work.code)}
 l.append("状态：" + (work.isFinished ? "已完成": "制作中"))
 if !work.colorName.isEmpty { l.append("颜色：" + work.colorName)}
 if let s = work.startedAt { l.append("开始：" + CSVValues.dateString(s))}
