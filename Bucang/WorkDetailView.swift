@@ -11,9 +11,6 @@ struct WorkDetailView: View {
     @State private var showingLongImage = false
     @State private var longImage: UIImage?
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
-    private func brainstormRowTitle(_ bs: Brainstorm) -> String {
-        bs.title.isEmpty ? "未命名脑洞" : bs.title
-    }
     private var workSummary: String {
         var parts: [String] = []
         parts.append(work.name.isEmpty ? "未命名成品" : work.name)
@@ -97,14 +94,7 @@ struct WorkDetailView: View {
                         Text("暂无关联脑洞").font(.caption).foregroundColor(.secondary)
                     } else {
                         ForEach(linkedBrainstorms) { bs in
-                            NavigationLink(destination: BrainstormDetailView(brainstorm: bs)) {
-                                HStack {
-                                    Text(brainstormRowTitle(bs)).lineLimit(1)
-                                    Spacer()
-                                    Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 4)
-                            }
+                            BrainstormRowLink(bs: bs)
                         }
                     }
                 }
@@ -207,5 +197,20 @@ struct BrainstormPickerView: View {
         }
         .navigationTitle("关联脑洞")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - 脑洞行（独立 View，避免编译器类型检查超时）
+struct BrainstormRowLink: View {
+    var bs: Brainstorm
+    var body: some View {
+        NavigationLink(destination: BrainstormDetailView(brainstorm: bs)) {
+            HStack {
+                Text(bs.title.isEmpty ? "未命名脑洞" : bs.title).lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+            }
+            .padding(.vertical, 4)
+        }
     }
 }
