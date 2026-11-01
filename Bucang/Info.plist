@@ -11,6 +11,17 @@
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>喵了个咪</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.example.bucang.quark</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bucang</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

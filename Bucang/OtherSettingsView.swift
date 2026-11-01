@@ -92,6 +92,10 @@ struct OtherSettingsView: View {
                     }
 
                     CardView {
+                        QuarkBackupView()
+                    }
+
+                    CardView {
                         iCloudBackupView()
                     }
 

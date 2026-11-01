@@ -27,6 +27,8 @@
 		DAF753E8ACFB1472DEABD599 /* CreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FD60D85A823CF9DF974B1D /* CreationView.swift */; };
 		16BEC0643B3F67A9CE25D8C8 /* ZipBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DABF04A415FFD995DC97EC0 /* ZipBackup.swift */; };
 		D0687455C07D878E9DB04308 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 671E5B54412D9F8033A8454C /* Assets.xcassets */; };
+		EEEA4483E6CA68BE79F97903 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 643EEEAD302E1AEC385580D4 /* zh-Hans */; };
+		6D8E2F1A8C9D0E1F2A3B4C5D = {isa = PBXBuildFile; fileRef = 7E9F3A2B9D0E1F2A3B4C5D6E; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,7 +53,9 @@
 		9DABF04A415FFD995DC97EC0 /* ZipBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipBackup.swift; sourceTree = "<group>"; };
 		0683ECD9B7328DE45FCA9153 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		671E5B54412D9F8033A8454C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		643EEEAD302E1AEC385580D4 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh-Hans; path = zh-Hans.lproj/Localizable.strings; sourceTree = "<group>"; };
 		F5BF48AA40CAD7891EB709FC /* Bucang.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bucang.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E9F3A2B9D0E1F2A3B4C5D6E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuarkBackup.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,12 +95,14 @@
 				8C374ED2B787653DCE6E91E8 /* WebDAVBackup.swift */,
 				55A86BE3573FCDAF82E3A6BA /* FabricImages.swift */,
 				FBEB6D61F02BF82F376FB517 /* FabricShare.swift */,
+				7E9F3A2B9D0E1F2A3B4C5D6E /* QuarkBackup.swift */,
 				3BF3EC1971D7F68A9185777E /* HomeView.swift */,
 				310895809D52998A95C086E6 /* StatsView.swift */,
 				09FD60D85A823CF9DF974B1D /* CreationView.swift */,
 				9DABF04A415FFD995DC97EC0 /* ZipBackup.swift */,
 				0683ECD9B7328DE45FCA9153 /* Info.plist */, 
 				671E5B54412D9F8033A8454C /* Assets.xcassets */,
+				643EEEAD302E1AEC385580D4 /* zh-Hans */,
 			);
 			name = Bucang;
 			path = Bucang;
@@ -151,6 +157,7 @@
 			knownRegions = (
 				en,
 				Base,
+				zh-Hans,
 			);
 			mainGroup = 5928955287B8089ED2177128;
 			projectDirPath = "";
@@ -167,6 +174,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D0687455C07D878E9DB04308 /* Assets.xcassets in Resources */,
+				EEEA4483E6CA68BE79F97903 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
