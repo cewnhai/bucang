@@ -78,7 +78,7 @@ Text(work.isFinished ? "已完成": "制作中")
 .font(.caption).fontWeight(.semibold)
 .foregroundColor(.white)
 .padding(.horizontal, 8).padding(.vertical, 4)
-.background(work.isFinished? Color.green: themeAccent)
+.background(work.isFinished ? Color.green : themeAccent)
 .cornerRadius(10)
 }
 Text(work.name.isEmpty ? "未命名成品": work.name)
@@ -148,7 +148,7 @@ if let s = work.startedAt { l.append("开始：" + CSVValues.dateString(s))}
 if let f = work.finishedAt { l.append("完成：" + CSVValues.dateString(f))}
 l.append(String(format: "总成本：¥%.2f", store.workTotalCost(for: work)))
 if work.hasLaborCost { l.append(String(format: "工费：¥%.2f", work.laborCost))}
-if work.isSold { l.append("已售出" + (work.hasSalePrice? String(format: " ¥%.2f", work.salePrice): ""))}
+if work.isSold { l.append("已售出" + (work.hasSalePrice ? String(format: " ¥%.2f", work.salePrice) : ""))}
 if !work.note.isEmpty { l.append("备注：" + work.note)}
 if !linkedBrainstorms.isEmpty {
 l.append("")
@@ -342,8 +342,7 @@ Menu {
 Button("编辑", action: { showingEdit = true})
 Menu {
 Button(action: {
-let img: UIImage?
-if let existing = longImage {
+let img: UIImage ? if let existing = longImage {
 img = existing
 } else {
 generateLongImage(showSheet: false)
@@ -352,7 +351,7 @@ img = longImage
 if let img = img, let data = img.pngData() {
 let url = FileManager.default.temporaryDirectory
 .appendingPathComponent("成品长图-\(work.name.isEmpty ? "未命名": work.name)-\(Int(Date().timeIntervalSince1970)).png")
-try? data.write(to: url)
+try ? data.write(to: url)
 shareFileItem = ShareURLItem(url: url)
 }
 }) {
