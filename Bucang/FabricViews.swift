@@ -504,7 +504,7 @@ struct FabricDetailView: View {
                     Button("生成长图", action: { generateLongImage() })
                     Button("删除", role: .destructive) { showingDelete = true }
                 } label: {
-                    Image(systemName: "gearshape")
+                    Image(systemName: "slider.horizontal.3")
                 }
             }
         }
@@ -1589,8 +1589,12 @@ struct FabricDetailView: View {
     @MainActor
     private func generateLongImage() {
         let view = LongDetailSummaryView(fabric: fabric, store: store)
+            .frame(width: 360)
+            .background(Color.white)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
+        // 2026-11-01：给渲染器明确尺寸，避免白屏
+        renderer.proposedSize = .init(width: 360, height: 800)
         if let image = renderer.uiImage {
             longImage = image
             showingLongImage = true

@@ -31,9 +31,9 @@ struct BucangApp: App {
                 }
             }
             .onAppear {
-                // 开屏 2 秒后淡出
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    withAnimation(.easeOut(duration: 0.5)) {
+                // 开屏 3 秒后淡出（2026-11-01：丝滑，不闪烁）
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
                         showingSplash = false
                     }
                 }
@@ -123,8 +123,8 @@ struct SplashView: View {
                                 .frame(width: 70 - CGFloat(i * 15), height: 70 - CGFloat(i * 15))
                                 .rotationEffect(.degrees(Double(i * 60)))
                         }
-                        // 布仓艺术字
-                        Text("布仓")
+                        // 品牌艺术字
+                        Text("喵了个咪")
                             .font(.system(size: 28, weight: .black, design: .rounded))
                             .foregroundColor(Color(red: 0.91, green: 0.51, blue: 0.05))
                             .opacity(showYarnText ? 1 : 0)

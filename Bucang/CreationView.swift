@@ -292,9 +292,9 @@ struct OtherListView: View {
             ZStack(alignment: .topTrailing) {
                 if let first = item.imageFileNames.first,
                    let uiImage = FabricImageStore.loadImage(named: first) {
-                    Image(uiImage: uiImage).resizable().scaledToFill().frame(height: 120).clipped()
+                    Image(uiImage: uiImage).resizable().aspectRatio(contentMode: .fill).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150).clipped()
                 } else {
-                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(height: 120)
+                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
                         .overlay(Image(systemName: "archivebox").foregroundColor(themeAccent).font(.title))
                 }
                 if !item.category.isEmpty {
@@ -423,9 +423,9 @@ struct WishlistListView: View {
             ZStack(alignment: .topTrailing) {
                 if let first = item.imageFileNames.first,
                    let uiImage = FabricImageStore.loadImage(named: first) {
-                    Image(uiImage: uiImage).resizable().scaledToFill().frame(height: 120).clipped()
+                    Image(uiImage: uiImage).resizable().aspectRatio(contentMode: .fill).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150).clipped()
                 } else {
-                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(height: 120)
+                    Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
                         .overlay(Image(systemName: "heart").foregroundColor(themeAccent).font(.title))
                 }
                 Text(item.isPurchased ? "已购" : "待购")

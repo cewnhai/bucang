@@ -8,7 +8,33 @@ struct WorkDetailView: View {
     @State private var showingEdit = false
     @State private var showingDelete = false
     @State private var showingBrainstormPicker = false
+    @State private var showingLongImage = false
+    @State private var longImage: UIImage?
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private var workSummary: String {
+        var parts: [String] = []
+        parts.append(work.name.isEmpty ? "未命名成品" : work.name)
+        parts.append(work.isFinished ? "已完成" : "制作中")
+        if work.isSold { parts.append("已出售") }
+        if !work.note.isEmpty { parts.append(work.note) }
+        return parts.joined(separator: "\n")
+    }
+    private func generateLongImage() {
+        let view = VStack(alignment: .leading, spacing: 10) {
+            Text("喵了个咪 · 成品详情").font(.headline)
+            Text(workSummary).font(.body)
+        }
+        .padding(24)
+        .frame(width: 360)
+        .background(Color.white)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        renderer.proposedSize = .init(width: 360, height: 600)
+        if let image = renderer.uiImage {
+            longImage = image
+            showingLongImage = true
+        }
+    }
     
     private var linkedBrainstorms: [Brainstorm] {
         store.brainstorms.filter { $0.linkedWorkIds.contains(work.id) }
@@ -108,9 +134,13 @@ struct WorkDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("编辑", action: { showingEdit = true })
+                    ShareLink(item: workSummary, preview: SharePreview(work.displayName)) {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
+                    Button("生成长图", action: { generateLongImage() })
                     Button("删除", role: .destructive) { showingDelete = true }
                 } label: {
-                    Image(systemName: "gearshape")
+                    Image(systemName: "slider.horizontal.3")
                 }
             }
         }
@@ -129,6 +159,20 @@ struct WorkDetailView: View {
         .sheet(isPresented: $showingBrainstormPicker) {
             NavigationStack {
                 BrainstormPickerView(work: work)
+            }
+        }
+        .sheet(isPresented: $showingLongImage) {
+            if let longImage {
+                NavigationStack {
+                    VStack {
+                        Image(uiImage: longImage).resizable().scaledToFit().padding()
+                        ShareLink(item: Image(uiImage: longImage), preview: SharePreview("成品长图")) {
+                            Label("分享长图", systemImage: "square.and.arrow.up")
+                        }.buttonStyle(.borderedProminent).tint(themeAccent)
+                    }
+                    .navigationTitle("长图")
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showingLongImage = false } } }
+                }
             }
         }
     }

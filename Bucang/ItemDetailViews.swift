@@ -54,8 +54,12 @@ struct OtherDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("编辑", action: { showingEdit = true })
+                    ShareLink(item: itemSummary, preview: SharePreview(item.displayName)) {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
+                    Button("生成长图", action: { generateLongImage() })
                     Button("删除", role: .destructive) { showingDelete = true }
-                } label: { Image(systemName: "gearshape") }
+                } label: { Image(systemName: "slider.horizontal.3") }
             }
         }
         .sheet(isPresented: $showingEdit) {
@@ -142,7 +146,7 @@ struct WishlistDetailView: View {
                 Menu {
                     Button("编辑", action: { showingEdit = true })
                     Button("删除", role: .destructive) { showingDelete = true }
-                } label: { Image(systemName: "gearshape") }
+                } label: { Image(systemName: "slider.horizontal.3") }
             }
         }
         .sheet(isPresented: $showingEdit) {
