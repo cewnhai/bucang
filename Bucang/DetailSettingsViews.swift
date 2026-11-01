@@ -3,6 +3,7 @@ import SwiftUI
 // 卡片显示信息明细（2026-10-31）：二级菜单
 struct CardDisplaySettingsView: View {
     @EnvironmentObject private var store: Store
+    @Environment(\.editMode) private var editMode
     var body: some View {
         Form {
             // 2026-11-01：已选字段可长按拖动排序（编辑模式）
@@ -44,7 +45,17 @@ struct CardDisplaySettingsView: View {
         }
         .navigationTitle("卡片显示信息")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { EditButton() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    withAnimation {
+                        editMode.wrappedValue = editMode.wrappedValue == .active ? .inactive : .active
+                    }
+                }) {
+                    Image(systemName: editMode.wrappedValue == .active ? "checkmark" : "pencil")
+                }
+            }
+        }
     }
 }
 

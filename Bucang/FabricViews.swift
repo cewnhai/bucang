@@ -244,7 +244,7 @@ struct FabricCardView: View {
             }
             .padding(12)
         }
-        .frame(height: 300)
+        .frame(height: 260)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
@@ -2039,7 +2039,7 @@ struct LongDetailSummaryView: View {
     private var remaining: Double { store.remaining(for: fabric) }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("布仓 · 布料详情").font(.headline)
+            Text("喵了个咪 · 布料详情").font(.headline)
             if !fabric.code.isEmpty { Text("编号：\(fabric.code)") }
             Text("名称：\(fabric.displayName)")
             Text("已消耗：\(LengthUnitHelper.format(fabric.usedLength, unit: store.lengthUnit)) \(LengthUnitHelper.suffix(unit: store.lengthUnit))")

@@ -97,6 +97,7 @@ struct BucangView: View {
     @State private var filterColors: Set<String> = []
     @State private var filterTagIDs: Set<UUID> = []
     @State private var filterChannels: Set<String> = []
+    @Environment(\.editMode) private var editMode
     @State private var showingFilter = false
     @State private var showingSort = false
     @State private var showingImportExport = false
