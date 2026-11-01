@@ -1161,7 +1161,104 @@ struct BrainstormDetailView: View {
     var brainstorm: Brainstorm
     @State private var showingEdit = false
     @State private var showingDeleteConfirm = false
+    @State private var headerPhotoIndex = 0
+    @State private var collapsedSections: Set<String> = []
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+
+    // MARK: - 照片头（统一为布料详情样式）
+    private var photoHeader: some View {
+        ZStack(alignment: .topTrailing) {
+            if brainstorm.imageFileNames.isEmpty {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.orange.opacity(0.15))
+                    .aspectRatio(4 / 3, contentMode: .fit)
+                    .overlay(
+                        Image(systemName: "lightbulb")
+                            .font(.largeTitle)
+                            .foregroundColor(.orange)
+                    )
+            } else {
+                TabView(selection: $headerPhotoIndex) {
+                    ForEach(Array(brainstorm.imageFileNames.enumerated()), id: \.element) { idx, name in
+                        Group {
+                            if let uiImage = FabricImageStore.loadImage(named: name) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Color.gray.opacity(0.15)
+                            }
+                        }
+                        .tag(idx)
+                    }
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .aspectRatio(4 / 3, contentMode: .fit)
+                .cornerRadius(16)
+                .clipped()
+            }
+            if brainstorm.imageFileNames.count > 1 {
+                Text("\(headerPhotoIndex + 1) / \(brainstorm.imageFileNames.count)")
+                    .font(.caption).foregroundColor(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.black.opacity(0.45))
+                    .cornerRadius(10)
+                    .padding(8)
+            }
+        }
+    }
+
+    // MARK: - 摘要卡（统一为布料详情样式）
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(brainstorm.status)
+                    .font(.caption).fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(statusColor)
+                    .cornerRadius(10)
+                Spacer()
+                Text(CSVValues.dateFormatter.string(from: brainstorm.createdAt))
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            Text(brainstorm.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名脑洞" : brainstorm.title)
+                .font(.title3).fontWeight(.bold)
+            if !brainstorm.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(String(brainstorm.content.prefix(100)))
+                    .font(.subheadline).foregroundColor(.secondary).lineLimit(2)
+            }
+        }
+        .padding(16)
+        .background(Design.card)
+        .cornerRadius(Design.corner)
+    }
+
+    // MARK: - 可折叠分区（统一为布料详情样式）
+    private func collapsibleSection<Content: View>(key: String, title: String, @ViewBuilder content: () -> Content) -> some View {
+        let collapsed = collapsedSections.contains(key)
+        return VStack(alignment: .leading, spacing: 0) {
+            Button(action: {
+                if collapsed { collapsedSections.remove(key) } else { collapsedSections.insert(key) }
+            }) {
+                HStack {
+                    Text(title).font(.headline)
+                    Spacer()
+                    Image(systemName: collapsed ? "chevron.down" : "chevron.up")
+                        .foregroundColor(.secondary).font(.caption)
+                }
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+            if !collapsed {
+                content()
+                    .padding(.bottom, 12)
+            }
+        }
+        .padding(.horizontal, 16)
+        .background(Design.card)
+        .cornerRadius(Design.corner)
+    }
 
     private var statusColor: Color {
         switch brainstorm.status {
@@ -1174,28 +1271,35 @@ struct BrainstormDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                photoHeader
+                summaryCard
+                // 全部收起
                 HStack {
-                    Text(brainstorm.status)
-                        .font(.subheadline).fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(statusColor)
-                        .cornerRadius(12)
                     Spacer()
-                    Text(CSVValues.dateFormatter.string(from: brainstorm.createdAt))
-                        .font(.caption).foregroundColor(.secondary)
+                    Button(action: {
+                        if collapsedSections.isEmpty {
+                            collapsedSections = ["content", "images", "linked"]
+                        } else {
+                            collapsedSections = []
+                        }
+                    }) {
+                        Label(collapsedSections.isEmpty ? "全部收起" : "全部展开", systemImage: "chevron.down.circle")
+                            .font(.subheadline).foregroundColor(themeAccent)
+                    }
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("灵感内容").font(.headline)
+                // 灵感内容
+                collapsibleSection(key: "content", title: "灵感内容") {
                     if brainstorm.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text("暂无内容").font(.subheadline).foregroundColor(.secondary)
                     } else {
                         Text(brainstorm.content).font(.subheadline)
                     }
                 }
-                if !brainstorm.imageFileNames.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("参考图").font(.headline)
+                // 参考图
+                collapsibleSection(key: "images", title: "参考图") {
+                    if brainstorm.imageFileNames.isEmpty {
+                        Text("暂无图片").font(.subheadline).foregroundColor(.secondary)
+                    } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
                             ForEach(brainstorm.imageFileNames, id: \.self) { name in
                                 Group {
@@ -1214,7 +1318,11 @@ struct BrainstormDetailView: View {
                         }
                     }
                 }
-                linkedSection
+                // 关联明细
+                collapsibleSection(key: "linked", title: "关联明细") {
+                    linkedSection
+                }
+                // 转成品 / 删除
                 VStack(spacing: 10) {
                     if brainstorm.convertedWorkId == nil {
                         Button(action: { brainstormConvertToWork(store: store, brainstorm: brainstorm) }) {
@@ -1234,10 +1342,6 @@ struct BrainstormDetailView: View {
                         .buttonStyle(.plain)
                         .disabled(true)
                     }
-                    Button(role: .destructive, action: { showingDeleteConfirm = true }) {
-                        Label("删除脑洞", systemImage: "trash")
-                            .frame(maxWidth: .infinity).padding(.vertical, 10)
-                    }
                 }
             }
             .padding(16)
@@ -1245,8 +1349,13 @@ struct BrainstormDetailView: View {
         .navigationTitle(brainstorm.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "脑洞详情" : brainstorm.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("编辑") { showingEdit = true }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button("编辑", action: { showingEdit = true })
+                    Button("删除", role: .destructive) { showingDeleteConfirm = true }
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
             }
         }
         .sheet(isPresented: $showingEdit) {
