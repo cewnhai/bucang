@@ -7,7 +7,32 @@ struct OtherDetailView: View {
     var item: OtherItem
     @State private var showingEdit = false
     @State private var showingDelete = false
+    @State private var showingLongImage = false
+    @State private var longImage: UIImage?
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private var itemSummary: String {
+        var parts: [String] = []
+        parts.append(item.name.isEmpty ? "未命名" : item.name)
+        if !item.categoryName.isEmpty { parts.append("分类：" + item.categoryName) }
+        if !item.note.isEmpty { parts.append(item.note) }
+        return parts.joined(separator: "\n")
+    }
+    private func generateLongImage() {
+        let view = VStack(alignment: .leading, spacing: 10) {
+            Text("喵了个咪 · 其他详情").font(.headline)
+            Text(itemSummary).font(.body)
+        }
+        .padding(24)
+        .frame(width: 360)
+        .background(Color.white)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        renderer.proposedSize = .init(width: 360, height: 600)
+        if let image = renderer.uiImage {
+            longImage = image
+            showingLongImage = true
+        }
+    }
     
     var body: some View {
         ScrollView {
@@ -65,6 +90,20 @@ struct OtherDetailView: View {
         .sheet(isPresented: $showingEdit) {
             NavigationStack { OtherEditView(item: item) }
         }
+        .sheet(isPresented: $showingLongImage) {
+            if let longImage {
+                NavigationStack {
+                    VStack {
+                        Image(uiImage: longImage).resizable().scaledToFit().padding()
+                        ShareLink(item: Image(uiImage: longImage), preview: SharePreview("其他长图")) {
+                            Label("分享长图", systemImage: "square.and.arrow.up")
+                        }.buttonStyle(.borderedProminent).tint(themeAccent)
+                    }
+                    .navigationTitle("长图")
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showingLongImage = false } } }
+                }
+            }
+        }
         .alert("删除条目", isPresented: $showingDelete) {
             Button("删除", role: .destructive) {
                 store.deleteOtherItem(item)
@@ -85,6 +124,14 @@ struct WishlistDetailView: View {
     @State private var showingEdit = false
     @State private var showingDelete = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private var wishlistSummary: String {
+        var parts: [String] = []
+        parts.append(item.name.isEmpty ? "未命名心愿" : item.name)
+        parts.append(item.isPurchased ? "已购" : "待购")
+        if item.hasEstimatedPrice { parts.append(String(format: "预估 ¥%.2f", item.estimatedPrice)) }
+        if !item.note.isEmpty { parts.append(item.note) }
+        return parts.joined(separator: "\n")
+    }
     
     var body: some View {
         ScrollView {
@@ -145,6 +192,9 @@ struct WishlistDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("编辑", action: { showingEdit = true })
+                    ShareLink(item: wishlistSummary, preview: SharePreview(item.name.isEmpty ? "未命名心愿" : item.name)) {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
                     Button("删除", role: .destructive) { showingDelete = true }
                 } label: { Image(systemName: "slider.horizontal.3") }
             }
