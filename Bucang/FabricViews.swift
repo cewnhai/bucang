@@ -363,6 +363,8 @@ struct FabricDetailView: View {
     @State private var showingDelete = false
     @State private var showingSimilar = false
     @State private var showingLongImage = false
+    @State private var shareFileURL: URL?
+    @State private var showingShareFile = false
     @State private var longImage: UIImage?
     // 子编号关联布料：linkingSubCode 为正在关联的子编号，sheet 里选布料。
     @State private var showingSubCodePicker = false
@@ -512,6 +514,12 @@ struct FabricDetailView: View {
                             showingLongImage = true
                         }
                     })
+                    Button("分享文件", action: {
+                        if let url = FabricShare.exportFile(fabric: fabric, store: store) {
+                            shareFileURL = url
+                            showingShareFile = true
+                        }
+                    })
                     Button("删除", role: .destructive) { showingDelete = true }
                 } label: {
                     Image(systemName: "slider.horizontal.3")
@@ -549,6 +557,11 @@ struct FabricDetailView: View {
         .onAppear {
             if longImage == nil {
                 generateLongImageSilent()
+            }
+        }
+        .sheet(isPresented: $showingShareFile) {
+            if let url = shareFileURL {
+                ShareSheet(url: url)
             }
         }
         .sheet(isPresented: $showingLongImage) {

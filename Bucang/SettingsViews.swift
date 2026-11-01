@@ -15,7 +15,7 @@ enum DictKind: String, CaseIterable, Identifiable {
 }
 
 enum ImportKind {
-    case csv, zip
+    case csv, zip, share
 }
 
 struct LocalZipFile: Identifiable {
@@ -293,7 +293,7 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .fileImporter(
                 isPresented: $showingImporter,
-                allowedContentTypes: importKind == .zip ? [UTType.data] : [UTType.commaSeparatedText],
+                allowedContentTypes: importKind == .csv ? [UTType.commaSeparatedText] : [UTType.data],
                 allowsMultipleSelection: importKind == .csv
             ) { result in
                 switch result {
@@ -402,6 +402,8 @@ struct ImportExportSheetView: View {
                 .buttonStyle(.bordered).tint(Design.accent)
                 Button("导入备份压缩包 (.zip)") { importKind = .zip; showingImporter = true }
                     .buttonStyle(.borderedProminent).tint(Design.accent)
+                Button("导入布料分享文件 (.zip)") { importKind = .share; showingImporter = true }
+                    .buttonStyle(.borderedProminent).tint(Design.accent)
                 Text("如果在选择器里选不到 zip 文件，请用设置页的“本地压缩包（无需选择器）”列表导入：把压缩包移到文件 App 的 Bucang 文件夹，再回设置页点列表里的导入。")
                     .font(.caption).foregroundColor(.secondary)
                 Button("完成") { dismiss() }
@@ -413,7 +415,7 @@ struct ImportExportSheetView: View {
         .navigationTitle("导入导出")
         .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: importKind == .zip ? [UTType.data] : [UTType.commaSeparatedText],
+            allowedContentTypes: importKind == .csv ? [UTType.commaSeparatedText] : [UTType.data],
             allowsMultipleSelection: importKind == .csv
         ) { result in
             switch result {
@@ -423,7 +425,9 @@ struct ImportExportSheetView: View {
                 } else if let url = urls.first, url.pathExtension.lowercased() == "zip" {
                     let accessing = url.startAccessingSecurityScopedResource()
                     defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-                    if let data = try? Data(contentsOf: url) {
+                    if importKind == .share {
+                        importSummary = FabricShare.importFile(from: url, store: store)
+                    } else if let data = try? Data(contentsOf: url) {
                         importSummary = ZipBackup.importZip(data, store: store).text
                     } else {
                         importSummary = "读不到压缩包文件。"
