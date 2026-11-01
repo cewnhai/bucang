@@ -1590,22 +1590,45 @@ struct FabricDetailView: View {
 
     @MainActor
     private func generateLongImage() {
-        // 2026-11-01：用 UIHostingController 渲染，确保有内容
-        DispatchQueue.main.async {
-            let view = LongDetailSummaryView(fabric: fabric, store: store)
-                .frame(width: 360)
-                .background(Color.white)
-            // 用 UIHostingController 确保视图有内容
-            let hosting = UIHostingController(rootView: view)
-            hosting.view.frame = CGRect(x: 0, y: 0, width: 360, height: 900)
-            hosting.view.layoutIfNeeded()
-            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 360, height: 900))
-            let image = renderer.image { _ in
-                hosting.view.drawHierarchy(in: hosting.view.bounds, afterScreenUpdates: true)
+        // 2026-11-01：纯 UIKit 绘制，不依赖 SwiftUI 渲染
+        let lines: [String] = {
+            var l: [String] = []
+            l.append("喵了个咪 · 布料详情")
+            l.append("")
+            if !fabric.code.isEmpty { l.append("编号：" + fabric.code) }
+            l.append("名称：" + fabric.displayName)
+            l.append("已消耗：" + String(format: "%.2f", fabric.usedLength) + "米")
+            l.append("已售出：" + String(format: "%.2f", sold) + "米")
+            if fabric.hasPurchaseLength {
+                l.append("剩余：" + String(format: "%.2f", remaining) + "米")
+                l.append("布长：" + String(format: "%.2f", fabric.length) + "米")
             }
-            self.longImage = image
-            self.showingLongImage = true
+            if fabric.width > 0 { l.append("幅宽：" + String(format: "%.0f", fabric.widthCm) + "厘米") }
+            if fabric.hasTotalPrice { l.append(String(format: "总价：¥%.2f", fabric.purchasePrice)) }
+            if !fabric.materialName.isEmpty { l.append("材质：" + fabric.materialName) }
+            if !fabric.channelName.isEmpty { l.append("渠道：" + fabric.channelName) }
+            let tagNames = store.tags(for: fabric).map { $0.name }
+            if !tagNames.isEmpty { l.append("标签：" + tagNames.joined(separator: "、")) }
+            return l
+        }()
+        let width: CGFloat = 720
+        let lineHeight: CGFloat = 44
+        let padding: CGFloat = 40
+        let height = padding * 2 + CGFloat(lines.count) * lineHeight
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height))
+        let image = renderer.image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            var y = padding
+            for (i, line) in lines.enumerated() {
+                let font = i == 0 ? UIFont.boldSystemFont(ofSize: 32) : UIFont.systemFont(ofSize: 28)
+                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black]
+                (line as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: attrs)
+                y += lineHeight
+            }
         }
+        self.longImage = image
+        self.showingLongImage = true
     }
 }
 
