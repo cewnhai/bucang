@@ -1,5 +1,5 @@
 import SwiftUI
-import AuthenticationServices
+import WebKit
 import CryptoKit
 import Security
 
@@ -60,75 +60,34 @@ class QuarkManager: ObservableObject {
     @Published var userNickname = ""
 
     private let baseURL = "https://drive-pc.quark.cn"
-    private var authToken: String? { QuarkKeychain.load() }
+    private var authCookie: String? { QuarkKeychain.load() }
 
     init() {
         isAuthorized = QuarkKeychain.load() != nil
     }
 
     // MARK: - OAuth 登录
+    @Published var showingLoginWeb = false
+
     func login() {
-        // 夸克官方 Agent OAuth 端点
-        // 实际使用时需要替换为你的应用配置
-        let authURLString = "https://pan.quark.cn/open/v1/oauth/agent?response_type=code&client_id=bucang&redirect_uri=bucang://quark-auth&scope=all"
-        guard let authURL = URL(string: authURLString) else {
-            statusMessage = "授权地址无效"
-            return
-        }
-        guard let scheme = URL(string: "bucang://")?.scheme else { return }
-
-        let session = ASWebAuthenticationSession(url: authURL, callbackURLScheme: scheme) { [weak self] callbackURL, error in
-            guard let self = self else { return }
-            Task { @MainActor in
-                if let error = error {
-                    self.statusMessage = "授权取消或失败：\(error.localizedDescription)"
-                    return
-                }
-                guard let url = callbackURL,
-                      let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                      let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-                    self.statusMessage = "未获取到授权码"
-                    return
-                }
-                await self.exchangeCodeForToken(code)
-            }
-        }
-        session.presentationContextProvider = AuthPresentationProvider()
-        session.prefersEphemeralWebBrowserSession = false
-        session.start()
+        // 打开网页登录，用户手动登录后提取 Cookie
+        showingLoginWeb = true
     }
 
-    private func exchangeCodeForToken(_ code: String) async {
-        isBusy = true
-        defer { isBusy = false }
-        // 用授权码换 token
-        // 注意：实际的 token 交换接口需要根据夸克官方文档调整
-        let url = URL(string: "https://pan.quark.cn/open/v1/oauth/token")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "grant_type": "authorization_code",
-            "code": code,
-            "client_id": "bucang",
-            "redirect_uri": "bucang://quark-auth"
-        ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let token = json["access_token"] as? String {
-                QuarkKeychain.save(token)
-                isAuthorized = true
-                statusMessage = "授权成功"
-                await fetchUserInfo()
-            } else {
-                statusMessage = "Token 交换失败"
-            }
-        } catch {
-            statusMessage = "网络错误：\(error.localizedDescription)"
+    func completeLoginWithCookies(_ cookies: [HTTPCookie]) {
+        // 提取关键 Cookie 并保存
+        let cookieString = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+        if !cookieString.isEmpty {
+            QuarkKeychain.save(cookieString)
+            isAuthorized = true
+            statusMessage = "登录成功"
+            showingLoginWeb = false
+            Task { await fetchUserInfo() }
+        } else {
+            statusMessage = "未获取到登录信息，请确认已登录"
         }
     }
+
 
     func logout() {
         QuarkKeychain.delete()
@@ -139,10 +98,10 @@ class QuarkManager: ObservableObject {
 
     // MARK: - 用户信息
     func fetchUserInfo() async {
-        guard let token = authToken else { return }
+        guard let token = authCookie else { return }
         let url = URL(string: "\(baseURL)/1/clouddrive/member?pr=ucpro&fr=pc&uc_param_str=")!
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "Cookie")
         request.setValue("https://pan.quark.cn/", forHTTPHeaderField: "Referer")
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
@@ -158,7 +117,7 @@ class QuarkManager: ObservableObject {
 
     // MARK: - 文件上传
     func uploadBackup(data: Data, fileName: String) async -> Bool {
-        guard let token = authToken else {
+        guard let token = authCookie else {
             statusMessage = "请先授权登录"
             return false
         }
@@ -211,7 +170,7 @@ class QuarkManager: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
         request.setValue("https://pan.quark.cn/", forHTTPHeaderField: "Referer")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "Cookie")
         let now = Int(Date().timeIntervalSince1970 * 1000)
         let body: [String: Any] = [
             "ccp_hash_update": true,
@@ -239,7 +198,7 @@ class QuarkManager: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
         request.setValue("https://pan.quark.cn/", forHTTPHeaderField: "Referer")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "Cookie")
         let body: [String: Any] = [
             "md5": md5,
             "sha1": sha1,
@@ -260,7 +219,7 @@ class QuarkManager: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
         request.setValue("https://pan.quark.cn/", forHTTPHeaderField: "Referer")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "Cookie")
         let body: [String: Any] = [
             "task_id": taskId,
             "upload_id": uploadId,
@@ -281,7 +240,7 @@ class QuarkManager: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
         request.setValue("https://pan.quark.cn/", forHTTPHeaderField: "Referer")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "Cookie")
         let body: [String: Any] = ["task_id": taskId]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -303,15 +262,6 @@ class QuarkManager: ObservableObject {
     }
 }
 
-// MARK: - 授权页面代理
-private class AuthPresentationProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        return UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
-    }
-}
 
 // MARK: - Data 哈希扩展
 private extension Data {
@@ -386,5 +336,54 @@ struct QuarkBackupView: View {
         .padding(16)
         .background(Design.card)
         .cornerRadius(Design.corner)
+        .sheet(isPresented: $quark.showingLoginWeb) {
+            QuarkLoginWebView()
+                .environmentObject(quark)
+        }
     }
+}
+
+// MARK: - 夸克网页登录
+struct QuarkLoginWebView: View {
+    @EnvironmentObject var quark: QuarkManager
+    @Environment(\.dismiss) var dismiss
+    @State private var webview: WKWebView?
+
+    var body: some View {
+        NavigationStack {
+            QuarkWebViewRepresentable(webview: $webview)
+            .navigationTitle("登录夸克网盘")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成登录") {
+                        WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
+                            let quarkCookies = cookies.filter { $0.domain.contains("quark.cn") }
+                            DispatchQueue.main.async {
+                                quark.completeLoginWithCookies(quarkCookies)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct QuarkWebViewRepresentable: UIViewRepresentable {
+    @Binding var webview: WKWebView?
+
+    func makeUIView(context: Context) -> WKWebView {
+        let wv = WKWebView()
+        if let url = URL(string: "https://pan.quark.cn") {
+            wv.load(URLRequest(url: url))
+        }
+        DispatchQueue.main.async { webview = wv }
+        return wv
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }

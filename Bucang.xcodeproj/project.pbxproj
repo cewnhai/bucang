@@ -29,6 +29,7 @@
 		D0687455C07D878E9DB04308 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 671E5B54412D9F8033A8454C /* Assets.xcassets */; };
 		EEEA4483E6CA68BE79F97903 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 643EEEAD302E1AEC385580D4 /* zh-Hans */; };
 		6D8E2F1A8C9D0E1F2A3B4C5D = {isa = PBXBuildFile; fileRef = 7E9F3A2B9D0E1F2A3B4C5D6E; };
+		8F1A2B3C4D5E6F7A8B9C0D1E = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F7A8B9C0D1E2F; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +57,7 @@
 		643EEEAD302E1AEC385580D4 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh-Hans; path = zh-Hans.lproj/Localizable.strings; sourceTree = "<group>"; };
 		F5BF48AA40CAD7891EB709FC /* Bucang.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bucang.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E9F3A2B9D0E1F2A3B4C5D6E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuarkBackup.swift; sourceTree = "<group>"; };
+		9A2B3C4D5E6F7A8B9C0D1E2F = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,6 +98,7 @@
 				55A86BE3573FCDAF82E3A6BA /* FabricImages.swift */,
 				FBEB6D61F02BF82F376FB517 /* FabricShare.swift */,
 				7E9F3A2B9D0E1F2A3B4C5D6E /* QuarkBackup.swift */,
+				9A2B3C4D5E6F7A8B9C0D1E2F /* LaunchScreen.storyboard */,
 				3BF3EC1971D7F68A9185777E /* HomeView.swift */,
 				310895809D52998A95C086E6 /* StatsView.swift */,
 				09FD60D85A823CF9DF974B1D /* CreationView.swift */,
@@ -173,6 +176,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8F1A2B3C4D5E6F7A8B9C0D1E /* LaunchScreen.storyboard in Resources */,
 				D0687455C07D878E9DB04308 /* Assets.xcassets in Resources */,
 				EEEA4483E6CA68BE79F97903 /* Localizable.strings in Resources */,
 			);
