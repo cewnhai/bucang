@@ -734,7 +734,6 @@ struct StoreData: Codable {
     var brainstorms: [Brainstorm] = []
     var materialOptions: [String] = []
     var otherCategories: [String]
-    var otherCategoryItems: [OtherCategory] = []
     var lengthUnit: String = "米"
     var hideAmounts: Bool = false
     var codePrefix: String = ""
@@ -841,6 +840,32 @@ final class Store: ObservableObject {
             .appendingPathComponent("bucang-store.json")
     }
 
+    private var categoryTreeURL: URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("bucang-category-tree.json")
+    }
+    // 分类树独立存储：老备份没有这个文件时，从扁平 otherCategories 生成一级分类
+    func loadCategoryTree() {
+        if let url = categoryTreeURL,
+           let data = try? Data(contentsOf: url),
+           let tree = try? JSONDecoder().decode([OtherCategory].self, from: data),
+           !tree.isEmpty {
+            otherCategoryTree = tree
+        } else if !otherCategories.isEmpty {
+            otherCategoryTree = otherCategories.enumerated().map { idx, name in
+                OtherCategory(name: name, parentId: nil, order: idx)
+            }
+            saveCategoryTree()
+        } else {
+            otherCategoryTree = [OtherCategory(name: "其他", parentId: nil, order: 0)]
+        }
+    }
+    func saveCategoryTree() {
+        guard let url = categoryTreeURL else { return }
+        if let data = try? JSONEncoder().encode(otherCategoryTree) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
     private func load() {
         guard let url = fileURL,
               let data = try? Data(contentsOf: url),
@@ -857,14 +882,8 @@ final class Store: ObservableObject {
         brainstorms = decoded.brainstorms
         materialOptions = decoded.materialOptions.isEmpty ? Self.defaultMaterialOptions : decoded.materialOptions
         otherCategories = decoded.otherCategories.isEmpty ? Self.defaultOtherCategories : decoded.otherCategories
-        // 多级分类迁移：老数据只有扁平 otherCategories，转成一级分类
-        if decoded.otherCategoryItems.isEmpty && !otherCategories.isEmpty {
-            otherCategoryTree = otherCategories.enumerated().map { idx, name in
-                OtherCategory(name: name, parentId: nil, order: idx)
-            }
-        } else {
-            otherCategoryTree = decoded.otherCategoryItems
-        }
+        // 多级分类从独立文件加载（2026-11-01）：不碰主 JSON，避免老备份解码失败
+        loadCategoryTree()
         lengthUnit = ["米", "厘米", "码"].contains(decoded.lengthUnit) ? decoded.lengthUnit : "米"
         hideAmounts = decoded.hideAmounts; codePrefix = decoded.codePrefix
         channelOptions = decoded.channelOptions.isEmpty ? Self.defaultChannelOptions : decoded.channelOptions
@@ -1140,7 +1159,7 @@ final class Store: ObservableObject {
             works: works, patterns: patterns, items: items,
             saleRecords: saleRecords, otherItems: otherItems, wishlistItems: wishlistItems,
             brainstorms: brainstorms,
-            materialOptions: materialOptions, otherCategories: otherCategories, otherCategoryItems: otherCategoryTree,
+            materialOptions: materialOptions, otherCategories: otherCategories,
             lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix,
             channelOptions: channelOptions, patternOptions: patternOptions, codeLevels: codeLevels,
             visibleTabs: visibleTabs, themeName: themeName, cardDisplayFields: cardDisplayFields

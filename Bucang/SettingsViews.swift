@@ -1404,7 +1404,7 @@ struct OtherCategorySettingsView: View {
         guard !name.isEmpty else { return }
         let maxOrder = topLevels.map { $0.order }.max() ?? -1
         store.otherCategoryTree.append(OtherCategory(name: name, parentId: nil, order: maxOrder + 1))
-        store.save()
+        store.saveCategoryTree()
         newName = ""
     }
     
@@ -1416,7 +1416,7 @@ struct OtherCategorySettingsView: View {
         for item in store.otherItems where namesToDelete.contains(item.category) {
             item.category = "其他"
         }
-        store.save()
+        store.saveCategoryTree()
     }
     
     var body: some View {
@@ -1438,7 +1438,7 @@ struct OtherCategorySettingsView: View {
                                     let n = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                                     if !n.isEmpty, let idx = store.otherCategoryTree.firstIndex(where: { $0.id == cat.id }) {
                                         store.otherCategoryTree[idx].name = n
-                                        store.save()
+                                        store.saveCategoryTree()
                                     }
                                     renamingId = nil
                                 })
@@ -1487,7 +1487,7 @@ struct OtherSubCategoryView: View {
         guard !name.isEmpty else { return }
         let maxOrder = children.map { $0.order }.max() ?? -1
         store.otherCategoryTree.append(OtherCategory(name: name, parentId: parent.id, order: maxOrder + 1))
-        store.save()
+        store.saveCategoryTree()
         newName = ""
     }
     
@@ -1496,7 +1496,7 @@ struct OtherSubCategoryView: View {
         for item in store.otherItems where item.category == cat.name {
             item.category = parent.name
         }
-        store.save()
+        store.saveCategoryTree()
     }
     
     var body: some View {
@@ -1520,7 +1520,7 @@ struct OtherSubCategoryView: View {
                                 let n = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                                 if !n.isEmpty, let idx = store.otherCategoryTree.firstIndex(where: { $0.id == cat.id }) {
                                     store.otherCategoryTree[idx].name = n
-                                    store.save()
+                                    store.saveCategoryTree()
                                 }
                                 renamingId = nil
                             })
