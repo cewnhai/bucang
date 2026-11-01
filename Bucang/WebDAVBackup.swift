@@ -120,7 +120,7 @@ final class WebDAVManager: ObservableObject {
 
     // MARK: - URL 拼接（正确处理末尾斜杠）
 
-    private func trimmedBase() -> String {
+    func trimmedBase() -> String {
         var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         while base.hasSuffix("/") { base.removeLast() }
         return base
