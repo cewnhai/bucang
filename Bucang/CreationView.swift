@@ -448,6 +448,7 @@ struct WishlistListView: View {
                     .background(Color.black.opacity(0.45)).cornerRadius(10)
                     .padding(8)
             }
+            .offset(y: -20)
             VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
