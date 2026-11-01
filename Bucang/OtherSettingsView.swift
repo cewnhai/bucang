@@ -92,6 +92,10 @@ struct OtherSettingsView: View {
                     }
 
                     CardView {
+                        iCloudBackupView()
+                    }
+
+                    CardView {
                         VStack(alignment: .leading, spacing: 8) {
                             SectionHeaderView(title: "关于")
                             Text("布仓：本机存储，不做 iCloud 同步，不做订阅。")
