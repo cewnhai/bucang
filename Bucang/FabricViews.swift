@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import CoreImage
 import AVKit
 
 // MARK: - V3 布料卡片 / 详情 / 编辑 / 使用 / 出售 / 拍照找相似
@@ -207,7 +208,7 @@ struct FabricCardView: View {
                         .padding(8)
                 }
             }
-            .offset(y: -20)
+            .offset(y: -10)
             VStack(alignment: .leading, spacing: 8) {
                 // 名称不再显示；编号小字在照片下方左对齐。
                 // 主编号为空时显示第一个子编号（被关联的布料）。
@@ -1615,6 +1616,46 @@ struct FabricDetailView: View {
     }
 
     @MainActor
+    private func makeParamQRCode() -> UIImage? {
+        // 把布料参数编码成 JSON 生成二维码（不含图片）
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        // 只编码关键参数，避免二维码过大
+        let params: [String: Any] = [
+            "type": "bucang-fabric",
+            "version": 1,
+            "code": fabric.code,
+            "name": fabric.displayName,
+            "length": fabric.length,
+            "width": fabric.width,
+            "purchasePrice": fabric.purchasePrice,
+            "pricePerMeter": fabric.pricePerMeter,
+            "usedLength": fabric.usedLength,
+            "materialName": fabric.materialName,
+            "composition": fabric.composition,
+            "colorName": fabric.colorName,
+            "channelName": fabric.channelName,
+            "merchantName": fabric.merchantName,
+            "note": fabric.note,
+            "brainstorm": fabric.brainstorm,
+            "subCodes": fabric.subCodes,
+            "washing": fabric.washing,
+            "usageNotes": fabric.usageNotes
+        ]
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: params, options: []) else { return nil }
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(jsonData, forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let ciImage = filter.outputImage else { return nil }
+        // 放大（CIImage 默认很小）
+        let scale = 10.0
+        let transform = CGAffineTransform(scaleX: scale, y: scale)
+        let scaled = ciImage.transformed(by: transform)
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cgImage)
+    }
+
     private func generateLongImageSilent() {
         // 静默生成，不弹 sheet（用于 onAppear 预生成）
         generateLongImage(showSheet: false)
@@ -1704,7 +1745,8 @@ struct FabricDetailView: View {
         let photos: [UIImage] = fabric.imageFileNames.compactMap { FabricImageStore.loadImage(named: $0) }
         let photoHeight: CGFloat = 400
         let totalPhotoHeight: CGFloat = CGFloat(photos.count) * (photoHeight + 16)
-        let height = padding * 2 + totalPhotoHeight + CGFloat(lines.count) * lineHeight
+        let qrSize: CGFloat = 220
+        let height = padding * 2 + totalPhotoHeight + CGFloat(lines.count) * lineHeight + qrSize + 40
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height))
         let image = renderer.image { ctx in
             UIColor.white.setFill()
@@ -1738,6 +1780,14 @@ struct FabricDetailView: View {
                 let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black]
                 (line as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: attrs)
                 y += lineHeight
+            }
+            // 参数二维码（不含图片）
+            y += 20
+            ("扫码导入参数" as NSString).draw(at: CGPoint(x: padding, y: y), withAttributes: [.font: UIFont.systemFont(ofSize: 24), .foregroundColor: UIColor.gray])
+            y += 36
+            if let qrImage = makeParamQRCode() {
+                let qrRect = CGRect(x: padding, y: y, width: qrSize, height: qrSize)
+                qrImage.draw(in: qrRect)
             }
         }
         self.longImage = image

@@ -95,6 +95,7 @@ struct WorksListView: View {
                     .cornerRadius(10)
                     .padding(8)
             }
+            .offset(y: -10)
             VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(work.name.isEmpty ? "未命名成品" : work.name).font(.headline).lineLimit(1)
