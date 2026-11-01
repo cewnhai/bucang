@@ -512,7 +512,8 @@ struct WebDAVBackupView: View {
                     }
                     while rel.hasPrefix("/") { rel.removeFirst() }
                     while rel.hasSuffix("/") { rel.removeLast() }
-                    webdav.remotePath = rel
+                    // 解码后再存，避免双重编码（fullBaseURL 里会统一编码）
+                    webdav.remotePath = rel.removingPercentEncoding ?? rel
                     webdav.saveSettings()
                 }
             )
@@ -547,53 +548,69 @@ extension WebDAVManager: FolderService {
         <?xml version="1.0" encoding="utf-8"?>
         <D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>
         """.data(using: .utf8)
-        let (data, _) = try await URLSession.shared.data(for: req)
-        let xml = String(data: data, encoding: .utf8) ?? ""
-        // 解析 PROPFIND 响应：按 <response> 块切分，找 collection 类型的
-        var folders: [RemoteFolder] = []
-        // 用 response 块切分
-        let respPattern = "<(?:\\w+:)?response>(.*?)</(?:\\w+:)?response>"
-        guard let respRegex = try? NSRegularExpression(pattern: respPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
-            return []
+        let (data, response) = try await URLSession.shared.data(for: req)
+        // 检查 HTTP 状态
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw NSError(domain: "WebDAV", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "服务器返回 HTTP \(http.statusCode)"])
         }
-        let nsXml = xml as NSString
-        let respMatches = respRegex.matches(in: xml, range: NSRange(location: 0, length: nsXml.length))
-        // 第一项是当前目录本身，跳过
-        for (i, rm) in respMatches.enumerated() {
-            if i == 0 { continue }
-            let block = nsXml.substring(with: rm.range(at: 1))
-            // 只保留集合（目录）
-            let isCollection = block.range(of: "collection", options: .caseInsensitive) != nil
-            if !isCollection { continue }
-            // 提取 href
-            let hrefPattern = "<(?:\\w+:)?href>([^<]+)</(?:\\w+:)?href>"
-            guard let hrefRegex = try? NSRegularExpression(pattern: hrefPattern, options: .caseInsensitive),
-                  let hm = hrefRegex.firstMatch(in: block, range: NSRange(location: 0, length: (block as NSString).length)) else {
-                continue
+        let xml = String(data: data, encoding: .utf8) ?? ""
+        if xml.isEmpty {
+            throw NSError(domain: "WebDAV", code: -1, userInfo: [NSLocalizedDescriptionKey: "服务器返回空数据"])
+        }
+        // 宽松解析：提取所有 href，不过滤 collection（Alist 的格式可能不标准）
+        // 用简单的字符串扫描，不依赖正则的命名空间
+        var folders: [RemoteFolder] = []
+        var seen = Set<String>()
+        // 找所有的 <href>...</href>（忽略命名空间前缀）
+        var searchFrom = xml.startIndex
+        var hrefs: [String] = []
+        while let openRange = xml.range(of: "<", range: searchFrom..<xml.endIndex),
+              let closeBracket = xml.range(of: ">", range: openRange.upperBound..<xml.endIndex) {
+            let tag = String(xml[openRange.upperBound..<closeBracket.lowerBound])
+            let tagName = tag.split(separator: " ").first.map(String.init) ?? tag
+            // 检查是否是 href 结束标签的开始
+            if tagName.hasSuffix("href") && !tag.hasPrefix("/") {
+                // 找到对应的结束标签
+                let contentStart = closeBracket.upperBound
+                // 找 </...href>
+                if let endOpen = xml.range(of: "</", range: contentStart..<xml.endIndex),
+                   let endClose = xml.range(of: ">", range: endOpen.upperBound..<xml.endIndex) {
+                    let endTag = String(xml[endOpen.upperBound..<endClose.lowerBound])
+                    if endTag.hasSuffix("href") {
+                        let href = String(xml[contentStart..<endOpen.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !href.isEmpty {
+                            hrefs.append(href)
+                        }
+                        searchFrom = endClose.upperBound
+                        continue
+                    }
+                }
             }
-            let href = (block as NSString).substring(with: hm.range(at: 1))
+            searchFrom = closeBracket.upperBound
+        }
+        // 第一项是当前目录本身，跳过
+        for (i, href) in hrefs.enumerated() {
+            if i == 0 { continue }
             let decoded = href.removingPercentEncoding ?? href
             var name = decoded
             while name.hasSuffix("/") { name.removeLast() }
+            // 跳过文件（不以 / 结尾且包含 . 的可能是文件，但目录也可能有 .，所以只跳过明确的文件）
+            // 为了简单，全部显示，用户自己判断
             if let last = name.split(separator: "/").last {
                 name = String(last)
             }
-            if name.isEmpty { continue }
-            // 显示用解码后的名字，path 用编码后的完整 URL
-            let baseURL = URL(string: path)!
-            // href 可能是绝对路径或相对路径
+            if name.isEmpty || seen.contains(name) { continue }
+            seen.insert(name)
             var folderURL: String
             if href.hasPrefix("http") {
                 folderURL = href
             } else {
-                // 相对路径，拼到 base 上
                 let baseStr = path.hasSuffix("/") ? String(path.dropLast()) : path
-                folderURL = baseStr + "/" + (href.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? href)
+                // href 可能已经编码，直接用
+                let cleanHref = href.hasPrefix("/") ? href : "/" + href
+                folderURL = baseStr + cleanHref
             }
-            // 用于显示的名字解码
-            let displayName = name.removingPercentEncoding ?? name
-            _ = baseURL
-            folders.append(RemoteFolder(id: folderURL, name: displayName, path: folderURL))
+            folders.append(RemoteFolder(id: folderURL, name: name, path: folderURL))
         }
         return folders
     }

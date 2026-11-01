@@ -231,6 +231,10 @@ class QuarkManager: ObservableObject {
     }
 
     private func getUploadAuth(taskId: String, uploadId: String, objKey: String, bucket: String, fileName: String, size: Int, token: String) async throws -> [String: Any] {
+        // auth_meta 可能是 JSON 字符串格式
+        let metaDict: [String: Any] = ["bucket": bucket, "key": objKey]
+        let metaData = try JSONSerialization.data(withJSONObject: metaDict)
+        let metaString = String(data: metaData, encoding: .utf8) ?? "{}"
         let url = URL(string: "\(baseURL)/1/clouddrive/file/upload/auth?pr=ucpro&fr=pc&uc_param_str=")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -241,12 +245,7 @@ class QuarkManager: ObservableObject {
             "task_id": taskId,
             "upload_id": uploadId,
             "auth_type": "cos",
-            "auth_meta": [
-                "bucket": bucket,
-                "key": objKey,
-                "file_name": fileName,
-                "size": size
-            ]
+            "auth_meta": metaString
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
