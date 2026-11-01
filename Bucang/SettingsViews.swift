@@ -108,6 +108,9 @@ struct SettingsView: View {
         refreshLocalZips()
     }
 
+    private func localDataSummary() -> String {
+        "本地数据 · \(store.fabrics.count) 块布料 · \(store.works.count) 个成品 · \(store.otherItems.count) 个其他 · \(store.wishlistItems.count) 个心愿"
+    }
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -119,7 +122,7 @@ struct SettingsView: View {
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             Text("我的布仓").font(.title3).fontWeight(.bold)
-                            Text("本地数据 · \(store.fabrics.count) 块布料 · \(store.works.count) 个成品 · \(store.otherItems.count) 个其他 · \(store.wishlistItems.count) 个心愿")
+                            Text(localDataSummary())
                                 .font(.subheadline).foregroundColor(.secondary)
                         }
                         Spacer()
@@ -177,7 +180,7 @@ struct SettingsView: View {
 
                     CardView {
                         VStack(alignment: .leading, spacing: 12) {
-                            NavigationLink(destination: DictionaryManagementView()) {
+                            NavigationLink(destination: DictionaryManagementInlineView()) {
                                 HStack {
                                     Text("字典管理")
                                     Spacer()
@@ -1173,3 +1176,41 @@ struct ColorItemsSettingsView: View {
     }
 }
 
+// 内联字典管理（2026-11-01）：绕开跨文件引用问题
+struct DictionaryManagementInlineView: View {
+    @EnvironmentObject private var store: Store
+    var body: some View {
+        List {
+            NavigationLink(destination: ChannelSettingsView()) {
+                HStack {
+                    Text("渠道")
+                    Spacer()
+                    Text("\(store.channelOptions.count) 条").foregroundColor(.secondary).font(.caption)
+                }
+            }
+            NavigationLink(destination: TagSettingsView()) {
+                HStack {
+                    Text("标签")
+                    Spacer()
+                    Text("\(store.tags.count) 个").foregroundColor(.secondary).font(.caption)
+                }
+            }
+            NavigationLink(destination: MaterialSettingsView()) {
+                HStack {
+                    Text("材质")
+                    Spacer()
+                    Text("\(store.materialOptions.count) 条").foregroundColor(.secondary).font(.caption)
+                }
+            }
+            NavigationLink(destination: OtherCategorySettingsView()) {
+                HStack {
+                    Text("其他分类")
+                    Spacer()
+                    Text("\(store.otherCategoryTree.filter { $0.parentId == nil }.count) 个一级").foregroundColor(.secondary).font(.caption)
+                }
+            }
+        }
+        .navigationTitle("字典管理")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
