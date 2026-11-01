@@ -549,29 +549,51 @@ extension WebDAVManager: FolderService {
         """.data(using: .utf8)
         let (data, _) = try await URLSession.shared.data(for: req)
         let xml = String(data: data, encoding: .utf8) ?? ""
-        // 简单解析：找 <D:href> 和 collection 标记
+        // 解析 PROPFIND 响应：按 <response> 块切分，找 collection 类型的
         var folders: [RemoteFolder] = []
-        let hrefPattern = "<(?:D:)?href>([^<]+)</(?:D:)?href>"
-        let hrefRegex = try NSRegularExpression(pattern: hrefPattern, options: .caseInsensitive)
+        // 用 response 块切分
+        let respPattern = "<(?:\w+:)?response>(.*?)</(?:\w+:)?response>"
+        guard let respRegex = try? NSRegularExpression(pattern: respPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
+            return []
+        }
         let nsXml = xml as NSString
-        let matches = hrefRegex.matches(in: xml, range: NSRange(location: 0, length: nsXml.length))
+        let respMatches = respRegex.matches(in: xml, range: NSRange(location: 0, length: nsXml.length))
         // 第一项是当前目录本身，跳过
-        for (i, m) in matches.enumerated() {
+        for (i, rm) in respMatches.enumerated() {
             if i == 0 { continue }
-            let href = nsXml.substring(with: m.range(at: 1))
+            let block = nsXml.substring(with: rm.range(at: 1))
+            // 只保留集合（目录）
+            let isCollection = block.range(of: "collection", options: .caseInsensitive) != nil
+            if !isCollection { continue }
+            // 提取 href
+            let hrefPattern = "<(?:\w+:)?href>([^<]+)</(?:\w+:)?href>"
+            guard let hrefRegex = try? NSRegularExpression(pattern: hrefPattern, options: .caseInsensitive),
+                  let hm = hrefRegex.firstMatch(in: block, range: NSRange(location: 0, length: (block as NSString).length)) else {
+                continue
+            }
+            let href = (block as NSString).substring(with: hm.range(at: 1))
             let decoded = href.removingPercentEncoding ?? href
-            // 只保留目录（以 / 结尾）
-            guard decoded.hasSuffix("/") else { continue }
             var name = decoded
             while name.hasSuffix("/") { name.removeLast() }
             if let last = name.split(separator: "/").last {
                 name = String(last)
             }
             if name.isEmpty { continue }
-            // 构建完整 URL
+            // 显示用解码后的名字，path 用编码后的完整 URL
             let baseURL = URL(string: path)!
-            let folderURL = URL(string: decoded, relativeTo: baseURL)?.absoluteString ?? path + "/" + name
-            folders.append(RemoteFolder(id: folderURL, name: name, path: folderURL))
+            // href 可能是绝对路径或相对路径
+            var folderURL: String
+            if href.hasPrefix("http") {
+                folderURL = href
+            } else {
+                // 相对路径，拼到 base 上
+                let baseStr = path.hasSuffix("/") ? String(path.dropLast()) : path
+                folderURL = baseStr + "/" + (href.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? href)
+            }
+            // 用于显示的名字解码
+            let displayName = name.removingPercentEncoding ?? name
+            _ = baseURL
+            folders.append(RemoteFolder(id: folderURL, name: displayName, path: folderURL))
         }
         return folders
     }

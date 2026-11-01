@@ -152,7 +152,7 @@ class QuarkManager: ObservableObject {
             }
 
             // 4. 获取上传授权并直传 OSS（单分片）
-            let authResult = try await getUploadAuth(taskId: taskId, uploadId: uploadId, token: token)
+            let authResult = try await getUploadAuth(taskId: taskId, uploadId: uploadId, objKey: objKey, bucket: bucket, fileName: fileName, size: data.count, token: token)
             // bucket 和 objKey 已从 preUpload 结果解析
             // authResult 中包含 OSS 临时凭证，实际地址格式：
             // https://{bucket}.oss-cn-zhangjiakou.aliyuncs.com/{obj_key}
@@ -230,7 +230,7 @@ class QuarkManager: ObservableObject {
         return dataDict
     }
 
-    private func getUploadAuth(taskId: String, uploadId: String, token: String) async throws -> [String: Any] {
+    private func getUploadAuth(taskId: String, uploadId: String, objKey: String, bucket: String, fileName: String, size: Int, token: String) async throws -> [String: Any] {
         let url = URL(string: "\(baseURL)/1/clouddrive/file/upload/auth?pr=ucpro&fr=pc&uc_param_str=")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -240,7 +240,13 @@ class QuarkManager: ObservableObject {
         let body: [String: Any] = [
             "task_id": taskId,
             "upload_id": uploadId,
-            "auth_type": "cos"
+            "auth_type": "cos",
+            "auth_meta": [
+                "bucket": bucket,
+                "key": objKey,
+                "file_name": fileName,
+                "size": size
+            ]
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
