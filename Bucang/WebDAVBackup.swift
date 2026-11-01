@@ -552,7 +552,7 @@ extension WebDAVManager: FolderService {
         // 解析 PROPFIND 响应：按 <response> 块切分，找 collection 类型的
         var folders: [RemoteFolder] = []
         // 用 response 块切分
-        let respPattern = "<(?:\w+:)?response>(.*?)</(?:\w+:)?response>"
+        let respPattern = "<(?:\\w+:)?response>(.*?)</(?:\\w+:)?response>"
         guard let respRegex = try? NSRegularExpression(pattern: respPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
             return []
         }
@@ -566,7 +566,7 @@ extension WebDAVManager: FolderService {
             let isCollection = block.range(of: "collection", options: .caseInsensitive) != nil
             if !isCollection { continue }
             // 提取 href
-            let hrefPattern = "<(?:\w+:)?href>([^<]+)</(?:\w+:)?href>"
+            let hrefPattern = "<(?:\\w+:)?href>([^<]+)</(?:\\w+:)?href>"
             guard let hrefRegex = try? NSRegularExpression(pattern: hrefPattern, options: .caseInsensitive),
                   let hm = hrefRegex.firstMatch(in: block, range: NSRange(location: 0, length: (block as NSString).length)) else {
                 continue
