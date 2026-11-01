@@ -295,8 +295,9 @@ struct OtherListView: View {
                    let uiImage = FabricImageStore.loadImage(named: first) {
                     Image(uiImage: uiImage)
                         .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 150)
                         .clipped()
                 } else {
                     Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
@@ -431,8 +432,9 @@ struct WishlistListView: View {
                    let uiImage = FabricImageStore.loadImage(named: first) {
                     Image(uiImage: uiImage)
                         .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 150)
                         .clipped()
                 } else {
                     Rectangle().fill(ThemeHelper.accentSoft(store.themeName)).frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
