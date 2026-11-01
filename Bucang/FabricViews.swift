@@ -97,7 +97,7 @@ struct DualProgressBarView: View {
     var usedFraction: Double
     var soldFraction: Double
     var height: CGFloat = 8
-    var usedColor: Color = Design.accent
+    var usedColor: Color = Color(red: 0.23, green: 0.43, blue: 0.80)
     var soldColor: Color = Design.priceAccent
 
     private func clamp01(_ v: Double) -> CGFloat { max(0, min(1, v)) }
@@ -126,7 +126,7 @@ struct DualProgressBarView: View {
 /// 记录类表单 / 记录页的图标盒：44pt 圆角正方形淡主色底 + 主色 SF 图标。
 struct RecordIconBox: View {
     var icon: String
-    var accent: Color = Design.accent
+    var accent: Color = Color(red: 0.23, green: 0.43, blue: 0.80)
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
@@ -176,9 +176,9 @@ struct FabricCardView: View {
                     // 无图占位：剪刀图标，占位高度大于照片高度（列表约 220 / 两列约 140），
                     // 让无图卡片在视觉上占卡片高度的一半以上。
                     Rectangle()
-                        .fill(Design.accentSoft)
+                        .fill(ThemeHelper.accentSoft(store.themeName))
                         .frame(height: compact ? 140 : 220)
-                        .overlay(Image(systemName: "scissors").foregroundColor(Design.accent).font(.title))
+                        .overlay(Image(systemName: "scissors").foregroundColor(themeAccent).font(.title))
                 }
                 Button(action: {
                     fabric.isFavorite.toggle()
@@ -327,7 +327,7 @@ struct FabricCardView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label).font(.caption2).foregroundColor(.secondary)
             Text(value)
-                .font(.subheadline).fontWeight(.semibold)
+                .font(.caption).fontWeight(.semibold)
                 .foregroundColor(accent ?? .primary)
                 .lineLimit(1).minimumScaleFactor(0.75)
         }
@@ -398,7 +398,7 @@ struct FabricDetailView: View {
                             Text(allCollapsed ? "全部展开" : "全部收起")
                         }
                         .font(.subheadline)
-                        .foregroundColor(Design.accent)
+                        .foregroundColor(themeAccent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -425,11 +425,11 @@ struct FabricDetailView: View {
                         Spacer()
                     }
                     .font(.subheadline)
-                    .foregroundColor(Design.accent)
+                    .foregroundColor(themeAccent)
                     .padding(.vertical, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Design.accent, lineWidth: 1)
+                            .stroke(themeAccent, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
@@ -820,6 +820,8 @@ struct FabricDetailView: View {
 
     /// 可缩放的单张图片：双指缩放、双击放大/还原、放大后可拖动。
     private struct ZoomablePhotoView: View {
+    @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
         var name: String
         @State private var scale: CGFloat = 1.0
         @State private var lastScale: CGFloat = 1.0
@@ -887,12 +889,12 @@ struct FabricDetailView: View {
         ZStack(alignment: .topLeading) {
             if fabric.imageFileNames.isEmpty {
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Design.accentSoft)
+                    .fill(ThemeHelper.accentSoft(store.themeName))
                     .aspectRatio(4 / 3, contentMode: .fit)
                     .overlay(
                         Image(systemName: "scissors")
                             .font(.largeTitle)
-                            .foregroundColor(Design.accent)
+                            .foregroundColor(themeAccent)
                     )
             } else {
                 TabView(selection: $headerPhotoIndex) {
@@ -1142,7 +1144,7 @@ struct FabricDetailView: View {
                             }
                         }
                         .font(.subheadline)
-                        .foregroundColor(Design.accent)
+                        .foregroundColor(themeAccent)
                         .buttonStyle(.plain)
                     }
                     ForEach(fabric.subCodes, id: \.self) { sub in
@@ -1160,7 +1162,7 @@ struct FabricDetailView: View {
                                 Button(action: { onOpenFabric(linked) }) {
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
-                                        .foregroundColor(Design.accent)
+                                        .foregroundColor(themeAccent)
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("查看关联布料")
@@ -1170,7 +1172,7 @@ struct FabricDetailView: View {
                                 showingSubCodePicker = true
                             }
                             .font(.caption)
-                            .foregroundColor(Design.accent)
+                            .foregroundColor(themeAccent)
                             .buttonStyle(.plain)
                             Button(action: {
                                 fabric.subCodes.removeAll { $0 == sub }
@@ -1605,6 +1607,7 @@ struct FabricDetailView: View {
 ///（去重），双方 updatedAt 刷新后 store.save() 一次落盘。
 struct SubCodeFabricPickerView: View {
     @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
     var subCode: String
@@ -1630,7 +1633,7 @@ struct SubCodeFabricPickerView: View {
                         }
                         Spacer()
                         if !subCode.isEmpty && other.subCodes.contains(subCode) {
-                            Image(systemName: "checkmark").foregroundColor(Design.accent)
+                            Image(systemName: "checkmark").foregroundColor(themeAccent)
                         }
                     }
                 }
@@ -2322,7 +2325,7 @@ struct FabricEditView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(6)
-                                .background(colorName == item.name ? Design.accentSoft : Color.clear)
+                                .background(colorName == item.name ? ThemeHelper.accentSoft(store.themeName) : Color.clear)
                                 .cornerRadius(10)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10)
@@ -2419,6 +2422,7 @@ struct FabricEditView: View {
 // 同时把选中的颜色名回填给布料（colorName 联动）。
 struct CodeGeneratorSheet: View {
     @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric
     var currentCode: String
@@ -2671,7 +2675,7 @@ struct CodeGeneratorSheet: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(8)
-                    .background(selected ? Design.accentSoft : Color.clear)
+                    .background(selected ? ThemeHelper.accentSoft(store.themeName) : Color.clear)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
@@ -2705,7 +2709,7 @@ struct CodeGeneratorSheet: View {
                         adjustNote = nil
                         values[lv.id] = formattedSequence(free)
                     }
-                    .font(.subheadline).foregroundColor(Design.accent)
+                    .font(.subheadline).foregroundColor(themeAccent)
                 }
             }
             if scopeReady {
@@ -2735,7 +2739,7 @@ struct CodeGeneratorSheet: View {
                                     .foregroundColor(taken ? .secondary : (selected ? Design.accent : .primary))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 8)
-                                    .background(selected ? Design.accentSoft : (taken ? Color.gray.opacity(0.12) : Color.clear))
+                                    .background(selected ? ThemeHelper.accentSoft(store.themeName) : (taken ? Color.gray.opacity(0.12) : Color.clear))
                                     .cornerRadius(8)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8)

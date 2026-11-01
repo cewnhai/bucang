@@ -109,6 +109,14 @@ struct BucangView: View {
     @State private var editingFabricRoot: Fabric?
     @State private var showingWishlistAdd = false
     @State private var showingTabSelection = false
+    // 2026-11-01：Tab 按用户排序显示
+    private var orderedTabs: [BucangTab] {
+        let keys = store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs
+        let ordered = keys.compactMap { BucangTab(rawValue: $0) }
+        // 没在 visibleTabs 里的（被隐藏的）追加在后面
+        let hidden = BucangTab.allCases.filter { !keys.contains($0.rawValue) }
+        return ordered + hidden
+    }
     @State private var saleFabric: Fabric?
     @State private var showingUsageDetail = false
     @State private var showingSaleFlow = false
@@ -259,7 +267,8 @@ struct BucangView: View {
                 NavigationStack {
                     Form {
                         Section {
-                            ForEach(BucangTab.allCases) { t in
+                            // 2026-11-01：按 visibleTabs 顺序显示，支持长按拖动排序
+                            ForEach(orderedTabs, id: \.rawValue) { t in
                                 if t == .fabric {
                                     HStack { Text(t.title); Spacer(); Text("始终显示").font(.caption).foregroundColor(.secondary) }
                                 } else {
@@ -270,21 +279,36 @@ struct BucangView: View {
                                             if on { if !keys.contains(t.rawValue) { keys.append(t.rawValue) } }
                                             else { keys.removeAll { $0 == t.rawValue } }
                                             if !keys.contains("fabric") { keys.insert("fabric", at: 0) }
-                                            store.visibleTabs = Store.allTabKeys.filter { keys.contains($0) }
+                                            // 保留用户顺序，不重置为 allTabKeys 顺序
+                                            store.visibleTabs = keys
                                             if !store.visibleTabs.contains(tab.rawValue) { tab = .fabric }
                                             store.save()
                                         }
                                     ))
                                 }
                             }
+                            .onMove { from, to in
+                                var keys = store.visibleTabs.isEmpty ? Store.allTabKeys : store.visibleTabs
+                                keys.move(fromOffsets: from, toOffset: to)
+                                // 布料始终在第一位
+                                if let fIdx = keys.firstIndex(of: "fabric") {
+                                    keys.remove(at: fIdx)
+                                    keys.insert("fabric", at: 0)
+                                }
+                                store.visibleTabs = keys
+                                store.save()
+                            }
                         } header: {
-                            Text("顶栏显示")
+                            Text("顶栏显示（右上角编辑后长按拖动排序）")
                         } footer: {
                             Text("布料是主 Tab，始终固定显示，不可关闭；若当前选中的 Tab 被隐藏，会自动切回布料。")
                         }
                     }
-                    .navigationTitle("顶栏")
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { showingTabSelection = false } } }
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("完成") { showingTabSelection = false } }
+                        ToolbarItem(placement: .primaryAction) { EditButton() }
+                    }
                 }
             }
             // 用 item 绑定代替 isPresented + if let：iOS 16 上后者在弹窗链里容易出现内容判空时机错乱导致白屏。

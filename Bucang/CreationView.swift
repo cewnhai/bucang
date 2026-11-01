@@ -29,6 +29,19 @@ struct WorksListView: View {
         list = filterWorks(list)
         return sortWorks(list)
     }
+    // 2026-11-01：成品不再分"制作中/已完成"两段，纯胶囊筛选
+    private var filteredWorks: [Work] {
+        var list = store.works
+        if statusFilter == "制作中" {
+            list = list.filter { !$0.isFinished }
+        } else if statusFilter == "已完成" {
+            list = list.filter { $0.isFinished }
+        } else if statusFilter == "已出售" {
+            list = list.filter { $0.isSold }
+        }
+        list = filterWorks(list)
+        return sortWorks(list)
+    }
     private func filterWorks(_ list: [Work]) -> [Work] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return list }
@@ -64,12 +77,12 @@ struct WorksListView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 120)
+                        .frame(height: 150)
                         .clipped()
                 } else {
                     Rectangle()
                         .fill(ThemeHelper.accentSoft(store.themeName))
-                        .frame(height: 120)
+                        .frame(height: 150)
                         .overlay(Image(systemName: "hammer").foregroundColor(themeAccent).font(.title))
                 }
                 Text(work.isFinished ? "已完成" : "制作中")
@@ -172,31 +185,15 @@ struct WorksListView: View {
                     }
                 }
                 StatusCapsuleAxis(options: ["全部", "制作中", "已完成", "已出售"], selected: $statusFilter, accent: themeAccent)
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionHeaderView(title: "制作中")
-                    if making.isEmpty { Text("暂无制作中的成品").font(.caption).foregroundColor(.secondary) }
-                    else {
-                        LazyVGrid(columns: gridColumns, spacing: 12) {
-                            ForEach(making) { work in
-                                NavigationLink(destination: WorkDetailView(work: work)) { workRow(work) }
-                                    .contextMenu {
-                                        Button("删除", role: .destructive) { store.deleteWork(work) }
-                                    }
-                            }
-                        }
-                    }
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionHeaderView(title: "已完成")
-                    if finished.isEmpty { Text("暂无已完成的成品").font(.caption).foregroundColor(.secondary) }
-                    else {
-                        LazyVGrid(columns: gridColumns, spacing: 12) {
-                            ForEach(finished) { work in
-                                NavigationLink(destination: WorkDetailView(work: work)) { workRow(work) }
-                                    .contextMenu {
-                                        Button("删除", role: .destructive) { store.deleteWork(work) }
-                                    }
-                            }
+                if filteredWorks.isEmpty {
+                    Text("暂无成品").font(.caption).foregroundColor(.secondary)
+                } else {
+                    LazyVGrid(columns: gridColumns, spacing: 12) {
+                        ForEach(filteredWorks) { work in
+                            NavigationLink(destination: WorkDetailView(work: work)) { workRow(work) }
+                                .contextMenu {
+                                    Button("删除", role: .destructive) { store.deleteWork(work) }
+                                }
                         }
                     }
                 }

@@ -129,15 +129,20 @@ struct WorkEditView: View {
                 LabeledMultilineField(label: "备注", text: $note)
             }
             Section("出售 / 使用") {
-                Toggle("是否出售", isOn: $isSold)
-                if isSold {
-                    LabeledTextField(label: "出售价格", placeholder: "留空=未填", text: $salePriceText, keyboardType: .decimalPad, unit: "元")
-                    Toggle("填写出售时间", isOn: $hasSaleDate)
-                    if hasSaleDate { DatePicker("出售时间", selection: $saleDate, displayedComponents: .date) }
-                    Picker("出售渠道", selection: $saleChannel) {
-                        Text("未填").tag("")
-                        ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
+                // 2026-11-01：只有已完成（填了完成时间）的成品才能标记出售
+                if hasFinishDate {
+                    Toggle("是否出售", isOn: $isSold)
+                    if isSold {
+                        LabeledTextField(label: "出售价格", placeholder: "留空=未填", text: $salePriceText, keyboardType: .decimalPad, unit: "元")
+                        Toggle("填写出售时间", isOn: $hasSaleDate)
+                        if hasSaleDate { DatePicker("出售时间", selection: $saleDate, displayedComponents: .date) }
+                        Picker("出售渠道", selection: $saleChannel) {
+                            Text("未填").tag("")
+                            ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
+                        }
                     }
+                } else {
+                    Text("填了完成时间后才能标记出售").font(.caption).foregroundColor(.secondary)
                 }
                 Toggle("是否使用", isOn: $isUsed)
                 Stepper("使用次数：\(usageCount)", value: $usageCount, in: 0...9999)

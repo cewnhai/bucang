@@ -5,21 +5,36 @@ struct CardDisplaySettingsView: View {
     @EnvironmentObject private var store: Store
     var body: some View {
         Form {
-            Section("布料卡片上显示哪些字段，顺序固定") {
+            // 2026-11-01：已选字段可长按拖动排序（编辑模式）
+            Section("已选字段（右上角编辑后长按拖动排序）") {
+                ForEach(store.cardDisplayFields, id: \.self) { key in
+                    if let option = Store.cardFieldOptions.first(where: { $0.key == key }) {
+                        Text(option.title)
+                    }
+                }
+                .onMove { from, to in
+                    store.cardDisplayFields.move(fromOffsets: from, toOffset: to)
+                    store.save()
+                }
+                .onDelete { offsets in
+                    store.cardDisplayFields.remove(atOffsets: offsets)
+                    store.save()
+                }
+            }
+            Section("可选字段") {
                 ForEach(Store.cardFieldOptions, id: \.key) { option in
-                    Toggle(option.title, isOn: Binding(
-                        get: { store.cardDisplayFields.contains(option.key) },
-                        set: { on in
-                            var keys = store.cardDisplayFields
-                            if on {
-                                if !keys.contains(option.key) { keys.append(option.key) }
-                            } else {
-                                keys.removeAll { $0 == option.key }
-                            }
-                            store.cardDisplayFields = Store.cardFieldOptions.map { $0.key }.filter { keys.contains($0) }
+                    if !store.cardDisplayFields.contains(option.key) {
+                        Button(action: {
+                            store.cardDisplayFields.append(option.key)
                             store.save()
+                        }) {
+                            HStack {
+                                Text(option.title)
+                                Spacer()
+                                Image(systemName: "plus.circle").foregroundColor(.green)
+                            }
                         }
-                    ))
+                    }
                 }
             }
             Section {
@@ -29,6 +44,7 @@ struct CardDisplaySettingsView: View {
         }
         .navigationTitle("卡片显示信息")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { EditButton() }
     }
 }
 
