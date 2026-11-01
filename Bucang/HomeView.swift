@@ -1194,19 +1194,22 @@ struct BrainstormDetailView: View {
                     }
                 }
                 if !brainstorm.imageFileNames.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("参考图").font(.headline)
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
                             ForEach(brainstorm.imageFileNames, id: \.self) { name in
-                                if let uiImage = FabricImageStore.loadImage(named: name) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(minWidth: 0, maxWidth: .infinity)
-                                        .aspectRatio(1, contentMode: .fill)
-                                        .clipped()
-                                        .cornerRadius(8)
+                                Group {
+                                    if let uiImage = FabricImageStore.loadImage(named: name) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                    } else {
+                                        Color.gray.opacity(0.15)
+                                    }
                                 }
+                                .frame(height: 100)
+                                .clipped()
+                                .cornerRadius(10)
                             }
                         }
                     }
