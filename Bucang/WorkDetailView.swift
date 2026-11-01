@@ -71,7 +71,6 @@ Text("\(headerPhotoIndex + 1) / \(work.imageFileNames.count)")
 private var summaryCard: some View {
 VStack(alignment:.leading, spacing: 8) {
 HStack {
-.font(.caption).foregroundColor(.secondary)
 Spacer()
 Text(work.isFinished ? "已完成": "制作中")
 .font(.caption).fontWeight(.semibold)
