@@ -49,10 +49,10 @@ struct CardDisplaySettingsView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: {
                     withAnimation {
-                        editMode.wrappedValue = editMode.wrappedValue == .active ? .inactive : .active
+                        if editMode?.wrappedValue == .active { editMode?.wrappedValue = .inactive } else { editMode?.wrappedValue = .active }
                     }
                 }) {
-                    Image(systemName: editMode.wrappedValue == .active ? "checkmark" : "pencil")
+                    Image(systemName: editMode?.wrappedValue == .active ? "checkmark" : "pencil")
                 }
             }
         }

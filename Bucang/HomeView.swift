@@ -308,7 +308,15 @@ struct BucangView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("完成") { showingTabSelection = false } }
-                        ToolbarItem(placement: .primaryAction) { EditButton() }
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(action: {
+                                withAnimation {
+                                    if editMode?.wrappedValue == .active { editMode?.wrappedValue = .inactive } else { editMode?.wrappedValue = .active }
+                                }
+                            }) {
+                                Image(systemName: editMode?.wrappedValue == .active ? "checkmark" : "pencil")
+                            }
+                        }
                     }
                 }
             }
