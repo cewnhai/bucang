@@ -81,7 +81,7 @@ Text(work.isFinished ? "已完成": "制作中")
 .background(work.isFinished ? Color.green : themeAccent)
 .cornerRadius(10)
 }
-Text(work.name.isEmpty ? "未命名成品": work.name)
+Text(work.name.isEmpty ? "未命名成品" : work.name)
 .font(.title3).fontWeight(.bold)
 HStack(spacing: 16) {
 if !work.colorName.isEmpty {
@@ -140,7 +140,7 @@ private func buildLongContent() -> LongContent {
 var l: [String] = []
 l.append("喵了个咪 · 成品详情")
 l.append("")
-l.append("名称：" + (work.name.isEmpty ? "未命名成品": work.name))
+l.append("名称：" + (work.name.isEmpty ? "未命名成品" : work.name))
 if !work.code.isEmpty { l.append("编号：" + work.code)}
 l.append("状态：" + (work.isFinished ? "已完成": "制作中"))
 if !work.colorName.isEmpty { l.append("颜色：" + work.colorName)}
@@ -231,7 +231,7 @@ ctx.beginPage()
 drawLongContent(content, in: ctx.cgContext, size: size)
 }
 let url = FileManager.default.temporaryDirectory
-.appendingPathComponent("成品长图-\(work.name.isEmpty ? "未命名": work.name)-\(Int(Date().timeIntervalSince1970)).pdf")
+.appendingPathComponent("成品长图-\(work.name.isEmpty ? "未命名" : work.name)-\(Int(Date().timeIntervalSince1970)).pdf")
 do {
 try data.write(to: url)
 return url
@@ -342,7 +342,8 @@ Menu {
 Button("编辑", action: { showingEdit = true})
 Menu {
 Button(action: {
-let img: UIImage ? if let existing = longImage {
+let img: UIImage?
+if let existing = longImage {
 img = existing
 } else {
 generateLongImage(showSheet: false)
@@ -350,8 +351,8 @@ img = longImage
 }
 if let img = img, let data = img.pngData() {
 let url = FileManager.default.temporaryDirectory
-.appendingPathComponent("成品长图-\(work.name.isEmpty ? "未命名": work.name)-\(Int(Date().timeIntervalSince1970)).png")
-try ? data.write(to: url)
+.appendingPathComponent("成品长图-\(work.name.isEmpty ? "未命名" : work.name)-\(Int(Date().timeIntervalSince1970)).png")
+try? data.write(to: url)
 shareFileItem = ShareURLItem(url: url)
 }
 }) {
@@ -390,7 +391,7 @@ dismiss()
 }
 Button("取消", role:.cancel) {}
 } message: {
-Text("确定删除「\(work.name.isEmpty ? "未命名成品": work.name)」吗？")
+Text("确定删除「\(work.name.isEmpty ? "未命名成品" : work.name)」吗？")
 }
 .sheet(isPresented: $showingBrainstormPicker) {
 NavigationStack { BrainstormPickerView(work: work)}
