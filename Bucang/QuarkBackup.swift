@@ -378,6 +378,8 @@ struct QuarkWebViewRepresentable: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let wv = WKWebView()
+        // 用 PC 的 UA，避免跳到移动端下载页
+        wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         if let url = URL(string: "https://pan.quark.cn") {
             wv.load(URLRequest(url: url))
         }
