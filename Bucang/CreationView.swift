@@ -134,6 +134,7 @@ struct WorksListView: View {
             }
             .padding(12)
         }
+        .frame(height: 300)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
@@ -312,6 +313,7 @@ struct OtherListView: View {
             }
             .padding(12)
         }
+        .frame(height: 300)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
@@ -473,6 +475,7 @@ struct WishlistListView: View {
             }
             .padding(12)
         }
+        .frame(height: 300)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)

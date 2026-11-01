@@ -244,6 +244,7 @@ struct FabricCardView: View {
             }
             .padding(12)
         }
+        .frame(height: 300)
         .background(Design.card)
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
