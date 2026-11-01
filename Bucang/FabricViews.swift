@@ -3537,7 +3537,7 @@ struct QRScannerView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: QRScannerViewController, context: Context) {}
 }
 
-final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     var onScanned: ((String) -> Void)?
     var onCancel: (() -> Void)?
     private var session: AVCaptureSession?
@@ -3557,7 +3557,21 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
         cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
         cancel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(cancel)
+        // 相册选择按钮
+        let album = UIButton(type: .system)
+        album.setTitle("从相册选择", for: .normal)
+        album.setTitleColor(.white, for: .normal)
+        album.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        album.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+        album.layer.cornerRadius = 8
+        album.addTarget(self, action: #selector(albumTapped), for: .touchUpInside)
+        album.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(album)
         NSLayoutConstraint.activate([
+            album.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            album.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            album.widthAnchor.constraint(equalToConstant: 140),
+            album.heightAnchor.constraint(equalToConstant: 40),
             cancel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
             cancel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             cancel.widthAnchor.constraint(equalToConstant: 72),
@@ -3634,6 +3648,49 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
 
     @objc private func cancelTapped() {
         Task { @MainActor [weak self] in self?.onCancel?() }
+    }
+
+    @objc private func albumTapped() {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    private func detectQRCode(in image: UIImage) {
+        guard let ciImage = CIImage(image: image) else {
+            showAlert("无法识别图片")
+            return
+        }
+        let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
+        let features = detector?.features(in: ciImage) ?? []
+        if let qr = features.first as? CIQRCodeFeature, let message = qr.messageString {
+            if !didFire {
+                didFire = true
+                let msg = message
+                Task { @MainActor [weak self] in self?.onScanned?(msg) }
+            }
+        } else {
+            showAlert("图片中未找到二维码")
+        }
+    }
+
+    private func showAlert(_ message: String) {
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        present(alert, animated: true)
+    }
+
+    // MARK: - UIImagePickerControllerDelegate
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        picker.dismiss(animated: true)
+        if let image = info[.originalImage] as? UIImage {
+            detectQRCode(in: image)
+        }
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
