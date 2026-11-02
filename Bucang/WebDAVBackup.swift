@@ -85,9 +85,8 @@ final class WebDAVManager: ObservableObject {
         username = defaults.string(forKey: DefaultsKey.username) ?? ""
         let savedName = defaults.string(forKey: DefaultsKey.fileName) ?? ""
         if !savedName.isEmpty { fileName = savedName }
-        // 2026-11-02：恢复原来不选目录，直接用根目录
-        remotePath = ""
-        defaults.removeObject(forKey: DefaultsKey.remotePath)
+        // remotePath 存的是中文原名（解码后的），如 "布仓备份"
+        remotePath = defaults.string(forKey: DefaultsKey.remotePath) ?? ""
         lastBackupAt = defaults.object(forKey: DefaultsKey.lastBackupAt) as? Date
         passwordInput = KeychainHelper.load() ?? ""
         if lastBackupAt != nil {
@@ -154,6 +153,16 @@ final class WebDAVManager: ObservableObject {
         // 中文目录名需要 percent-encoding，否则 URL(string:) 返回 nil
         let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
         return base + "/" + encoded
+    }
+
+    // 中文原名版（未编码），给目录选择器用：App 层统一用中文原名
+    var decodedBaseURL: String {
+        let base = trimmedBase()
+        var path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        while path.hasPrefix("/") { path.removeFirst() }
+        while path.hasSuffix("/") { path.removeLast() }
+        if path.isEmpty { return base }
+        return base + "/" + path
     }
 
     private func imagesBaseURL() -> URL? {
@@ -434,7 +443,24 @@ struct WebDAVBackupView: View {
                 .textFieldStyle(.roundedBorder)
             TextField("备份文件名", text: $webdav.fileName, prompt: Text("bucang-backup.json"))
                 .textFieldStyle(.roundedBorder)
-
+            HStack {
+                Text("备份目录：")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text(webdav.remotePath.isEmpty ? "根目录" : webdav.remotePath)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer()
+                Button("选择目录") {
+                    webdav.saveSettings()
+                    if webdav.trimmedBase().isEmpty {
+                        webdav.errorMessage = "请先填写服务器地址并保存"
+                    } else {
+                        webdav.showingFolderPicker = true
+                    }
+                }
+                .font(.subheadline)
+            }
             Text("图片会存在服务器上的 bucang-images/ 目录里，和备份 JSON 在同一服务器地址下。")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -485,9 +511,9 @@ struct WebDAVBackupView: View {
         .sheet(isPresented: $webdav.showingFolderPicker) {
             BackupFolderPickerView(
                 service: webdav,
-                currentPath: webdav.fullBaseURL,
+                currentPath: webdav.decodedBaseURL,
                 onSelect: { folder in
-                    // 计算相对于服务器地址的路径
+                    // folder.path 已是中文原名（解码后），直接算相对路径
                     let base = webdav.trimmedBase()
                     var rel = folder.path
                     if rel.hasPrefix(base) {
@@ -495,8 +521,8 @@ struct WebDAVBackupView: View {
                     }
                     while rel.hasPrefix("/") { rel.removeFirst() }
                     while rel.hasSuffix("/") { rel.removeLast() }
-                    // 解码后再存，避免双重编码（fullBaseURL 里会统一编码）
-                    webdav.remotePath = rel.removingPercentEncoding ?? rel
+                    // 存中文原名
+                    webdav.remotePath = rel
                     webdav.saveSettings()
                 }
             )
@@ -521,7 +547,13 @@ extension WebDAVManager: FolderService {
     }
 
     func listFolders(path: String) async throws -> [RemoteFolder] {
-        guard let url = URL(string: path) else {
+        // 按 Android-DataBackup 思路：path 是中文原名（含 scheme 的完整 URL），请求时编码一次
+        // 用 URLComponents 来正确编码中文路径
+        guard var comps = URLComponents(string: path.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? path) else {
+            throw NSError(domain: "WebDAV", code: -1, userInfo: [NSLocalizedDescriptionKey: "地址无效"])
+        }
+        // 如果原 path 已编码，addingPercentEncoding 不会双重编码 %（urlFragmentAllowed 包含 %）
+        guard let url = comps.url else {
             throw NSError(domain: "WebDAV", code: -1, userInfo: [NSLocalizedDescriptionKey: "地址无效"])
         }
         var req = authedRequest(url: url, method: "PROPFIND")
@@ -614,14 +646,17 @@ extension WebDAVManager: FolderService {
                 let cleanHref = hrefVal.hasPrefix("/") ? hrefVal : "/" + hrefVal
                 folderURL = baseStr + cleanHref
             }
-            folders.append(RemoteFolder(id: folderURL, name: name, path: folderURL))
+            // 按 Android-DataBackup 思路：App 层用解码后的中文原名
+            let decodedURL = folderURL.removingPercentEncoding ?? folderURL
+            folders.append(RemoteFolder(id: decodedURL, name: name, path: decodedURL))
         }
         return folders
     }
 
     func createFolder(name: String, in path: String) async throws {
         let base = path.hasSuffix("/") ? String(path.dropLast()) : path
-        guard let url = URL(string: base + "/" + name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
+        let fullPath = base + "/" + name
+        guard let url = URL(string: fullPath.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? fullPath) else {
             throw NSError(domain: "WebDAV", code: -1, userInfo: [NSLocalizedDescriptionKey: "地址无效"])
         }
         let req = authedRequest(url: url, method: "MKCOL")
