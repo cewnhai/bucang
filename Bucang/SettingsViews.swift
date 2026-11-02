@@ -139,8 +139,8 @@ struct SettingsView: View {
                                 get: { store.lengthUnit },
                                 set: { store.lengthUnit = $0; store.save() }
                             )) {
-                                Text("米").tag("米")
-                                Text("厘米").tag("厘米")
+                                Text("m").tag("m")
+                                Text("cm").tag("cm")
                                 Text("码").tag("码")
                             }
                             .pickerStyle(.segmented)

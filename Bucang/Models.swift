@@ -203,11 +203,20 @@ final class Brainstorm: Identifiable, Codable {
 // MARK: - 长度单位（内部米，显示换算）
 
 enum LengthUnitHelper {
+    // 单位统一用英文：m（米）、cm（厘米）、码（2026-11-02 用户要求）
     static func factorToDisplay(unit: String) -> Double {
-        switch unit {
-        case "厘米": return 100
+        switch normalized(unit) {
+        case "cm": return 100
         case "码": return 1.09361
         default: return 1
+        }
+    }
+    // 兼容老数据："米"→"m"，"厘米"→"cm"
+    static func normalized(_ unit: String) -> String {
+        switch unit {
+        case "米": return "m"
+        case "厘米": return "cm"
+        default: return unit
         }
     }
     static func fromDisplay(_ value: Double, unit: String) -> Double {
@@ -219,10 +228,10 @@ enum LengthUnitHelper {
         return String(format: "%.2f", v)
     }
     static func suffix(unit: String) -> String {
-        switch unit {
-        case "厘米": return "厘米"
+        switch normalized(unit) {
+        case "cm": return "cm"
         case "码": return "码"
-        default: return "米"
+        default: return "m"
         }
     }
 }
@@ -295,6 +304,13 @@ final class Fabric: Identifiable, Codable {
     var collapsedSections: [String]
     var hasTotalPrice: Bool
     var hasPurchaseLength: Bool
+    // 件数（2026-11-02）：与购买长度二选一；hasPieceCount 为 true 时按件数计量
+    var hasPieceCount: Bool
+    var pieceCount: Int
+    // 购买凭证图片（2026-11-02）：购买信息里的收据/发票照片
+    var purchaseImageNames: [String]
+    // 多选颜色（2026-11-02）：未生成编号时可多选
+    var colorNames: [String]
 
     // 派生：剩余（旧口径，不含售出；V3 剩余请用 Store.remaining(for:)，
     // 它会再减售出长度）。
@@ -325,7 +341,10 @@ final class Fabric: Identifiable, Codable {
         merchantName: String = "", brainstorm: String = "", subCodes: [String] = [],
         videoFileNames: [String] = [], codeSegments: [String] = [],
         collapsedSections: [String] = ["other"],
-        hasTotalPrice: Bool = true, hasPurchaseLength: Bool = true
+        hasTotalPrice: Bool = true, hasPurchaseLength: Bool = true,
+        hasPieceCount: Bool = false, pieceCount: Int = 0,
+        purchaseImageNames: [String] = [],
+        colorNames: [String] = []
     ) {
         self.id = id; self.name = name; self.length = length; self.width = width
         self.purchasePrice = purchasePrice; self.pricePerMeter = pricePerMeter
@@ -349,6 +368,10 @@ final class Fabric: Identifiable, Codable {
         self.collapsedSections = collapsedSections
         self.hasTotalPrice = hasTotalPrice
         self.hasPurchaseLength = hasPurchaseLength
+        self.hasPieceCount = hasPieceCount
+        self.pieceCount = pieceCount
+        self.purchaseImageNames = purchaseImageNames
+        self.colorNames = colorNames
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -359,6 +382,9 @@ final class Fabric: Identifiable, Codable {
         case washing, usageNotes, channelName, merchantName, brainstorm, subCodes, videoFileNames
         case codeSegments, collapsedSections
         case hasTotalPrice, hasPurchaseLength
+        case hasPieceCount, pieceCount
+        case purchaseImageNames
+        case colorNames
     }
 
     required init(from decoder: Decoder) throws {
@@ -404,6 +430,10 @@ final class Fabric: Identifiable, Codable {
         // 旧数据没有这两个标志时按旧值推断：有价格/有长度即视为已填，0 视为未填。
         hasTotalPrice = try c.decodeIfPresent(Bool.self, forKey: .hasTotalPrice) ?? (purchasePrice > 0)
         hasPurchaseLength = try c.decodeIfPresent(Bool.self, forKey: .hasPurchaseLength) ?? (length > 0)
+        hasPieceCount = try c.decodeIfPresent(Bool.self, forKey: .hasPieceCount) ?? false
+        pieceCount = try c.decodeIfPresent(Int.self, forKey: .pieceCount) ?? 0
+        purchaseImageNames = try c.decodeIfPresent([String].self, forKey: .purchaseImageNames) ?? []
+        colorNames = try c.decodeIfPresent([String].self, forKey: .colorNames) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -443,6 +473,10 @@ final class Fabric: Identifiable, Codable {
         try c.encode(collapsedSections, forKey: .collapsedSections)
         try c.encode(hasTotalPrice, forKey: .hasTotalPrice)
         try c.encode(hasPurchaseLength, forKey: .hasPurchaseLength)
+        try c.encode(hasPieceCount, forKey: .hasPieceCount)
+        try c.encode(pieceCount, forKey: .pieceCount)
+        try c.encode(purchaseImageNames, forKey: .purchaseImageNames)
+        try c.encode(colorNames, forKey: .colorNames)
     }
 }
 
@@ -455,10 +489,14 @@ final class UsageRecord: Identifiable, Codable {
     var note: String
     var fabricId: UUID
     var workIds: [UUID]
-    init(id: UUID = UUID(), date: Date = Date(), length: Double = 0, note: String = "", fabricId: UUID, workIds: [UUID] = []) {
+    // 件数（2026-11-02）：布料按件数计量时使用
+    var isPieces: Bool
+    var pieces: Int
+    init(id: UUID = UUID(), date: Date = Date(), length: Double = 0, note: String = "", fabricId: UUID, workIds: [UUID] = [], isPieces: Bool = false, pieces: Int = 0) {
         self.id = id; self.date = date; self.length = length; self.note = note; self.fabricId = fabricId; self.workIds = workIds
+        self.isPieces = isPieces; self.pieces = pieces
     }
-    private enum CodingKeys: String, CodingKey { case id, date, length, note, fabricId, workIds }
+    private enum CodingKeys: String, CodingKey { case id, date, length, note, fabricId, workIds, isPieces, pieces }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -467,12 +505,15 @@ final class UsageRecord: Identifiable, Codable {
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         fabricId = try c.decodeIfPresent(UUID.self, forKey: .fabricId) ?? UUID()
         workIds = try c.decodeIfPresent([UUID].self, forKey: .workIds) ?? []
+        isPieces = try c.decodeIfPresent(Bool.self, forKey: .isPieces) ?? false
+        pieces = try c.decodeIfPresent(Int.self, forKey: .pieces) ?? 0
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id); try c.encode(date, forKey: .date)
         try c.encode(length, forKey: .length); try c.encode(note, forKey: .note)
         try c.encode(fabricId, forKey: .fabricId); try c.encode(workIds, forKey: .workIds)
+        try c.encode(isPieces, forKey: .isPieces); try c.encode(pieces, forKey: .pieces)
     }
 }
 
@@ -490,10 +531,15 @@ final class SaleRecord: Identifiable, Codable {
     var imageFileNames: [String]
     var isPieces: Bool
     var pieces: Int
-    init(id: UUID = UUID(), fabricId: UUID, length: Double = 0, channel: String = "", merchant: String = "", price: Double = 0, date: Date = Date(), note: String = "", imageFileNames: [String] = [], isPieces: Bool = false, pieces: Int = 0) {
+    // 邮费/打包费（2026-11-02）：实际入账 = 售出价格 - 邮费
+    var shippingFee: Double
+    // 实际入账（派生）：price - shippingFee
+    var netIncome: Double { max(0, price - shippingFee) }
+    init(id: UUID = UUID(), fabricId: UUID, length: Double = 0, channel: String = "", merchant: String = "", price: Double = 0, date: Date = Date(), note: String = "", imageFileNames: [String] = [], isPieces: Bool = false, pieces: Int = 0, shippingFee: Double = 0) {
         self.id = id; self.fabricId = fabricId; self.length = length; self.channel = channel; self.merchant = merchant; self.price = price; self.date = date; self.note = note; self.imageFileNames = imageFileNames; self.isPieces = isPieces; self.pieces = pieces
+        self.shippingFee = shippingFee
     }
-    private enum CodingKeys: String, CodingKey { case id, fabricId, length, channel, merchant, price, date, note, imageFileNames, isPieces, pieces }
+    private enum CodingKeys: String, CodingKey { case id, fabricId, length, channel, merchant, price, date, note, imageFileNames, isPieces, pieces, shippingFee }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -507,6 +553,7 @@ final class SaleRecord: Identifiable, Codable {
         imageFileNames = try c.decodeIfPresent([String].self, forKey: .imageFileNames) ?? []
         isPieces = try c.decodeIfPresent(Bool.self, forKey: .isPieces) ?? false
         pieces = try c.decodeIfPresent(Int.self, forKey: .pieces) ?? 0
+        shippingFee = try c.decodeIfPresent(Double.self, forKey: .shippingFee) ?? 0
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -516,6 +563,7 @@ final class SaleRecord: Identifiable, Codable {
         try c.encode(price, forKey: .price); try c.encode(date, forKey: .date)
         try c.encode(note, forKey: .note); try c.encode(imageFileNames, forKey: .imageFileNames)
         try c.encode(isPieces, forKey: .isPieces); try c.encode(pieces, forKey: .pieces)
+        try c.encode(shippingFee, forKey: .shippingFee)
     }
 }
 
@@ -548,6 +596,9 @@ final class Work: Identifiable, Codable {
     var isSold: Bool
     var salePrice: Double
     var hasSalePrice: Bool
+    // 邮费/打包费（2026-11-02）：实际入账 = 售出价格 - 邮费
+    var shippingFee: Double
+    var netIncome: Double { max(0, (hasSalePrice ? salePrice : 0) - shippingFee) }
     var saleDate: Date?
     var saleChannel: String
     var isUsed: Bool
@@ -568,7 +619,8 @@ final class Work: Identifiable, Codable {
         isSold: Bool = false, salePrice: Double = 0, hasSalePrice: Bool = false,
         saleDate: Date? = nil, saleChannel: String = "", isUsed: Bool = false, usageCount: Int = 0,
         laborCost: Double = 0, hasLaborCost: Bool = false, colorName: String = "",
-        colorCodes: [String] = []
+        colorCodes: [String] = [],
+        shippingFee: Double = 0
     ) {
         self.id = id; self.name = name; self.progress = progress
         self.startedAt = startedAt; self.finishedAt = finishedAt
@@ -579,11 +631,13 @@ final class Work: Identifiable, Codable {
         self.saleDate = saleDate; self.saleChannel = saleChannel; self.isUsed = isUsed; self.usageCount = usageCount
         self.laborCost = laborCost; self.hasLaborCost = hasLaborCost; self.colorName = colorName
         self.colorCodes = colorCodes
+        self.shippingFee = shippingFee
     }
     private enum CodingKeys: String, CodingKey {
         case id, name, progress, startedAt, finishedAt, costPrice, sellPrice, timeHours, note, createdAt, imageFileNames, materials
         case isSold, salePrice, hasSalePrice, saleDate, saleChannel, isUsed, usageCount
         case laborCost, hasLaborCost, colorName, colorCodes
+        case shippingFee
     }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -610,6 +664,7 @@ final class Work: Identifiable, Codable {
         hasLaborCost = try c.decodeIfPresent(Bool.self, forKey: .hasLaborCost) ?? (laborCost > 0)
         colorName = try c.decodeIfPresent(String.self, forKey: .colorName) ?? ""
         colorCodes = try c.decodeIfPresent([String].self, forKey: .colorCodes) ?? []
+        shippingFee = try c.decodeIfPresent(Double.self, forKey: .shippingFee) ?? 0
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -625,6 +680,7 @@ final class Work: Identifiable, Codable {
         try c.encode(usageCount, forKey: .usageCount)
         try c.encode(laborCost, forKey: .laborCost); try c.encode(hasLaborCost, forKey: .hasLaborCost)
         try c.encode(colorName, forKey: .colorName); try c.encode(colorCodes, forKey: .colorCodes)
+        try c.encode(shippingFee, forKey: .shippingFee)
     }
 }
 
@@ -744,7 +800,7 @@ struct StoreData: Codable {
     var brainstorms: [Brainstorm] = []
     var materialOptions: [String] = []
     var otherCategories: [String]
-    var lengthUnit: String = "米"
+    var lengthUnit: String = "m"
     var hideAmounts: Bool = false
     var codePrefix: String = ""
     var channelOptions: [String] = []
@@ -776,7 +832,7 @@ final class Store: ObservableObject {
     @Published var materialOptions: [String] = []
     @Published var otherCategories: [String] = []
     @Published var otherCategoryTree: [OtherCategory] = []
-    @Published var lengthUnit: String = "米"
+    @Published var lengthUnit: String = "m"
     @Published var hideAmounts: Bool = false
     @Published var codePrefix: String = ""
     @Published var channelOptions: [String] = []
@@ -894,7 +950,8 @@ final class Store: ObservableObject {
         otherCategories = decoded.otherCategories.isEmpty ? Self.defaultOtherCategories : decoded.otherCategories
         // 多级分类从独立文件加载（2026-11-01）：不碰主 JSON，避免老备份解码失败
         loadCategoryTree()
-        lengthUnit = ["米", "厘米", "码"].contains(decoded.lengthUnit) ? decoded.lengthUnit : "米"
+        lengthUnit = LengthUnitHelper.normalized(decoded.lengthUnit)
+        if !["m", "cm", "码"].contains(lengthUnit) { lengthUnit = "m" }
         hideAmounts = decoded.hideAmounts; codePrefix = decoded.codePrefix
         channelOptions = decoded.channelOptions.isEmpty ? Self.defaultChannelOptions : decoded.channelOptions
         patternOptions = decoded.patternOptions.isEmpty ? Self.defaultPatternOptions : decoded.patternOptions
@@ -1296,7 +1353,27 @@ final class Store: ObservableObject {
     func addMaterial(_ material: Material) { materials.append(material); save() }
     func addChannel(_ channel: Channel) { channels.append(channel); save() }
     func addFabric(_ fabric: Fabric) { fabrics.append(fabric); save() }
-    func addUsageRecord(_ record: UsageRecord) { usageRecords.append(record); save() }
+    func addUsageRecord(_ record: UsageRecord) {
+        usageRecords.append(record)
+        // 未关联成品时自动创建成品卡片（默认制作中），两者对应（2026-11-02）
+        if record.workIds.isEmpty {
+            let work = Work(
+                name: record.note.isEmpty ? "未命名成品" : record.note,
+                startedAt: record.date
+            )
+            // 关联用料
+            if record.isPieces {
+                // 件数模式：记录件数到备注
+                work.note = "用料：\(record.pieces)件"
+            } else {
+                work.materials.append(WorkMaterial(fabricId: record.fabricId, amount: record.length))
+            }
+            works.append(work)
+            // 回填关联
+            record.workIds = [work.id]
+        }
+        save()
+    }
     func addSaleRecord(_ record: SaleRecord) { saleRecords.append(record); save() }
     func addWork(_ work: Work) { works.append(work); save() }
     func addPattern(_ pattern: Pattern) { patterns.append(pattern); save() }
@@ -1353,6 +1430,10 @@ final class Store: ObservableObject {
     /// 颜色默认值迁移到图2的13色（2026-10-31）：旧版12色（含茶/其他）替换为新13色，
     /// 用户自定义的颜色（不在旧默认值里的）保留并追加到末尾。
     private func migrateColorDefaults() {
+        // 只运行一次：用户修改后的颜色不再被重置（2026-11-02 修复：之前每次启动都重置）
+        let key = "bucang.colorMigrationDone"
+        if UserDefaults.standard.bool(forKey: key) { return }
+        UserDefaults.standard.set(true, forKey: key)
         guard let level = codeLevels.first(where: { $0.kind == "color" }) else { return }
         let newNames = Set(Self.defaultColorItems().map { $0.name })
         // 如果已经是新13色（名称完全匹配），不处理

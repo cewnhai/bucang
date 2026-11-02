@@ -158,6 +158,11 @@ struct FabricCardView: View {
     var compact: Bool = false
     @State private var showingAddSheet = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private var netIncome: Double {
+        let price = Double(priceText) ?? 0
+        let fee = Double(shippingFeeText) ?? 0
+        return max(0, price - fee)
+    }
 
     private var sold: Double { store.soldLength(for: fabric.id) }
     private var remaining: Double { store.remaining(for: fabric) }
@@ -176,9 +181,9 @@ struct FabricCardView: View {
                         .clipped()
                 } else {
                     Rectangle()
-                        .fill(ThemeHelper.accentSoft(store.themeName))
+                        .fill(Color(.systemGray5))
                         .frame(height: 120)
-                        .overlay(Image(systemName: "scissors").foregroundColor(themeAccent).font(.title))
+                        .overlay(Image(systemName: "scissors").foregroundColor(.secondary).font(.title))
                 }
                 Button(action: {
                     fabric.isFavorite.toggle()
@@ -295,7 +300,7 @@ struct FabricCardView: View {
         case "material":
             return ("材质", fabric.materialName.isEmpty ? "—" : fabric.materialName)
         case "width":
-            return ("宽幅", fabric.width > 0 ? "\(String(format: "%.0f", fabric.widthCm))厘米" : "—")
+            return ("宽幅", fabric.width > 0 ? "\(String(format: "%.0f", fabric.widthCm))cm" : "—")
         case "length":
             return ("米数", fabric.hasPurchaseLength
                 ? "\(LengthUnitHelper.format(fabric.length, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
@@ -2318,7 +2323,7 @@ struct SaleRecordsPageView: View {
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var totalPieces: Int { records.filter { $0.isPieces }.reduce(0) { $0 + $1.pieces } }
-    private var totalRevenue: Double { records.reduce(0) { $0 + $1.price } }
+    private var totalRevenue: Double { records.reduce(0) { $0 + $1.netIncome } }
 
     private var statusCapsule: some View {
         HStack(spacing: 4) {
@@ -2508,6 +2513,10 @@ struct FabricEditView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     var fabric: Fabric?
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private var selectedTagNames: [String] {
+        store.tags.filter { selectedTagIDs.contains($0.id) }.map { $0.name }
+    }
     @State private var code: String
     @State private var name: String
     @State private var material: String
@@ -2516,6 +2525,7 @@ struct FabricEditView: View {
     @State private var colorName: String
     @State private var widthCmText: String
     @State private var lengthText: String
+    @State private var pieceCountText: String
     @State private var priceText: String
     @State private var weightText: String
     @State private var shrinkageText: String
@@ -2529,6 +2539,10 @@ struct FabricEditView: View {
     @State private var fillPurchaseDate: Bool
     @State private var isFavorite: Bool
     @State private var selectedTagIDs: Set<UUID>
+    @State private var showingTagPicker = false
+    @State private var purchaseImageNames: [String]
+    @State private var purchasePickerItems: [PhotosPickerItem] = []
+    @State private var selColorNames: Set<String>
     @State private var imageNames: [String]
     @State private var videoNames: [String]
     @State private var errorMessage: String?
@@ -2556,6 +2570,9 @@ struct FabricEditView: View {
         // 长度初始值先按米填，body 的 onAppear 会按当前设置单位换算一次
         //（init 里读不到 store，只能先占位，不能在 init 里直接换算）。
         _lengthText = State(initialValue: fabric == nil || !fabric!.hasPurchaseLength ? "" : String(fabric!.length))
+        _pieceCountText = State(initialValue: fabric == nil || !fabric!.hasPieceCount ? "" : String(fabric!.pieceCount))
+        _purchaseImageNames = State(initialValue: fabric?.purchaseImageNames ?? [])
+        _selColorNames = State(initialValue: Set(fabric?.colorNames ?? []))
         _priceText = State(initialValue: fabric == nil || !fabric!.hasTotalPrice ? "" : String(fabric!.purchasePrice))
         _weightText = State(initialValue: fabric?.weightGsm.map { String($0) } ?? "")
         _shrinkageText = State(initialValue: fabric?.shrinkagePct.map { String($0) } ?? "")
@@ -2615,7 +2632,19 @@ struct FabricEditView: View {
             existing.code = trimmedCode; existing.name = name; existing.materialName = materialValue
             existing.composition = composition; existing.colorName = colorName
             existing.width = widthMetres; existing.length = lengthMetres
-            existing.hasPurchaseLength = !lengthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let pieceTrimmed = pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let pieceVal = Int(pieceTrimmed) ?? 0
+            existing.hasPieceCount = !pieceTrimmed.isEmpty && pieceVal > 0
+            existing.pieceCount = pieceVal
+            existing.purchaseImageNames = purchaseImageNames
+            existing.colorNames = Array(selColorNames)
+            // 件数和长度二选一：填了件数则长度视为未填
+            if existing.hasPieceCount {
+                existing.hasPurchaseLength = false
+                existing.length = 0
+            } else {
+                existing.hasPurchaseLength = !lengthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
             existing.purchasePrice = price; existing.hasTotalPrice = !priceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             existing.pricePerMeter = (existing.hasPurchaseLength && lengthMetres > 0) ? price / lengthMetres : 0
             existing.weightGsm = Double(weightText); existing.shrinkagePct = Double(shrinkageText)
@@ -2651,13 +2680,35 @@ struct FabricEditView: View {
                 subCodes: subCodes.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
                 videoFileNames: videoNames, codeSegments: codeSegments,
                 hasTotalPrice: !priceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                hasPurchaseLength: !lengthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                hasPurchaseLength: !lengthText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                hasPieceCount: !(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (Int(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) > 0,
+                pieceCount: Int(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+                purchaseImageNames: purchaseImageNames,
+                colorNames: Array(selColorNames)
             )
             newFabric.isFavorite = isFavorite
             if newFabric.hasPurchaseLength && lengthMetres > 0 { newFabric.pricePerMeter = price / lengthMetres }
             store.addFabric(newFabric)
         }
         dismiss()
+    }
+
+    private func importPurchaseImages(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                let name = UUID().uuidString + ".jpg"
+                if let data = image.jpegData(compressionQuality: 0.85),
+                   FabricImageStore.saveData(data, named: name) {
+                    await MainActor.run {
+                        purchaseImageNames.append(name)
+                    }
+                }
+            }
+        }
+        await MainActor.run {
+            purchasePickerItems = []
+        }
     }
 
     private func cancelEditing() {
@@ -2685,7 +2736,8 @@ struct FabricEditView: View {
                 Button("生成编号") { codeGenTargetSubIndex = nil; showingCodeGenerator = true }
                 Text("编号体系：设置 > 编号体系里定颜色体系与纹样；生成时选颜色与纹样，序号按该组合递增。").font(.caption).foregroundColor(.secondary)
                 LabeledTextField(label: "名称", placeholder: "选填", text: $name)
-                LabeledTextField(label: "幅宽", placeholder: "点击输入", text: $widthCmText, keyboardType: .decimalPad, unit: "厘米")
+                LabeledTextField(label: "件数", placeholder: "与长度二选一", text: $pieceCountText, keyboardType: .numberPad, unit: "件")
+                LabeledTextField(label: "幅宽", placeholder: "点击输入", text: $widthCmText, keyboardType: .decimalPad, unit: "cm")
                 LabeledTextField(label: "长度", placeholder: "留空=未填", text: $lengthText, keyboardType: .decimalPad, unit: store.lengthUnit)
                 HStack {
                     Text("子编号").font(.subheadline)
@@ -2707,21 +2759,81 @@ struct FabricEditView: View {
                         }
                     }
                 }
-                if store.tags.isEmpty {
-                    Text("还没有标签，去设置里先加标签").foregroundColor(.secondary)
-                } else {
-                    ForEach(store.tags.sorted { $0.sortOrder < $1.sortOrder }) { tag in
-                        Button(action: {
-                            if selectedTagIDs.contains(tag.id) { selectedTagIDs.remove(tag.id) } else { selectedTagIDs.insert(tag.id) }
-                        }) {
-                            HStack { Text(tag.name); Spacer(); if selectedTagIDs.contains(tag.id) { Image(systemName: "checkmark") } }
+                // 标签栏：右侧 > 按钮，点击进入选择器多选保存
+                Button(action: { showingTagPicker = true }) {
+                    HStack {
+                        Text("标签").foregroundColor(.primary)
+                        Spacer()
+                        Text(selectedTagNames.isEmpty ? "未选择" : selectedTagNames.joined(separator: "、"))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.right").foregroundColor(.secondary)
+                    }
+                }
+                .sheet(isPresented: $showingTagPicker) {
+                    NavigationStack {
+                        List(store.tags.sorted { $0.sortOrder < $1.sortOrder }) { tag in
+                            Button(action: {
+                                if selectedTagIDs.contains(tag.id) { selectedTagIDs.remove(tag.id) }
+                                else { selectedTagIDs.insert(tag.id) }
+                            }) {
+                                HStack {
+                                    Text(tag.name).foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedTagIDs.contains(tag.id) {
+                                        Image(systemName: "checkmark").foregroundColor(themeAccent)
+                                    }
+                                }
+                            }
                         }
-                        .foregroundColor(.primary)
+                        .navigationTitle("选择标签")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("保存") { showingTagPicker = false }
+                            }
+                        }
                     }
                 }
             }
             // (3) 购买信息
             Section("购买信息") {
+                // 购买凭证图片（收据/发票）
+                HStack {
+                    Text("凭证图片").font(.subheadline)
+                    Spacer()
+                    PhotosPicker(selection: $purchasePickerItems, matching: .images, photoLibrary: .shared()) {
+                        Label("选择图片", systemImage: "photo.on.rectangle")
+                    }
+                    .onChange(of: purchasePickerItems) { items in
+                        Task { await importPurchaseImages(items) }
+                    }
+                }
+                if !purchaseImageNames.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(purchaseImageNames, id: \.self) { name in
+                                ZStack(alignment: .topTrailing) {
+                                    if let uiImage = FabricImageStore.loadImage(named: name) {
+                                        Image(uiImage: uiImage)
+                                            .resizable().scaledToFill()
+                                            .frame(width: 80, height: 80)
+                                            .cornerRadius(8).clipped()
+                                    }
+                                    Button(action: {
+                                        purchaseImageNames.removeAll { $0 == name }
+                                        FabricImageStore.delete(named: name)
+                                    }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.red)
+                                            .background(Circle().fill(Color.white))
+                                    }
+                                    .padding(4)
+                                }
+                            }
+                        }
+                    }
+                }
                 Picker("渠道", selection: $channel) {
                     Text("未填").tag("")
                     ForEach(store.channelOptions, id: \.self) { Text($0).tag($0) }
@@ -2743,38 +2855,46 @@ struct FabricEditView: View {
                 }
                 LabeledTextField(label: "自定义材质", placeholder: "选填", text: $customMaterial)
                 LabeledTextField(label: "成分", placeholder: "如 棉80%/涤纶20%", text: $composition)
-                Text("颜色（单选，来自设置 > 编号体系 > 色系）").font(.caption).foregroundColor(.secondary)
+                Text(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "颜色（多选，未生成编号时可选多个）" : "颜色（单选，来自设置 > 编号体系 > 色系）").font(.caption).foregroundColor(.secondary)
                 let colorItems = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? []).filter { $0.enabled }
+                let isMultiColor = code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 if colorItems.isEmpty {
                     Text("色系表为空，去设置 > 编号体系里添加").foregroundColor(.secondary)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 72))], spacing: 10) {
                         ForEach(colorItems) { item in
                             Button(action: {
-                                colorName = item.name
-                                // 颜色单选联动编号体系：把选中色的代码写进待定 codeSegments
-                                // 的色系级位置，生成器预填时就能延续该色的序号规则。
-                                if let idx = store.levelOrder().firstIndex(where: { $0.kind == "color" }) {
-                                    var segs = codeSegments.isEmpty ? store.parseSegments(code: code) : codeSegments
-                                    while segs.count <= idx { segs.append("") }
-                                    segs[idx] = item.code
-                                    codeSegments = segs
+                                if isMultiColor {
+                                    // 多选模式
+                                    if selColorNames.contains(item.name) { selColorNames.remove(item.name) }
+                                    else { selColorNames.insert(item.name) }
+                                } else {
+                                    colorName = item.name
+                                    // 颜色单选联动编号体系：把选中色的代码写进待定 codeSegments
+                                    // 的色系级位置，生成器预填时就能延续该色的序号规则。
+                                    if let idx = store.levelOrder().firstIndex(where: { $0.kind == "color" }) {
+                                        var segs = codeSegments.isEmpty ? store.parseSegments(code: code) : codeSegments
+                                        while segs.count <= idx { segs.append("") }
+                                        segs[idx] = item.code
+                                        codeSegments = segs
+                                    }
                                 }
                             }) {
+                                let isSelected = isMultiColor ? selColorNames.contains(item.name) : (colorName == item.name)
                                 VStack(spacing: 4) {
                                     CodeItemIconView(icon: item.icon, size: 32)
-                                    Text(item.name).font(.caption).foregroundColor(colorName == item.name ? Design.accent : .primary)
+                                    Text(item.name).font(.caption).foregroundColor(isSelected ? Design.accent : .primary)
                                     if !item.code.isEmpty {
                                         Text(item.code).font(.caption2).foregroundColor(.secondary)
                                     }
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(6)
-                                .background(colorName == item.name ? ThemeHelper.accentSoft(store.themeName) : Color.clear)
+                                .background(isSelected ? ThemeHelper.accentSoft(store.themeName) : Color.clear)
                                 .cornerRadius(10)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10)
-                                        .stroke(colorName == item.name ? Design.accent : Color.gray.opacity(0.25), lineWidth: 1)
+                                        .stroke(isSelected ? Design.accent : Color.gray.opacity(0.25), lineWidth: 1)
                                 )
                             }
                             .buttonStyle(.plain)
@@ -3326,6 +3446,43 @@ struct UsageFormView: View {
                         .padding(.vertical, 6)
                     }
                     .buttonStyle(.plain)
+                    // 已关联明细缩略图
+                    if !selectedWorkIDs.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(selectedWorkIDs, id: \.self) { workId in
+                                    if let work = store.works.first(where: { $0.id == workId }) {
+                                        VStack(spacing: 4) {
+                                            ZStack {
+                                                if let first = work.imageFileNames.first,
+                                                   let uiImage = FabricImageStore.loadImage(named: first) {
+                                                    Image(uiImage: uiImage)
+                                                        .resizable().scaledToFill()
+                                                        .frame(width: 60, height: 60)
+                                                        .cornerRadius(8).clipped()
+                                                } else {
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .fill(Color(.systemGray5))
+                                                        .frame(width: 60, height: 60)
+                                                        .overlay(Image(systemName: "tshirt").foregroundColor(.secondary))
+                                                }
+                                                Button(action: { selectedWorkIDs.remove(workId) }) {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .foregroundColor(.red)
+                                                        .background(Circle().fill(Color.white))
+                                                }
+                                                .offset(x: 20, y: -20)
+                                            }
+                                            Text(work.name.isEmpty ? "未命名" : work.name)
+                                                .font(.caption2).lineLimit(1)
+                                                .frame(width: 60)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
                     Divider()
                     HStack(spacing: 12) {
                         RecordIconBox(icon: "text.alignleft", accent: themeAccent)
@@ -3433,6 +3590,7 @@ struct SaleFormView: View {
     @State private var channel = ""
     @State private var merchant = ""
     @State private var priceText = ""
+    @State private var shippingFeeText = ""
     @State private var date = Date()
     @State private var note = ""
     @State private var imageNames: [String] = []
@@ -3471,6 +3629,7 @@ struct SaleFormView: View {
             _channel = State(initialValue: record.channel)
             _merchant = State(initialValue: record.merchant)
             _priceText = State(initialValue: String(record.price))
+            _shippingFeeText = State(initialValue: record.shippingFee > 0 ? String(record.shippingFee) : "")
             _date = State(initialValue: record.date)
             _note = State(initialValue: record.note)
             _imageNames = State(initialValue: record.imageFileNames)
@@ -3539,6 +3698,19 @@ struct SaleFormView: View {
                         .font(.headline)
                         .padding(.bottom, 8)
                     HStack(spacing: 12) {
+                        RecordIconBox(icon: "box.truck", accent: themeAccent)
+                        Text("邮费/打包费").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        TextField("点击输入", text: $shippingFeeText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .font(.subheadline)
+                            .frame(width: 110)
+                        Text("元").font(.subheadline).foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                    Divider()
+                    HStack(spacing: 12) {
                         RecordIconBox(icon: "yensign", accent: themeAccent)
                         Text("售出价格").font(.subheadline).foregroundColor(.secondary)
                         Spacer()
@@ -3548,6 +3720,17 @@ struct SaleFormView: View {
                             .font(.subheadline)
                             .frame(width: 110)
                         Text("元").font(.subheadline).foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                    Divider()
+                    // 实际入账（自动计算，不可改）
+                    HStack(spacing: 12) {
+                        RecordIconBox(icon: "banknote", accent: themeAccent)
+                        Text("实际入账").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        Text("¥\(String(format: "%.2f", netIncome))")
+                            .font(.subheadline).fontWeight(.semibold)
+                            .foregroundColor(Design.priceAccent)
                     }
                     .padding(.vertical, 6)
                     Divider()
@@ -3642,16 +3825,18 @@ struct SaleFormView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
                     let price = Double(priceText) ?? 0
+                    let shippingFee = Double(shippingFeeText) ?? 0
                     if isPieces {
                         guard let pieces = Int(piecesText), pieces > 0 else { errorMessage = "份数出售请输入大于 0 的件数"; return }
                         if let old = record {
                             old.isPieces = true; old.pieces = pieces; old.length = 0
                             old.channel = channel; old.merchant = merchant; old.price = price; old.date = date; old.note = note
+                            old.shippingFee = shippingFee
                             for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
                             old.imageFileNames = imageNames
                             store.save()
                         } else {
-                            store.addSaleRecord(SaleRecord(fabricId: fabric.id, length: 0, channel: channel, merchant: merchant, price: price, date: date, note: note, imageFileNames: imageNames, isPieces: true, pieces: pieces))
+                            store.addSaleRecord(SaleRecord(fabricId: fabric.id, length: 0, channel: channel, merchant: merchant, price: price, date: date, note: note, imageFileNames: imageNames, isPieces: true, pieces: pieces, shippingFee: shippingFee))
                         }
                     } else {
                         guard let display = Double(lengthText), display > 0 else { errorMessage = "请输入大于 0 的售出长度"; return }
@@ -3664,6 +3849,7 @@ struct SaleFormView: View {
                             }
                             old.isPieces = false; old.pieces = 0; old.length = metres
                             old.channel = channel; old.merchant = merchant; old.price = price; old.date = date; old.note = note
+                            old.shippingFee = shippingFee
                             for oldName in originalImageNames where !imageNames.contains(oldName) { FabricImageStore.delete(named: oldName) }
                             old.imageFileNames = imageNames
                             store.save()
@@ -3671,7 +3857,7 @@ struct SaleFormView: View {
                             if fabric.hasPurchaseLength && metres > store.remaining(for: fabric) {
                                 errorMessage = "售出长度不能大于剩余长度"; return
                             }
-                            store.addSaleRecord(SaleRecord(fabricId: fabric.id, length: metres, channel: channel, merchant: merchant, price: price, date: date, note: note, imageFileNames: imageNames, isPieces: false, pieces: 0))
+                            store.addSaleRecord(SaleRecord(fabricId: fabric.id, length: metres, channel: channel, merchant: merchant, price: price, date: date, note: note, imageFileNames: imageNames, isPieces: false, pieces: 0, shippingFee: shippingFee))
                         }
                     }
                     dismiss()
