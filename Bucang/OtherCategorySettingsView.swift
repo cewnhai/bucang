@@ -56,10 +56,18 @@ struct OtherCategorySettingsView: View {
                                     renamingId = nil
                                 })
                             } else {
-                                Text(cat.name)
-                                Spacer()
-                                Text("\(store.otherCategoryTree.filter { $0.parentId == cat.id }.count) 个子分类")
-                                    .font(.caption).foregroundColor(.secondary)
+                                Button(action: {
+                                    renamingId = cat.id
+                                    renameText = cat.name
+                                }) {
+                                    HStack {
+                                        Text(cat.name).foregroundColor(.primary)
+                                        Spacer()
+                                        Text("\(store.otherCategoryTree.filter { $0.parentId == cat.id }.count) 个子分类")
+                                            .font(.caption).foregroundColor(.secondary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }

@@ -62,6 +62,10 @@ struct WorksListView: View {
             : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     }
     private var totalSoldAmount: Double { soldWorks.reduce(0) { $0 + ($1.hasSalePrice ? $1.salePrice : 0) } }
+    // 净回款 = 实际入账 - 成本（2026-11-02）
+    private var totalNetIncome: Double {
+        soldWorks.reduce(0) { $0 + ($1.netIncome - store.workTotalCost(for: $1)) }
+    }
 
     private func workStatColumn(label: String, value: String) -> some View {
         VStack(spacing: 2) {
@@ -225,6 +229,8 @@ struct WorksListView: View {
                             workStatColumn(label: "已售出数", value: "\(soldWorks.count)")
                             Divider().frame(height: 36).background(Color.white.opacity(0.4))
                             workStatColumn(label: "总金额", value: "¥\(String(format: "%.2f", totalSoldAmount))")
+                            Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                            workStatColumn(label: "净回款", value: "¥\(String(format: "%.2f", totalNetIncome))")
                         }
                     } else {
                         HStack(spacing: 0) {

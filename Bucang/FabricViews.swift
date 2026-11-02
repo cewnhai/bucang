@@ -158,11 +158,6 @@ struct FabricCardView: View {
     var compact: Bool = false
     @State private var showingAddSheet = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
-    private var netIncome: Double {
-        let price = Double(priceText) ?? 0
-        let fee = Double(shippingFeeText) ?? 0
-        return max(0, price - fee)
-    }
 
     private var sold: Double { store.soldLength(for: fabric.id) }
     private var remaining: Double { store.remaining(for: fabric) }
@@ -3336,6 +3331,54 @@ struct UsageFormView: View {
     @State private var lengthInitialized = false
 
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private var workThumbnailRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(selectedWorkIDs), id: \.self) { workId in
+                    workThumb(workId)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+    private func workThumb(_ workId: UUID) -> some View {
+        guard let work = store.works.first(where: { $0.id == workId }) else {
+            return AnyView(EmptyView())
+        }
+        return AnyView(
+            VStack(spacing: 4) {
+                ZStack {
+                    workThumbImage(work)
+                    Button(action: { selectedWorkIDs.remove(workId) }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                            .background(Circle().fill(Color.white))
+                    }
+                    .offset(x: 20, y: -20)
+                }
+                Text(work.name.isEmpty ? "未命名" : work.name)
+                    .font(.caption2).lineLimit(1)
+                    .frame(width: 60)
+            }
+        )
+    }
+    private func workThumbImage(_ work: Work) -> some View {
+        guard let first = work.imageFileNames.first,
+              let uiImage = FabricImageStore.loadImage(named: first) else {
+            return AnyView(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.systemGray5))
+                    .frame(width: 60, height: 60)
+                    .overlay(Image(systemName: "tshirt").foregroundColor(.secondary))
+            )
+        }
+        return AnyView(
+            Image(uiImage: uiImage)
+                .resizable().scaledToFill()
+                .frame(width: 60, height: 60)
+                .cornerRadius(8).clipped()
+        )
+    }
     /// 可用上限（米）：编辑时把旧记录的长度加回剩余。
     private var maxAvailable: Double {
         if let old = record { return store.remaining(for: fabric) + old.length }
@@ -3448,40 +3491,7 @@ struct UsageFormView: View {
                     .buttonStyle(.plain)
                     // 已关联明细缩略图
                     if !selectedWorkIDs.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(selectedWorkIDs, id: \.self) { workId in
-                                    if let work = store.works.first(where: { $0.id == workId }) {
-                                        VStack(spacing: 4) {
-                                            ZStack {
-                                                if let first = work.imageFileNames.first,
-                                                   let uiImage = FabricImageStore.loadImage(named: first) {
-                                                    Image(uiImage: uiImage)
-                                                        .resizable().scaledToFill()
-                                                        .frame(width: 60, height: 60)
-                                                        .cornerRadius(8).clipped()
-                                                } else {
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .fill(Color(.systemGray5))
-                                                        .frame(width: 60, height: 60)
-                                                        .overlay(Image(systemName: "tshirt").foregroundColor(.secondary))
-                                                }
-                                                Button(action: { selectedWorkIDs.remove(workId) }) {
-                                                    Image(systemName: "xmark.circle.fill")
-                                                        .foregroundColor(.red)
-                                                        .background(Circle().fill(Color.white))
-                                                }
-                                                .offset(x: 20, y: -20)
-                                            }
-                                            Text(work.name.isEmpty ? "未命名" : work.name)
-                                                .font(.caption2).lineLimit(1)
-                                                .frame(width: 60)
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
+                        workThumbnailRow
                     }
                     Divider()
                     HStack(spacing: 12) {
@@ -3599,6 +3609,11 @@ struct SaleFormView: View {
     private let originalImageNames: [String]
 
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    private var netIncome: Double {
+        let price = Double(priceText) ?? 0
+        let fee = Double(shippingFeeText) ?? 0
+        return max(0, price - fee)
+    }
     /// 长度出售的可用上限（米）：编辑时把旧记录的长度加回剩余；份数模式不用。
     private var maxAvailable: Double {
         if let old = record, !old.isPieces { return store.remaining(for: fabric) + old.length }

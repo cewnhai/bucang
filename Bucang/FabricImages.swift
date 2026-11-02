@@ -241,6 +241,14 @@ struct FabricImageEditor: View {
         onNamesChanged()
     }
 
+    private func moveImage(_ name: String, direction: Int) {
+        guard let idx = imageNames.firstIndex(of: name) else { return }
+        let newIdx = idx + direction
+        guard newIdx >= 0 && newIdx < imageNames.count else { return }
+        imageNames.move(fromOffsets: IndexSet(integer: idx), toOffset: newIdx > idx ? newIdx + 1 : newIdx)
+        onNamesChanged()
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if imageNames.isEmpty {
@@ -251,28 +259,47 @@ struct FabricImageEditor: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(imageNames, id: \.self) { name in
-                            ZStack(alignment: .topTrailing) {
-                                if let uiImage = FabricImageStore.loadImage(named: name) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 96, height: 96)
-                                        .clipped()
-                                        .cornerRadius(12)
-                                        .onTapGesture { previewName = name }
-                                } else {
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.gray.opacity(0.15))
-                                        .frame(width: 96, height: 96)
-                                        .overlay(Image(systemName: "photo").foregroundColor(.secondary))
+                            VStack(spacing: 4) {
+                                ZStack(alignment: .topTrailing) {
+                                    if let uiImage = FabricImageStore.loadImage(named: name) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 96, height: 96)
+                                            .clipped()
+                                            .cornerRadius(12)
+                                            .onTapGesture { previewName = name }
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.gray.opacity(0.15))
+                                            .frame(width: 96, height: 96)
+                                            .overlay(Image(systemName: "photo").foregroundColor(.secondary))
+                                    }
+                                    Button(action: { removeImage(name) }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.white)
+                                            .background(Circle().fill(Color.black.opacity(0.6)))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(4)
                                 }
-                                Button(action: { removeImage(name) }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.white)
-                                        .background(Circle().fill(Color.black.opacity(0.6)))
+                                // 左右移动排序
+                                HStack(spacing: 12) {
+                                    Button(action: { moveImage(name, direction: -1) }) {
+                                        Image(systemName: "chevron.left")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(imageNames.first == name)
+                                    Button(action: { moveImage(name, direction: 1) }) {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(imageNames.last == name)
                                 }
-                                .buttonStyle(.plain)
-                                .padding(4)
                             }
                         }
                     }
@@ -324,12 +351,16 @@ struct FabricImageEditor: View {
         )) { item in
             ZStack(alignment: .topTrailing) {
                 Color.black.ignoresSafeArea()
-                if let uiImage = FabricImageStore.loadImage(named: item.name) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                        .ignoresSafeArea()
+                // 居中显示
+                GeometryReader { geo in
+                    if let uiImage = FabricImageStore.loadImage(named: item.name) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                    }
                 }
+                .ignoresSafeArea()
                 Button(action: { previewName = nil }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title)
