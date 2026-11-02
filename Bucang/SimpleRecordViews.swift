@@ -17,6 +17,7 @@ struct WorkEditView: View {
     @State private var imageNames: [String]
     @State private var isSold: Bool
     @State private var salePriceText: String
+    @State private var shippingFeeText: String
     @State private var hasSalePrice: Bool
     @State private var saleDate: Date
     @State private var hasSaleDate: Bool
@@ -42,6 +43,7 @@ struct WorkEditView: View {
         _imageNames = State(initialValue: work?.imageFileNames ?? [])
         _isSold = State(initialValue: work?.isSold ?? false)
         _salePriceText = State(initialValue: work == nil || !work!.hasSalePrice ? "" : String(work!.salePrice))
+        _shippingFeeText = State(initialValue: work == nil ? "" : (work!.shippingFee == 0 ? "" : String(work!.shippingFee)))
         _hasSalePrice = State(initialValue: work?.hasSalePrice ?? false)
         _saleDate = State(initialValue: work?.saleDate ?? Date())
         _hasSaleDate = State(initialValue: work?.saleDate != nil)
@@ -66,6 +68,7 @@ struct WorkEditView: View {
             existing.isSold = isSold
             existing.salePrice = Double(salePriceText) ?? 0
             existing.hasSalePrice = isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            existing.shippingFee = Double(shippingFeeText) ?? 0
             existing.saleDate = (isSold && hasSaleDate) ? saleDate : nil
             existing.saleChannel = saleChannel
             existing.isUsed = isUsed
@@ -93,6 +96,7 @@ struct WorkEditView: View {
                 note: note, imageFileNames: imageNames,
                 isSold: isSold, salePrice: Double(salePriceText) ?? 0,
                 hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                shippingFee: Double(shippingFeeText) ?? 0,
                 saleDate: (isSold && hasSaleDate) ? saleDate : nil,
                 saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
                 laborCost: labor, hasLaborCost: laborFilled, colorCodes: Array(selColors),
@@ -140,7 +144,7 @@ struct WorkEditView: View {
                     }
                 }
             }
-            Section("成品（全部可留空）") {
+            Section("成品") {
                 LabeledTextField(label: "成品名称", placeholder: "选填", text: $name)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("颜色搭配").font(.subheadline).foregroundColor(.secondary)
@@ -194,7 +198,16 @@ struct WorkEditView: View {
                 if hasFinishDate {
                     Toggle("是否出售", isOn: $isSold)
                     if isSold {
+                        LabeledTextField(label: "邮费/打包费", placeholder: "留空=0", text: $shippingFeeText, keyboardType: .decimalPad, unit: "元")
                         LabeledTextField(label: "出售价格", placeholder: "留空=未填", text: $salePriceText, keyboardType: .decimalPad, unit: "元")
+                        HStack {
+                            Text("实际入账").font(.subheadline).foregroundColor(.secondary)
+                            Spacer()
+                            let price = Double(salePriceText) ?? 0
+                            let fee = Double(shippingFeeText) ?? 0
+                            Text("¥\(String(format: "%.2f", max(0, price - fee)))")
+                                .font(.subheadline).fontWeight(.semibold)
+                        }
                         Toggle("填写出售时间", isOn: $hasSaleDate)
                         if hasSaleDate { DatePicker("出售时间", selection: $saleDate, displayedComponents: .date) }
                         Picker("出售渠道", selection: $saleChannel) {
@@ -487,7 +500,7 @@ struct OtherEditView: View {
             Section("照片") {
                 FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
             }
-            Section("其他条目（全部可留空，最少填名称加照片就能存）") {
+            Section("其他条目") {
                 Picker("所属分类", selection: $category) {
                     Text("未分类").tag("")
                     ForEach(store.otherCategoryTree.filter { $0.parentId == nil }.sorted { $0.order < $1.order }) { Text($0.name).tag($0.name) }
@@ -565,11 +578,11 @@ struct WishlistEditView: View {
 
     var body: some View {
         Form {
-            Section("心愿单（只当备忘）") {
+            Section("心愿单") {
                 LabeledTextField(label: "名称", placeholder: "选填", text: $name)
                 LabeledMultilineField(label: "想法备注", text: $note)
             }
-            Section("预估价（转入库时带入布料总价）") {
+            Section("预估价") {
                 Toggle("填写预估价", isOn: $hasEstimatedPrice)
                 if hasEstimatedPrice {
                     LabeledTextField(label: "预估价", placeholder: "留空=未填", text: $estimatedPriceText, keyboardType: .decimalPad, unit: "元")

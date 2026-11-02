@@ -497,7 +497,7 @@ struct BucangView: View {
                                 Text("售出米数").font(.caption).foregroundColor(.white.opacity(0.85))
                                 HStack(spacing: 4) {
                                     Text("\(LengthUnitHelper.format(store.totalSoldMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
-                                        .font(.headline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
+                                        .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
                                     Button(action: { showingSaleFlow = true }) {
                                         Image(systemName: "chevron.right").font(.caption).foregroundColor(.white)
                                     }
@@ -528,7 +528,7 @@ struct BucangView: View {
                                 .buttonStyle(.plain)
                             }
                             Text(hideAmounts ? "****" : "¥\(String(format: "%.2f", store.totalValue))")
-                                .font(.headline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
+                                .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
                         }
                         .frame(maxWidth: .infinity)
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
@@ -548,11 +548,13 @@ struct BucangView: View {
                         .frame(maxWidth: .infinity)
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
                         statColumn(label: "剩余米数", value: "\(LengthUnitHelper.format(store.totalRemaining, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
+                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
+                        statColumn(label: "总件数", value: "\(store.fabrics.filter { $0.hasPieceCount }.map { $0.pieceCount }.reduce(0, +))件")
                     }
                 }
             }
         }
-        .padding(24)
+        .padding(32)
         .background(ThemeStatsBackground(themeName: store.themeName))
         .cornerRadius(Design.corner)
         .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
@@ -663,7 +665,7 @@ struct BucangView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                     ForEach(filteredFabrics) { fabric in
                         NavigationLink(value: FabricNavTarget.detail(fabric.id)) {
                             FabricCardView(fabric: fabric, onAddUsage: {
@@ -671,6 +673,7 @@ struct BucangView: View {
                             }, onAddSale: {
                                 saleFabric = fabric
                             }, compact: true)
+                            .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.plain)
                     }
@@ -708,7 +711,7 @@ struct BucangView: View {
     private func statColumn(label: String, value: String, valueColor: Color = .white) -> some View {
         VStack(spacing: 2) {
             Text(label).font(.caption).foregroundColor(.white.opacity(0.85))
-            Text(value).font(.headline).fontWeight(.bold).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.7)
+            Text(value).font(.subheadline).fontWeight(.bold).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
     }

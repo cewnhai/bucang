@@ -172,12 +172,12 @@ struct FabricCardView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 120)
+                        .frame(height: 150)
                         .clipped()
                 } else {
                     Rectangle()
                         .fill(Color(.systemGray5))
-                        .frame(height: 120)
+                        .frame(height: 150)
                         .overlay(Image(systemName: "scissors").foregroundColor(.secondary).font(.title))
                 }
                 Button(action: {
@@ -205,8 +205,9 @@ struct FabricCardView: View {
                         .padding(8)
                 }
             }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 // 名称不再显示；编号小字在照片下方左对齐。
+                
                 // 主编号为空时显示第一个子编号（被关联的布料）。
                 let cardCode = fabric.code.isEmpty ? (fabric.subCodes.first ?? "") : fabric.code
                 if !cardCode.isEmpty {
@@ -1125,8 +1126,22 @@ struct FabricDetailView: View {
                             value: fabric.hasPurchaseLength
                                 ? "\(LengthUnitHelper.format(fabric.length, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
                                 : "未填")
-                summaryStat(icon: "arrow.left.arrow.right", label: "幅宽",
-                            value: fabric.width > 0 ? "\(String(format: "%.0f", fabric.widthCm))厘米" : "未填")
+                if fabric.hasPieceCount {
+                    summaryStat(icon: "square.stack", label: "件数",
+                                value: "\(fabric.pieceCount)件")
+                    if !fabric.pieceDetails.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("份数明细").font(.caption).foregroundColor(.secondary)
+                            ForEach(fabric.pieceDetails) { detail in
+                                Text("幅宽 \(String(format: "%.0f", detail.width))cm × 长度 \(String(format: "%.1f", detail.length))m × \(detail.pieces)份")
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                } else {
+                    summaryStat(icon: "arrow.left.arrow.right", label: "幅宽",
+                                value: fabric.width > 0 ? "\(String(format: "%.0f", fabric.widthCm))厘米" : "未填")
+                }
                 summaryStat(icon: "yensign", label: "总价",
                             value: fabric.hasTotalPrice ? "¥\(String(format: "%.2f", fabric.purchasePrice))" : "—",
                             valueColor: Design.priceAccent,
@@ -1329,11 +1344,26 @@ struct FabricDetailView: View {
             let items = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
                 .filter { $0.enabled }
             if !items.isEmpty {
+                // 未生成编号时可多选（2026-11-03）
+                let isMulti = fabric.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 // 4列网格（按图2设计）：圆色块 + 名称
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 16) {
                     ForEach(items) { item in
-                        let selected = fabric.colorName == item.name
-                        Button(action: { applyColor(item) }) {
+                        let selected = isMulti ? fabric.colorNames.contains(item.name) : fabric.colorName == item.name
+                        Button(action: {
+                            if isMulti {
+                                if fabric.colorNames.contains(item.name) {
+                                    fabric.colorNames.removeAll { $0 == item.name }
+                                } else {
+                                    fabric.colorNames.append(item.name)
+                                }
+                                // 同步第一个为 colorName
+                                fabric.colorName = fabric.colorNames.first ?? ""
+                                store.save()
+                            } else {
+                                applyColor(item)
+                            }
+                        }) {
                             VStack(spacing: 6) {
                                 ZStack {
                                     CodeItemIconView(icon: item.icon, size: 44)
@@ -2521,6 +2551,7 @@ struct FabricEditView: View {
     @State private var widthCmText: String
     @State private var lengthText: String
     @State private var pieceCountText: String
+    @State private var pieceDetails: [PieceDetail]
     @State private var priceText: String
     @State private var weightText: String
     @State private var shrinkageText: String
@@ -2566,6 +2597,7 @@ struct FabricEditView: View {
         //（init 里读不到 store，只能先占位，不能在 init 里直接换算）。
         _lengthText = State(initialValue: fabric == nil || !fabric!.hasPurchaseLength ? "" : String(fabric!.length))
         _pieceCountText = State(initialValue: fabric == nil || !fabric!.hasPieceCount ? "" : String(fabric!.pieceCount))
+        _pieceDetails = State(initialValue: fabric?.pieceDetails ?? [])
         _purchaseImageNames = State(initialValue: fabric?.purchaseImageNames ?? [])
         _selColorNames = State(initialValue: Set(fabric?.colorNames ?? []))
         _priceText = State(initialValue: fabric == nil || !fabric!.hasTotalPrice ? "" : String(fabric!.purchasePrice))
@@ -2679,7 +2711,8 @@ struct FabricEditView: View {
                 hasPieceCount: !(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (Int(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) > 0,
                 pieceCount: Int(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
                 purchaseImageNames: purchaseImageNames,
-                colorNames: Array(selColorNames)
+                colorNames: Array(selColorNames),
+                pieceDetails: pieceDetails
             )
             newFabric.isFavorite = isFavorite
             if newFabric.hasPurchaseLength && lengthMetres > 0 { newFabric.pricePerMeter = price / lengthMetres }
@@ -2732,8 +2765,55 @@ struct FabricEditView: View {
                 Text("编号体系：设置 > 编号体系里定颜色体系与纹样；生成时选颜色与纹样，序号按该组合递增。").font(.caption).foregroundColor(.secondary)
                 LabeledTextField(label: "名称", placeholder: "选填", text: $name)
                 LabeledTextField(label: "件数", placeholder: "与长度二选一", text: $pieceCountText, keyboardType: .numberPad, unit: "件")
+                // 份数明细（2026-11-03）：件数模式下可新增多条，每条含幅宽/长度/份数
+                if !(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (Int(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) > 0 {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("份数明细").font(.subheadline)
+                            Spacer()
+                            Button("新增明细") {
+                                pieceDetails.append(PieceDetail())
+                            }
+                        }
+                        if pieceDetails.isEmpty {
+                            Text("可新增多条明细，每条含幅宽、长度、份数").font(.caption).foregroundColor(.secondary)
+                        } else {
+                            ForEach(pieceDetails.indices, id: \.self) { idx in
+                                HStack(spacing: 8) {
+                                    TextField("幅宽cm", text: Binding(
+                                        get: { pieceDetails[idx].width == 0 ? "" : String(pieceDetails[idx].width) },
+                                        set: { pieceDetails[idx].width = Double($0) ?? 0 }
+                                    ))
+                                    .keyboardType(.decimalPad)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 80)
+                                    TextField("长度m", text: Binding(
+                                        get: { pieceDetails[idx].length == 0 ? "" : String(pieceDetails[idx].length) },
+                                        set: { pieceDetails[idx].length = Double($0) ?? 0 }
+                                    ))
+                                    .keyboardType(.decimalPad)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 80)
+                                    TextField("份数", text: Binding(
+                                        get: { pieceDetails[idx].pieces == 0 ? "" : String(pieceDetails[idx].pieces) },
+                                        set: { pieceDetails[idx].pieces = Int($0) ?? 0 }
+                                    ))
+                                    .keyboardType(.numberPad)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 60)
+                                    Button(action: { pieceDetails.remove(at: idx) }) {
+                                        Image(systemName: "trash").foregroundColor(.red)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
                 LabeledTextField(label: "幅宽", placeholder: "点击输入", text: $widthCmText, keyboardType: .decimalPad, unit: "cm")
+                    .disabled(!(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (Int(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) > 0)
                 LabeledTextField(label: "长度", placeholder: "留空=未填", text: $lengthText, keyboardType: .decimalPad, unit: store.lengthUnit)
+                    .disabled(!(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (Int(pieceCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) > 0)
                 HStack {
                     Text("子编号").font(.subheadline)
                     Spacer()
@@ -3317,6 +3397,110 @@ struct CodeGeneratorSheet: View {
     }
 }
 
+// 成品选择器（2026-11-03）：带缩略图+单双列切换，用于使用/出售记录关联成品
+struct WorkPickerSheet: View {
+    @EnvironmentObject private var store: Store
+    private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
+    @Binding var selectedWorkIDs: Set<UUID>
+    @Binding var showingWorkPicker: Bool
+    @State private var searchText = ""
+    @State private var isGrid = false
+
+    private var filtered: [Work] {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return store.works }
+        let kw = searchText.lowercased()
+        return store.works.filter { ($0.name.isEmpty ? "未命名成品" : $0.name).lowercased().contains(kw) }
+    }
+
+    private func toggle(_ id: UUID) {
+        if selectedWorkIDs.contains(id) { selectedWorkIDs.remove(id) }
+        else { selectedWorkIDs.insert(id) }
+    }
+
+    private func thumb(_ work: Work) -> some View {
+        Group {
+            if let first = work.imageFileNames.first, let ui = FabricImageStore.loadImage(named: first) {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else {
+                RoundedRectangle(cornerRadius: 8).fill(Color(.systemGray5))
+                    .overlay(Image(systemName: "scissors").foregroundColor(.secondary))
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                        TextField("搜索", text: $searchText)
+                    }
+                    .padding(8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    Button(action: { isGrid.toggle() }) {
+                        Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                            .font(.title3)
+                            .foregroundColor(themeAccent)
+                    }
+                }
+                .padding()
+                if filtered.isEmpty {
+                    Text("还没有成品").foregroundColor(.secondary).padding()
+                    Spacer()
+                } else if isGrid {
+                    ScrollView {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+                            ForEach(filtered) { work in
+                                Button(action: { toggle(work.id) }) {
+                                    VStack(spacing: 6) {
+                                        ZStack(alignment: .topTrailing) {
+                                            thumb(work).frame(height: 100).clipped().cornerRadius(12)
+                                            if selectedWorkIDs.contains(work.id) {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(themeAccent)
+                                                    .background(Circle().fill(Color.white))
+                                                    .padding(6)
+                                            }
+                                        }
+                                        Text(work.name.isEmpty ? "未命名成品" : work.name)
+                                            .font(.caption).lineLimit(1)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding()
+                    }
+                } else {
+                    List {
+                        ForEach(filtered) { work in
+                            Button(action: { toggle(work.id) }) {
+                                HStack(spacing: 12) {
+                                    thumb(work).frame(width: 48, height: 48).clipped().cornerRadius(8)
+                                    Text(work.name.isEmpty ? "未命名成品" : work.name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedWorkIDs.contains(work.id) {
+                                        Image(systemName: "checkmark").foregroundColor(themeAccent)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("关联成品")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("完成") { showingWorkPicker = false } }
+            }
+        }
+    }
+}
+
 struct UsageFormView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
@@ -3532,34 +3716,7 @@ struct UsageFormView: View {
             }
         }
         .sheet(isPresented: $showingWorkPicker) {
-            NavigationStack {
-                List {
-                    if store.works.isEmpty {
-                        Text("还没有成品").foregroundColor(.secondary)
-                    } else {
-                        ForEach(store.works) { work in
-                            Button(action: {
-                                if selectedWorkIDs.contains(work.id) { selectedWorkIDs.remove(work.id) }
-                                else { selectedWorkIDs.insert(work.id) }
-                            }) {
-                                HStack {
-                                    Text(work.name.isEmpty ? "未命名成品" : work.name)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    if selectedWorkIDs.contains(work.id) {
-                                        Image(systemName: "checkmark").foregroundColor(themeAccent)
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .navigationTitle("关联成品")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) { Button("完成") { showingWorkPicker = false } }
-                }
-            }
+            WorkPickerSheet(selectedWorkIDs: $selectedWorkIDs, showingWorkPicker: $showingWorkPicker)
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }

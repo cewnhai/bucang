@@ -213,6 +213,29 @@ struct CameraPicker: UIViewControllerRepresentable {
 // deleteFilesImmediately = false：编辑页，删图只从列表里去掉，
 // 文件由编辑页在“保存”时删（被去掉的旧图）、在“取消”时删（新加的图），
 // 这样点取消不会把原来图片弄丢。
+// 图片拖动排序代理（2026-11-03）：长按拖动改变顺序
+struct ImageDropDelegate: DropDelegate {
+    let item: String
+    @Binding var imageNames: [String]
+    @Binding var draggingName: String?
+    var onNamesChanged: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging = draggingName, dragging != item,
+              let from = imageNames.firstIndex(of: dragging),
+              let to = imageNames.firstIndex(of: item) else { return }
+        withAnimation {
+            imageNames.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        }
+        onNamesChanged()
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingName = nil
+        return true
+    }
+}
+
 struct FabricImageEditor: View {
     @Binding var imageNames: [String]
     var deleteFilesImmediately: Bool
@@ -221,6 +244,7 @@ struct FabricImageEditor: View {
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var showingCamera = false
     @State private var previewName: String?
+    @State private var draggingName: String?
 
     private var canUseCamera: Bool {
         UIImagePickerController.isSourceTypeAvailable(.camera)
@@ -241,14 +265,6 @@ struct FabricImageEditor: View {
         onNamesChanged()
     }
 
-    private func moveImage(_ name: String, direction: Int) {
-        guard let idx = imageNames.firstIndex(of: name) else { return }
-        let newIdx = idx + direction
-        guard newIdx >= 0 && newIdx < imageNames.count else { return }
-        imageNames.move(fromOffsets: IndexSet(integer: idx), toOffset: newIdx > idx ? newIdx + 1 : newIdx)
-        onNamesChanged()
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if imageNames.isEmpty {
@@ -259,52 +275,44 @@ struct FabricImageEditor: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(imageNames, id: \.self) { name in
-                            VStack(spacing: 4) {
-                                ZStack(alignment: .topTrailing) {
-                                    if let uiImage = FabricImageStore.loadImage(named: name) {
-                                        Image(uiImage: uiImage)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 96, height: 96)
-                                            .clipped()
-                                            .cornerRadius(12)
-                                            .onTapGesture { previewName = name }
-                                    } else {
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.gray.opacity(0.15))
-                                            .frame(width: 96, height: 96)
-                                            .overlay(Image(systemName: "photo").foregroundColor(.secondary))
-                                    }
-                                    Button(action: { removeImage(name) }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.white)
-                                            .background(Circle().fill(Color.black.opacity(0.6)))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .padding(4)
+                            ZStack(alignment: .topTrailing) {
+                                if let uiImage = FabricImageStore.loadImage(named: name) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 96, height: 96)
+                                        .clipped()
+                                        .cornerRadius(12)
+                                        .onTapGesture { previewName = name }
+                                        .opacity(draggingName == name ? 0.5 : 1.0)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.gray.opacity(0.15))
+                                        .frame(width: 96, height: 96)
+                                        .overlay(Image(systemName: "photo").foregroundColor(.secondary))
                                 }
-                                // 左右移动排序
-                                HStack(spacing: 12) {
-                                    Button(action: { moveImage(name, direction: -1) }) {
-                                        Image(systemName: "chevron.left")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(imageNames.first == name)
-                                    Button(action: { moveImage(name, direction: 1) }) {
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(imageNames.last == name)
+                                Button(action: { removeImage(name) }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.white)
+                                        .background(Circle().fill(Color.black.opacity(0.6)))
                                 }
+                                .buttonStyle(.plain)
+                                .padding(4)
                             }
+                            .onDrag {
+                                draggingName = name
+                                return NSItemProvider(object: name as NSString)
+                            }
+                            .onDrop(of: [.text], delegate: ImageDropDelegate(
+                                item: name,
+                                imageNames: $imageNames,
+                                draggingName: $draggingName,
+                                onNamesChanged: onNamesChanged
+                            ))
                         }
                     }
                 }
-                Text("点图片可放大看，第一张会用作列表封面")
+                Text("点图片可放大看，长按拖动可排序，第一张会用作列表封面")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
