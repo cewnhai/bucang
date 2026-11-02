@@ -600,8 +600,8 @@ final class Work: Identifiable, Codable {
     var shippingFee: Double
     var netIncome: Double { max(0, (hasSalePrice ? salePrice : 0) - shippingFee) }
     // 成品尺寸（2026-11-02）：字典管理可自定义选项，单位 cm/m/尺
-    var workSize: String
-    var workSizeUnit: String
+    var workSize: String = ""
+    var workSizeUnit: String = "cm"
     var saleDate: Date?
     var saleChannel: String
     var isUsed: Bool
