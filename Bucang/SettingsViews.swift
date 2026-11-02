@@ -1206,6 +1206,13 @@ struct DictionaryManagementInlineView: View {
                     Text("\(store.materialOptions.count) 条").foregroundColor(.secondary).font(.caption)
                 }
             }
+            NavigationLink(destination: WorkSizeSettingsView()) {
+                HStack {
+                    Text("成品尺寸")
+                    Spacer()
+                    Text("\(store.workSizeOptions.count) 条").foregroundColor(.secondary).font(.caption)
+                }
+            }
             NavigationLink(destination: OtherCategorySettingsView()) {
                 HStack {
                     Text("其他分类")
@@ -1223,6 +1230,8 @@ struct ChannelSettingsView: View {
     @State private var newChannel = ""
     @State private var renamingChannel: String?
     @State private var renameText = ""
+    @State private var isSelecting = false
+    @State private var selectedOptions = Set<String>()
     var body: some View {
         Form {
             Section("新增渠道") {
@@ -1237,17 +1246,41 @@ struct ChannelSettingsView: View {
                     .disabled(newChannel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            Section("渠道列表") {
+            Section("渠道列表（长按拖动排序）") {
                 ForEach(store.channelOptions, id: \.self) { option in
                     HStack {
-                        Text(option)
-                        Spacer()
-                        Button("改名") { renamingChannel = option; renameText = option }
-                            .font(.caption)
-                        Button("删除", role: .destructive) {
-                            store.channelOptions.removeAll { $0 == option }; store.save()
+                        if isSelecting {
+                            Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(selectedOptions.contains(option) ? ThemeHelper.accent(store.themeName) : .secondary)
                         }
-                        .font(.caption)
+                        Text(option)
+                            .onTapGesture {
+                                if isSelecting {
+                                    if selectedOptions.contains(option) { selectedOptions.remove(option) }
+                                    else { selectedOptions.insert(option) }
+                                } else {
+                                    renamingChannel = option; renameText = option
+                                }
+                            }
+                        Spacer()
+                        if !isSelecting {
+                            Button("删除", role: .destructive) {
+                                store.channelOptions.removeAll { $0 == option }; store.save()
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+                .onMove { from, to in
+                    store.channelOptions.move(fromOffsets: from, toOffset: to)
+                    store.save()
+                }
+            }
+            if isSelecting && !selectedOptions.isEmpty {
+                Section {
+                    Button("删除选中 (\(selectedOptions.count))", role: .destructive) {
+                        store.channelOptions.removeAll { selectedOptions.contains($0) }
+                        store.save(); selectedOptions.removeAll(); isSelecting = false
                     }
                 }
             }
@@ -1258,6 +1291,16 @@ struct ChannelSettingsView: View {
         }
         .navigationTitle("渠道")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(isSelecting ? "取消" : "多选") {
+                    isSelecting.toggle(); selectedOptions.removeAll()
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                EditButton()
+            }
+        }
         .alert("改名", isPresented: Binding(get: { renamingChannel != nil }, set: { if !$0 { renamingChannel = nil } })) {
             TextField("新名称", text: $renameText)
             Button("确定") {
@@ -1274,12 +1317,117 @@ struct ChannelSettingsView: View {
     }
 }
 
+// 成品尺寸设置（2026-11-02）：字典管理，设计同材质栏，可自定义新增，单位 cm/m/尺切换
+struct WorkSizeSettingsView: View {
+    @EnvironmentObject private var store: Store
+    @State private var newSize = ""
+    @State private var renamingSize: String?
+    @State private var renameText = ""
+    // 单位切换：cm / m / 尺
+    @State private var displayUnit = "cm"
+    @State private var isSelecting = false
+    @State private var selectedOptions = Set<String>()
+    var body: some View {
+        Form {
+            Section("单位") {
+                Picker("展示单位", selection: $displayUnit) {
+                    Text("cm").tag("cm")
+                    Text("m").tag("m")
+                    Text("尺").tag("尺")
+                }
+                .pickerStyle(.segmented)
+                Text("成品尺寸按选定单位展示。")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            Section("新增尺寸") {
+                HStack {
+                    TextField("尺寸名称", text: $newSize)
+                    Button("添加") {
+                        let name = newSize.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !name.isEmpty, !store.workSizeOptions.contains(name) else { return }
+                        store.workSizeOptions.append(name); store.save(); newSize = ""
+                    }
+                    .buttonStyle(.borderedProminent).tint(Design.accent)
+                    .disabled(newSize.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            Section("尺寸列表（长按拖动排序）") {
+                ForEach(store.workSizeOptions, id: \.self) { option in
+                    HStack {
+                        if isSelecting {
+                            Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(selectedOptions.contains(option) ? ThemeHelper.accent(store.themeName) : .secondary)
+                        }
+                        Text(option)
+                            .onTapGesture {
+                                if isSelecting {
+                                    if selectedOptions.contains(option) { selectedOptions.remove(option) }
+                                    else { selectedOptions.insert(option) }
+                                } else {
+                                    renamingSize = option; renameText = option
+                                }
+                            }
+                        Spacer()
+                        if !isSelecting {
+                            Button("删除", role: .destructive) {
+                                store.workSizeOptions.removeAll { $0 == option }; store.save()
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+                .onMove { from, to in
+                    store.workSizeOptions.move(fromOffsets: from, toOffset: to)
+                    store.save()
+                }
+            }
+            if isSelecting && !selectedOptions.isEmpty {
+                Section {
+                    Button("删除选中 (\(selectedOptions.count))", role: .destructive) {
+                        store.workSizeOptions.removeAll { selectedOptions.contains($0) }
+                        store.save(); selectedOptions.removeAll(); isSelecting = false
+                    }
+                }
+            }
+            Section {
+                Text("成品编辑页尺寸板块的选项。")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+        }
+        .navigationTitle("成品尺寸")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(isSelecting ? "取消" : "多选") {
+                    isSelecting.toggle(); selectedOptions.removeAll()
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                EditButton()
+            }
+        }
+        .alert("改名", isPresented: Binding(get: { renamingSize != nil }, set: { if !$0 { renamingSize = nil } })) {
+            TextField("新名称", text: $renameText)
+            Button("确定") {
+                let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty, let old = renamingSize,
+                   let idx = store.workSizeOptions.firstIndex(of: old) {
+                    store.workSizeOptions[idx] = name; store.save()
+                }
+                renamingSize = nil
+            }
+            Button("取消", role: .cancel) { renamingSize = nil }
+        }
+    }
+}
 // 材质设置明细（2026-10-31）：从设置页迁移
 struct MaterialSettingsView: View {
     @EnvironmentObject private var store: Store
     @State private var newMaterial = ""
     @State private var renamingMaterial: String?
     @State private var renameText = ""
+    @State private var isSelecting = false
+    @State private var selectedOptions = Set<String>()
     var body: some View {
         Form {
             Section("新增材质") {
@@ -1294,17 +1442,41 @@ struct MaterialSettingsView: View {
                     .disabled(newMaterial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            Section("材质列表") {
+            Section("材质列表（长按拖动排序）") {
                 ForEach(store.materialOptions, id: \.self) { option in
                     HStack {
-                        Text(option)
-                        Spacer()
-                        Button("改名") { renamingMaterial = option; renameText = option }
-                            .font(.caption)
-                        Button("删除", role: .destructive) {
-                            store.materialOptions.removeAll { $0 == option }; store.save()
+                        if isSelecting {
+                            Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(selectedOptions.contains(option) ? ThemeHelper.accent(store.themeName) : .secondary)
                         }
-                        .font(.caption)
+                        Text(option)
+                            .onTapGesture {
+                                if isSelecting {
+                                    if selectedOptions.contains(option) { selectedOptions.remove(option) }
+                                    else { selectedOptions.insert(option) }
+                                } else {
+                                    renamingMaterial = option; renameText = option
+                                }
+                            }
+                        Spacer()
+                        if !isSelecting {
+                            Button("删除", role: .destructive) {
+                                store.materialOptions.removeAll { $0 == option }; store.save()
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+                .onMove { from, to in
+                    store.materialOptions.move(fromOffsets: from, toOffset: to)
+                    store.save()
+                }
+            }
+            if isSelecting && !selectedOptions.isEmpty {
+                Section {
+                    Button("删除选中 (\(selectedOptions.count))", role: .destructive) {
+                        store.materialOptions.removeAll { selectedOptions.contains($0) }
+                        store.save(); selectedOptions.removeAll(); isSelecting = false
                     }
                 }
             }
@@ -1315,6 +1487,16 @@ struct MaterialSettingsView: View {
         }
         .navigationTitle("材质")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(isSelecting ? "取消" : "多选") {
+                    isSelecting.toggle(); selectedOptions.removeAll()
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                EditButton()
+            }
+        }
         .alert("改名", isPresented: Binding(get: { renamingMaterial != nil }, set: { if !$0 { renamingMaterial = nil } })) {
             TextField("新名称", text: $renameText)
             Button("确定") {
@@ -1337,6 +1519,8 @@ struct TagSettingsView: View {
     @State private var newName = ""
     @State private var renamingTag: Tag?
     @State private var renameText = ""
+    @State private var isSelecting = false
+    @State private var selectedIds = Set<UUID>()
     var body: some View {
         Form {
             Section("新增标签") {
@@ -1355,24 +1539,60 @@ struct TagSettingsView: View {
                     .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            Section("标签列表") {
+            Section("标签列表（长按拖动排序）") {
                 ForEach(store.tags.sorted { $0.sortOrder < $1.sortOrder }) { tag in
                     HStack {
-                        Text(tag.name)
-                        Spacer()
-                        Button("改名") { renamingTag = tag; renameText = tag.name }
-                            .font(.caption)
-                        Button("删除", role: .destructive) {
-                            store.tags.removeAll { $0.id == tag.id }
-                            store.save()
+                        if isSelecting {
+                            Image(systemName: selectedIds.contains(tag.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(selectedIds.contains(tag.id) ? ThemeHelper.accent(store.themeName) : .secondary)
                         }
-                        .font(.caption)
+                        Text(tag.name)
+                            .onTapGesture {
+                                if isSelecting {
+                                    if selectedIds.contains(tag.id) { selectedIds.remove(tag.id) }
+                                    else { selectedIds.insert(tag.id) }
+                                } else {
+                                    renamingTag = tag; renameText = tag.name
+                                }
+                            }
+                        Spacer()
+                        if !isSelecting {
+                            Button("删除", role: .destructive) {
+                                store.tags.removeAll { $0.id == tag.id }
+                                store.save()
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+                .onMove { from, to in
+                    var sorted = store.tags.sorted { $0.sortOrder < $1.sortOrder }
+                    sorted.move(fromOffsets: from, toOffset: to)
+                    for (idx, tag) in sorted.enumerated() { tag.sortOrder = idx }
+                    store.save()
+                }
+            }
+            if isSelecting && !selectedIds.isEmpty {
+                Section {
+                    Button("删除选中 (\(selectedIds.count))", role: .destructive) {
+                        store.tags.removeAll { selectedIds.contains($0.id) }
+                        store.save(); selectedIds.removeAll(); isSelecting = false
                     }
                 }
             }
         }
         .navigationTitle("标签")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(isSelecting ? "取消" : "多选") {
+                    isSelecting.toggle(); selectedIds.removeAll()
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                EditButton()
+            }
+        }
         .alert("改名", isPresented: Binding(get: { renamingTag != nil }, set: { if !$0 { renamingTag = nil } })) {
             TextField("新名称", text: $renameText)
             Button("确定") {

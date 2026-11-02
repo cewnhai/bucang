@@ -26,6 +26,8 @@ struct WorkEditView: View {
     @State private var laborCostText: String
     @State private var hasLaborCost: Bool
     @State private var selColors: Set<String>
+    @State private var workSize: String
+    @State private var workSizeUnit: String
     private let originalImageNames: [String]
 
     init(work: Work?) {
@@ -49,6 +51,8 @@ struct WorkEditView: View {
         _laborCostText = State(initialValue: work == nil || !work!.hasLaborCost ? "" : String(work!.laborCost))
         _hasLaborCost = State(initialValue: work?.hasLaborCost ?? false)
         _selColors = State(initialValue: Set(work?.colorCodes ?? []))
+        _workSize = State(initialValue: work?.workSize ?? "")
+        _workSizeUnit = State(initialValue: work?.workSizeUnit ?? "cm")
     }
 
     private func save() {
@@ -68,6 +72,8 @@ struct WorkEditView: View {
             existing.usageCount = usageCount
             existing.laborCost = labor
             existing.hasLaborCost = laborFilled
+            existing.workSize = workSize
+            existing.workSizeUnit = workSizeUnit
             existing.colorCodes = Array(selColors)
             // 兼容旧 colorName：取第一个选中色的名称
             if let firstCode = selColors.first,
@@ -89,7 +95,8 @@ struct WorkEditView: View {
                 hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 saleDate: (isSold && hasSaleDate) ? saleDate : nil,
                 saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
-                laborCost: labor, hasLaborCost: laborFilled, colorCodes: Array(selColors)
+                laborCost: labor, hasLaborCost: laborFilled, colorCodes: Array(selColors),
+                workSize: workSize, workSizeUnit: workSizeUnit
             )
             store.addWork(newWork)
         }
@@ -100,6 +107,20 @@ struct WorkEditView: View {
         Form {
             Section("成品照片") {
                 FabricImageEditor(imageNames: $imageNames, deleteFilesImmediately: false, onNamesChanged: {})
+            }
+            Section("成品尺寸") {
+                Picker("尺寸", selection: $workSize) {
+                    Text("未选择").tag("")
+                    ForEach(store.workSizeOptions, id: \.self) { option in
+                        Text(option).tag(option)
+                    }
+                }
+                Picker("单位", selection: $workSizeUnit) {
+                    Text("cm").tag("cm")
+                    Text("m").tag("m")
+                    Text("尺").tag("尺")
+                }
+                .pickerStyle(.segmented)
             }
             // 成品页没有独立的详情页（列表直达编辑），只读的关联脑洞放编辑页最上方。
             if let work {

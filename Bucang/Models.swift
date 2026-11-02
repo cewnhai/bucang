@@ -599,6 +599,9 @@ final class Work: Identifiable, Codable {
     // 邮费/打包费（2026-11-02）：实际入账 = 售出价格 - 邮费
     var shippingFee: Double
     var netIncome: Double { max(0, (hasSalePrice ? salePrice : 0) - shippingFee) }
+    // 成品尺寸（2026-11-02）：字典管理可自定义选项，单位 cm/m/尺
+    var workSize: String
+    var workSizeUnit: String
     var saleDate: Date?
     var saleChannel: String
     var isUsed: Bool
@@ -620,7 +623,8 @@ final class Work: Identifiable, Codable {
         saleDate: Date? = nil, saleChannel: String = "", isUsed: Bool = false, usageCount: Int = 0,
         laborCost: Double = 0, hasLaborCost: Bool = false, colorName: String = "",
         colorCodes: [String] = [],
-        shippingFee: Double = 0
+        shippingFee: Double = 0,
+        workSize: String = "", workSizeUnit: String = "cm"
     ) {
         self.id = id; self.name = name; self.progress = progress
         self.startedAt = startedAt; self.finishedAt = finishedAt
@@ -632,12 +636,13 @@ final class Work: Identifiable, Codable {
         self.laborCost = laborCost; self.hasLaborCost = hasLaborCost; self.colorName = colorName
         self.colorCodes = colorCodes
         self.shippingFee = shippingFee
+        self.workSize = workSize; self.workSizeUnit = workSizeUnit
     }
     private enum CodingKeys: String, CodingKey {
         case id, name, progress, startedAt, finishedAt, costPrice, sellPrice, timeHours, note, createdAt, imageFileNames, materials
         case isSold, salePrice, hasSalePrice, saleDate, saleChannel, isUsed, usageCount
         case laborCost, hasLaborCost, colorName, colorCodes
-        case shippingFee
+        case shippingFee, workSize, workSizeUnit
     }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -665,6 +670,8 @@ final class Work: Identifiable, Codable {
         colorName = try c.decodeIfPresent(String.self, forKey: .colorName) ?? ""
         colorCodes = try c.decodeIfPresent([String].self, forKey: .colorCodes) ?? []
         shippingFee = try c.decodeIfPresent(Double.self, forKey: .shippingFee) ?? 0
+        workSize = try c.decodeIfPresent(String.self, forKey: .workSize) ?? ""
+        workSizeUnit = try c.decodeIfPresent(String.self, forKey: .workSizeUnit) ?? "cm"
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -681,6 +688,7 @@ final class Work: Identifiable, Codable {
         try c.encode(laborCost, forKey: .laborCost); try c.encode(hasLaborCost, forKey: .hasLaborCost)
         try c.encode(colorName, forKey: .colorName); try c.encode(colorCodes, forKey: .colorCodes)
         try c.encode(shippingFee, forKey: .shippingFee)
+        try c.encode(workSize, forKey: .workSize); try c.encode(workSizeUnit, forKey: .workSizeUnit)
     }
 }
 
@@ -799,6 +807,8 @@ struct StoreData: Codable {
     var wishlistItems: [WishlistItem] = []
     var brainstorms: [Brainstorm] = []
     var materialOptions: [String] = []
+    // 成品尺寸选项（2026-11-02）：字典管理可自定义
+    var workSizeOptions: [String] = []
     var otherCategories: [String]
     var lengthUnit: String = "m"
     var hideAmounts: Bool = false
@@ -830,6 +840,7 @@ final class Store: ObservableObject {
     @Published var wishlistItems: [WishlistItem] = []
     @Published var brainstorms: [Brainstorm] = []
     @Published var materialOptions: [String] = []
+    @Published var workSizeOptions: [String] = []
     @Published var otherCategories: [String] = []
     @Published var otherCategoryTree: [OtherCategory] = []
     @Published var lengthUnit: String = "m"
@@ -844,6 +855,7 @@ final class Store: ObservableObject {
     @Published var cardDisplayFields: [String] = []
 
     static let defaultMaterialOptions = ["棉", "麻", "丝", "毛", "化纤", "混纺", "针织", "其他"]
+    static let defaultWorkSizeOptions = ["S", "M", "L", "XL", "均码"]
     static let defaultOtherCategories = ["其他"]
     static let defaultChannelOptions = ["淘宝", "闲鱼", "小红书"]
     static let defaultPatternOptions = ["素色", "提花", "印花", "格纹", "条纹", "碎花", "暗花", "缎面"]
@@ -947,6 +959,7 @@ final class Store: ObservableObject {
         wishlistItems = decoded.wishlistItems
         brainstorms = decoded.brainstorms
         materialOptions = decoded.materialOptions.isEmpty ? Self.defaultMaterialOptions : decoded.materialOptions
+        workSizeOptions = decoded.workSizeOptions.isEmpty ? Self.defaultWorkSizeOptions : decoded.workSizeOptions
         otherCategories = decoded.otherCategories.isEmpty ? Self.defaultOtherCategories : decoded.otherCategories
         // 多级分类从独立文件加载（2026-11-01）：不碰主 JSON，避免老备份解码失败
         loadCategoryTree()
@@ -1226,7 +1239,7 @@ final class Store: ObservableObject {
             works: works, patterns: patterns, items: items,
             saleRecords: saleRecords, otherItems: otherItems, wishlistItems: wishlistItems,
             brainstorms: brainstorms,
-            materialOptions: materialOptions, otherCategories: otherCategories,
+            materialOptions: materialOptions, workSizeOptions: workSizeOptions, otherCategories: otherCategories,
             lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix,
             channelOptions: channelOptions, patternOptions: patternOptions, codeLevels: codeLevels,
             visibleTabs: visibleTabs, themeName: themeName, cardDisplayFields: cardDisplayFields
