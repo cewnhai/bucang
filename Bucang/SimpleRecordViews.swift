@@ -96,8 +96,8 @@ struct WorkEditView: View {
                 note: note, imageFileNames: imageNames,
                 isSold: isSold, salePrice: Double(salePriceText) ?? 0,
                 hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                shippingFee: Double(shippingFeeText) ?? 0,
                 saleDate: (isSold && hasSaleDate) ? saleDate : nil,
+                shippingFee: Double(shippingFeeText) ?? 0,
                 saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
                 laborCost: labor, hasLaborCost: laborFilled, colorCodes: Array(selColors),
                 workSize: workSize, workSizeUnit: workSizeUnit
