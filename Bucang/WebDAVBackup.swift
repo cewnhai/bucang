@@ -85,20 +85,9 @@ final class WebDAVManager: ObservableObject {
         username = defaults.string(forKey: DefaultsKey.username) ?? ""
         let savedName = defaults.string(forKey: DefaultsKey.fileName) ?? ""
         if !savedName.isEmpty { fileName = savedName }
-        var loadedPath = defaults.string(forKey: DefaultsKey.remotePath) ?? ""
-        // 迁移修复：旧版 bug 可能存了双重编码的路径（含 %25），自动解码
-        while loadedPath.contains("%25") {
-            if let decoded = loadedPath.removingPercentEncoding, decoded != loadedPath {
-                loadedPath = decoded
-            } else {
-                break
-            }
-        }
-        // 再解一次，确保存的是原始中文
-        if let decoded = loadedPath.removingPercentEncoding, loadedPath.contains("%") {
-            loadedPath = decoded
-        }
-        remotePath = loadedPath
+        // 2026-11-02：恢复原来不选目录，直接用根目录
+        remotePath = ""
+        defaults.removeObject(forKey: DefaultsKey.remotePath)
         lastBackupAt = defaults.object(forKey: DefaultsKey.lastBackupAt) as? Date
         passwordInput = KeychainHelper.load() ?? ""
         if lastBackupAt != nil {
@@ -445,26 +434,7 @@ struct WebDAVBackupView: View {
                 .textFieldStyle(.roundedBorder)
             TextField("备份文件名", text: $webdav.fileName, prompt: Text("bucang-backup.json"))
                 .textFieldStyle(.roundedBorder)
-            HStack {
-                Text("备份目录：")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text(webdav.remotePath.isEmpty ? "根目录" : webdav.remotePath)
-                    .font(.subheadline)
-                    .lineLimit(1)
-                Spacer()
-                Button("选择目录") {
-                    webdav.saveSettings()
-                    if webdav.trimmedBase().isEmpty {
-                        webdav.errorMessage = "请先填写服务器地址并保存"
-                    } else {
-                        webdav.showingFolderPicker = true
-                    }
-                }
-                .font(.subheadline)
-            }
-                .textInputAutocapitalization(.never)
-                .disableAutocorrection(true)
+
             Text("图片会存在服务器上的 bucang-images/ 目录里，和备份 JSON 在同一服务器地址下。")
                 .font(.caption)
                 .foregroundColor(.secondary)
