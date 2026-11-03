@@ -3547,6 +3547,7 @@ struct UsageFormView: View {
     @State private var errorMessage: String?
     @State private var showingWorkPicker = false
     @State private var lengthInitialized = false
+    @State private var selectedPieceIndex: Int?
 
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     private var workThumbnailRow: some View {
@@ -3624,12 +3625,43 @@ struct UsageFormView: View {
             _date = State(initialValue: record.date)
             _selectedWorkIDs = State(initialValue: Set(record.workIds))
             _note = State(initialValue: record.note)
+            _selectedPieceIndex = State(initialValue: record.pieceDetailIndex)
         }
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                // 件数模式：选择份数明细（2026-11-04）
+                if fabric.hasPieceCount && !fabric.pieceDetails.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "square.stack").foregroundColor(themeAccent)
+                            Text("选择份数明细").font(.headline)
+                        }
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(fabric.pieceDetails.indices, id: \.self) { idx in
+                                    let detail = fabric.pieceDetails[idx]
+                                    let isSelected = selectedPieceIndex == idx
+                                    Button(action: { selectedPieceIndex = (isSelected ? nil : idx) }) {
+                                        Text("\(String(format: "%g", detail.width))cm✖\(String(format: "%g", detail.length))m✖\(detail.pieces)")
+                                            .font(.caption)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(isSelected ? themeAccent : Color(.systemGray6))
+                                            .foregroundColor(isSelected ? .white : .primary)
+                                            .cornerRadius(8)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemBackground))
+                    .cornerRadius(12)
+                }
                 // 长度卡：大数字输入 + 米单位 + 滑块 + 最多/记录后可用 + 全部使用链接。
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -3765,13 +3797,13 @@ struct UsageFormView: View {
                             errorMessage = "使用长度不能大于剩余长度（已加回旧记录）"; return
                         }
                         fabric.usedLength = max(0, fabric.usedLength - old.length + metres)
-                        old.date = date; old.length = metres; old.note = note; old.workIds = Array(selectedWorkIDs)
+                        old.date = date; old.length = metres; old.note = note; old.workIds = Array(selectedWorkIDs); old.pieceDetailIndex = selectedPieceIndex
                         store.save()
                     } else {
                         if fabric.hasPurchaseLength && metres > store.remaining(for: fabric) {
                             errorMessage = "使用长度不能大于剩余长度"; return
                         }
-                        store.addUsageAndDeduct(UsageRecord(date: date, length: metres, note: note, fabricId: fabric.id, workIds: Array(selectedWorkIDs)))
+                        store.addUsageAndDeduct(UsageRecord(date: date, length: metres, note: note, fabricId: fabric.id, workIds: Array(selectedWorkIDs), pieceDetailIndex: selectedPieceIndex))
                     }
                     dismiss()
                 }
