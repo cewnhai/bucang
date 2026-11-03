@@ -1328,178 +1328,231 @@ struct ChannelSettingsView: View {
 struct BodyMeasureSettingsView: View {
     @EnvironmentObject private var store: Store
     @State private var newItem = ""
-    @State private var isSelecting = false
-    @State private var selectedOptions = Set<String>()
+    @State private var expandedIds = Set<UUID>()
+    @State private var renamingId: UUID?
+    @State private var renameText = ""
+    @State private var addingChildTo: UUID?
+    @State private var childName = ""
+
+    private var topLevels: [BodyMeasureCategory] {
+        store.bodyMeasureTree.filter { $0.parentId == nil }.sorted { $0.order < $1.order }
+    }
+    private func children(of parentId: UUID) -> [BodyMeasureCategory] {
+        store.bodyMeasureTree.filter { $0.parentId == parentId }.sorted { $0.order < $1.order }
+    }
+
     var body: some View {
-        Form {
-            Section("新增项目") {
+        List {
+            Section {
                 HStack {
-                    TextField("项目名称（如胸围）", text: $newItem)
+                    TextField("新增一级项目", text: $newItem)
                     Button("添加") {
                         let name = newItem.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !name.isEmpty, !store.bodyMeasureOptions.contains(name) else { return }
-                        store.bodyMeasureOptions.append(name); store.save(); newItem = ""
+                        guard !name.isEmpty else { return }
+                        let maxOrder = topLevels.map { $0.order }.max() ?? -1
+                        store.bodyMeasureTree.append(BodyMeasureCategory(name: name, order: maxOrder + 1))
+                        store.save(); newItem = ""
                     }
-                    .buttonStyle(.borderedProminent)
                     .disabled(newItem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            Section("项目列表（长按拖动排序）") {
-                ForEach(store.bodyMeasureOptions, id: \.self) { option in
-                    HStack {
-                        if isSelecting {
-                            Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(.blue)
-                        }
-                        Text(option)
-                            .onTapGesture {
-                                if isSelecting {
-                                    if selectedOptions.contains(option) { selectedOptions.remove(option) }
-                                    else { selectedOptions.insert(option) }
-                                }
-                            }
-                        Spacer()
-                        if !isSelecting {
-                            Button(role: .destructive, action: {
-                                store.bodyMeasureOptions.removeAll { $0 == option }
-                                store.save()
-                            }) {
-                                Image(systemName: "trash").foregroundColor(.red)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
+            Section("一级分类（点 > 展开）") {
+                ForEach(topLevels) { cat in
+                    row(cat, level: 0)
                 }
                 .onMove { from, to in
-                    store.bodyMeasureOptions.move(fromOffsets: from, toOffset: to)
+                    var list = topLevels
+                    list.move(fromOffsets: from, toOffset: to)
+                    for (idx, c) in list.enumerated() {
+                        if let i = store.bodyMeasureTree.firstIndex(where: { $0.id == c.id }) {
+                            store.bodyMeasureTree[i].order = idx
+                        }
+                    }
                     store.save()
                 }
-                if isSelecting && !selectedOptions.isEmpty {
-                    Button("删除选中 (\(selectedOptions.count))", role: .destructive) {
-                        store.bodyMeasureOptions.removeAll { selectedOptions.contains($0) }
-                        selectedOptions.removeAll()
-                        store.save()
+                .onDelete { offsets in
+                    for idx in offsets {
+                        let cat = topLevels[idx]
+                        store.bodyMeasureTree.removeAll { $0.id == cat.id || $0.parentId == cat.id }
                     }
+                    store.save()
                 }
             }
         }
         .navigationTitle("身材数据")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack {
-                    Button(isSelecting ? "完成" : "多选") { isSelecting.toggle() }
-                    EditButton()
+        .toolbar { EditButton() }
+    }
+
+    @ViewBuilder
+    private func row(_ cat: BodyMeasureCategory, level: Int) -> some View {
+        let kids = children(of: cat.id)
+        let isExpanded = expandedIds.contains(cat.id)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                if renamingId == cat.id {
+                    TextField("名称", text: $renameText, onCommit: {
+                        let n = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !n.isEmpty, let i = store.bodyMeasureTree.firstIndex(where: { $0.id == cat.id }) {
+                            store.bodyMeasureTree[i].name = n; store.save()
+                        }
+                        renamingId = nil
+                    })
+                } else {
+                    Button(action: { renamingId = cat.id; renameText = cat.name }) {
+                        Text(cat.name).foregroundColor(.primary)
+                    }.buttonStyle(.plain)
+                }
+                Spacer()
+                if !kids.isEmpty {
+                    Button(action: {
+                        if isExpanded { expandedIds.remove(cat.id) } else { expandedIds.insert(cat.id) }
+                    }) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right").foregroundColor(.secondary)
+                    }.buttonStyle(.plain)
+                }
+                Button(action: {
+                    addingChildTo = (addingChildTo == cat.id) ? nil : cat.id
+                    childName = ""; expandedIds.insert(cat.id)
+                }) {
+                    Image(systemName: "plus.circle").foregroundColor(.blue).font(.caption)
+                }.buttonStyle(.plain)
+            }
+            .padding(.leading, CGFloat(level * 16))
+            if isExpanded {
+                ForEach(kids) { child in row(child, level: level + 1) }
+                if addingChildTo == cat.id {
+                    HStack {
+                        TextField("子项目名称", text: $childName)
+                        Button("添加") {
+                            let name = childName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !name.isEmpty else { return }
+                            let maxOrder = kids.map { $0.order }.max() ?? -1
+                            store.bodyMeasureTree.append(BodyMeasureCategory(name: name, parentId: cat.id, order: maxOrder + 1))
+                            store.save(); childName = ""; addingChildTo = nil
+                        }.disabled(childName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }.padding(.leading, CGFloat((level + 1) * 16))
                 }
             }
         }
     }
 }
 
-// 成品尺寸设置（2026-11-02）：字典管理，设计同材质栏，可自定义新增，单位 cm/m/尺切换
 struct WorkSizeSettingsView: View {
     @EnvironmentObject private var store: Store
-    @State private var newSize = ""
-    @State private var renamingSize: String?
+    @State private var newItem = ""
+    @State private var expandedIds = Set<UUID>()
+    @State private var renamingId: UUID?
     @State private var renameText = ""
-    // 单位切换：cm / m / 尺
-    @State private var displayUnit = "cm"
-    @State private var isSelecting = false
-    @State private var selectedOptions = Set<String>()
+    @State private var addingChildTo: UUID?
+    @State private var childName = ""
+    @State private var unit = "cm"
+
+    private var topLevels: [WorkSizeCategory] {
+        store.workSizeTree.filter { $0.parentId == nil }.sorted { $0.order < $1.order }
+    }
+    private func children(of parentId: UUID) -> [WorkSizeCategory] {
+        store.workSizeTree.filter { $0.parentId == parentId }.sorted { $0.order < $1.order }
+    }
+
     var body: some View {
-        Form {
-            Section("单位") {
-                Picker("展示单位", selection: $displayUnit) {
-                    Text("cm").tag("cm")
-                    Text("m").tag("m")
-                    Text("尺").tag("尺")
-                }
-                .pickerStyle(.segmented)
-                Text("成品尺寸按选定单位展示。")
-                    .font(.caption).foregroundColor(.secondary)
-            }
-            Section("新增尺寸") {
+        List {
+            Section {
                 HStack {
-                    TextField("尺寸名称", text: $newSize)
+                    TextField("新增一级尺寸", text: $newItem)
                     Button("添加") {
-                        let name = newSize.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !name.isEmpty, !store.workSizeOptions.contains(name) else { return }
-                        store.workSizeOptions.append(name); store.save(); newSize = ""
+                        let name = newItem.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !name.isEmpty else { return }
+                        let maxOrder = topLevels.map { $0.order }.max() ?? -1
+                        store.workSizeTree.append(WorkSizeCategory(name: name, order: maxOrder + 1))
+                        store.save(); newItem = ""
                     }
-                    .buttonStyle(.borderedProminent).tint(Design.accent)
-                    .disabled(newSize.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(newItem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+                Picker("单位", selection: $unit) {
+                    Text("cm").tag("cm"); Text("m").tag("m"); Text("尺").tag("尺")
+                }.pickerStyle(.segmented)
             }
-            Section("尺寸列表（长按拖动排序）") {
-                ForEach(store.workSizeOptions, id: \.self) { option in
-                    HStack {
-                        if isSelecting {
-                            Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(selectedOptions.contains(option) ? ThemeHelper.accent(store.themeName) : .secondary)
-                        }
-                        Text(option)
-                            .onTapGesture {
-                                if isSelecting {
-                                    if selectedOptions.contains(option) { selectedOptions.remove(option) }
-                                    else { selectedOptions.insert(option) }
-                                } else {
-                                    renamingSize = option; renameText = option
-                                }
-                            }
-                        Spacer()
-                        if !isSelecting {
-                            Button("删除", role: .destructive) {
-                                store.workSizeOptions.removeAll { $0 == option }; store.save()
-                            }
-                            .font(.caption)
-                        }
-                    }
+            Section("一级分类（点 > 展开）") {
+                ForEach(topLevels) { cat in
+                    row(cat, level: 0)
                 }
                 .onMove { from, to in
-                    store.workSizeOptions.move(fromOffsets: from, toOffset: to)
+                    var list = topLevels
+                    list.move(fromOffsets: from, toOffset: to)
+                    for (idx, c) in list.enumerated() {
+                        if let i = store.workSizeTree.firstIndex(where: { $0.id == c.id }) {
+                            store.workSizeTree[i].order = idx
+                        }
+                    }
+                    store.save()
+                }
+                .onDelete { offsets in
+                    for idx in offsets {
+                        let cat = topLevels[idx]
+                        store.workSizeTree.removeAll { $0.id == cat.id || $0.parentId == cat.id }
+                    }
                     store.save()
                 }
             }
-            if isSelecting && !selectedOptions.isEmpty {
-                Section {
-                    Button("删除选中 (\(selectedOptions.count))", role: .destructive) {
-                        store.workSizeOptions.removeAll { selectedOptions.contains($0) }
-                        store.save(); selectedOptions.removeAll(); isSelecting = false
-                    }
-                }
-            }
-            Section {
-                Text("成品编辑页尺寸板块的选项。")
-                    .font(.caption).foregroundColor(.secondary)
-            }
         }
         .navigationTitle("成品尺寸")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(isSelecting ? "取消" : "多选") {
-                    isSelecting.toggle(); selectedOptions.removeAll()
+        .toolbar { EditButton() }
+    }
+
+    @ViewBuilder
+    private func row(_ cat: WorkSizeCategory, level: Int) -> some View {
+        let kids = children(of: cat.id)
+        let isExpanded = expandedIds.contains(cat.id)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                if renamingId == cat.id {
+                    TextField("名称", text: $renameText, onCommit: {
+                        let n = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !n.isEmpty, let i = store.workSizeTree.firstIndex(where: { $0.id == cat.id }) {
+                            store.workSizeTree[i].name = n; store.save()
+                        }
+                        renamingId = nil
+                    })
+                } else {
+                    Button(action: { renamingId = cat.id; renameText = cat.name }) {
+                        Text(cat.name).foregroundColor(.primary)
+                    }.buttonStyle(.plain)
+                }
+                Spacer()
+                if !kids.isEmpty {
+                    Button(action: {
+                        if isExpanded { expandedIds.remove(cat.id) } else { expandedIds.insert(cat.id) }
+                    }) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right").foregroundColor(.secondary)
+                    }.buttonStyle(.plain)
+                }
+                Button(action: {
+                    addingChildTo = (addingChildTo == cat.id) ? nil : cat.id
+                    childName = ""; expandedIds.insert(cat.id)
+                }) {
+                    Image(systemName: "plus.circle").foregroundColor(.blue).font(.caption)
+                }.buttonStyle(.plain)
+            }
+            .padding(.leading, CGFloat(level * 16))
+            if isExpanded {
+                ForEach(kids) { child in row(child, level: level + 1) }
+                if addingChildTo == cat.id {
+                    HStack {
+                        TextField("子项目名称", text: $childName)
+                        Button("添加") {
+                            let name = childName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !name.isEmpty else { return }
+                            let maxOrder = kids.map { $0.order }.max() ?? -1
+                            store.workSizeTree.append(WorkSizeCategory(name: name, parentId: cat.id, order: maxOrder + 1))
+                            store.save(); childName = ""; addingChildTo = nil
+                        }.disabled(childName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }.padding(.leading, CGFloat((level + 1) * 16))
                 }
             }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                EditButton()
-            }
-        }
-        .alert("改名", isPresented: Binding(get: { renamingSize != nil }, set: { if !$0 { renamingSize = nil } })) {
-            TextField("新名称", text: $renameText)
-            Button("确定") {
-                let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty, let old = renamingSize,
-                   let idx = store.workSizeOptions.firstIndex(of: old) {
-                    store.workSizeOptions[idx] = name; store.save()
-                }
-                renamingSize = nil
-            }
-            Button("取消", role: .cancel) { renamingSize = nil }
         }
     }
 }
-// 材质设置明细（2026-10-31）：从设置页迁移
+
 struct MaterialSettingsView: View {
     @EnvironmentObject private var store: Store
     @State private var newMaterial = ""

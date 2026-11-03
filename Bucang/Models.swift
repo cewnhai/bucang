@@ -788,6 +788,28 @@ struct OtherCategory: Identifiable, Codable, Hashable {
     }
 }
 
+// 身材数据分类（2026-11-04）：多层级，结构同 OtherCategory
+struct BodyMeasureCategory: Identifiable, Codable, Hashable {
+    var id: UUID
+    var name: String
+    var parentId: UUID?
+    var order: Int
+    init(id: UUID = UUID(), name: String, parentId: UUID? = nil, order: Int = 0) {
+        self.id = id; self.name = name; self.parentId = parentId; self.order = order
+    }
+}
+
+// 成品尺寸分类（2026-11-04）：多层级，结构同 OtherCategory
+struct WorkSizeCategory: Identifiable, Codable, Hashable {
+    var id: UUID
+    var name: String
+    var parentId: UUID?
+    var order: Int
+    init(id: UUID = UUID(), name: String, parentId: UUID? = nil, order: Int = 0) {
+        self.id = id; self.name = name; self.parentId = parentId; self.order = order
+    }
+}
+
 // MARK: - 其他条目（V3 新增）
 
 final class OtherItem: Identifiable, Codable {
@@ -876,6 +898,9 @@ struct StoreData: Codable {
     var workSizeOptions: [String] = []
     // 身材数据选项（2026-11-03）
     var bodyMeasureOptions: [String] = []
+    // 多层级分类树（2026-11-04）：新结构，旧 [String] 迁移后保留做兼容
+    var bodyMeasureTree: [BodyMeasureCategory] = []
+    var workSizeTree: [WorkSizeCategory] = []
     var otherCategories: [String]
     var lengthUnit: String = "m"
     var hideAmounts: Bool = false
@@ -909,6 +934,8 @@ final class Store: ObservableObject {
     @Published var materialOptions: [String] = []
     @Published var workSizeOptions: [String] = []
     @Published var bodyMeasureOptions: [String] = []
+    @Published var bodyMeasureTree: [BodyMeasureCategory] = []
+    @Published var workSizeTree: [WorkSizeCategory] = []
     @Published var otherCategories: [String] = []
     @Published var otherCategoryTree: [OtherCategory] = []
     @Published var lengthUnit: String = "m"
@@ -1030,6 +1057,21 @@ final class Store: ObservableObject {
         materialOptions = decoded.materialOptions.isEmpty ? Self.defaultMaterialOptions : decoded.materialOptions
         workSizeOptions = decoded.workSizeOptions.isEmpty ? Self.defaultWorkSizeOptions : decoded.workSizeOptions
         bodyMeasureOptions = decoded.bodyMeasureOptions.isEmpty ? Self.defaultBodyMeasureOptions : decoded.bodyMeasureOptions
+        // 多层级树迁移（2026-11-04）：旧 [String] 转为一级分类
+        if decoded.bodyMeasureTree.isEmpty && !bodyMeasureOptions.isEmpty {
+            bodyMeasureTree = bodyMeasureOptions.enumerated().map { idx, name in
+                BodyMeasureCategory(name: name, order: idx)
+            }
+        } else {
+            bodyMeasureTree = decoded.bodyMeasureTree
+        }
+        if decoded.workSizeTree.isEmpty && !workSizeOptions.isEmpty {
+            workSizeTree = workSizeOptions.enumerated().map { idx, name in
+                WorkSizeCategory(name: name, order: idx)
+            }
+        } else {
+            workSizeTree = decoded.workSizeTree
+        }
         otherCategories = decoded.otherCategories.isEmpty ? Self.defaultOtherCategories : decoded.otherCategories
         // 多级分类从独立文件加载（2026-11-01）：不碰主 JSON，避免老备份解码失败
         loadCategoryTree()
@@ -1309,7 +1351,8 @@ final class Store: ObservableObject {
             works: works, patterns: patterns, items: items,
             saleRecords: saleRecords, otherItems: otherItems, wishlistItems: wishlistItems,
             brainstorms: brainstorms,
-            materialOptions: materialOptions, workSizeOptions: workSizeOptions, bodyMeasureOptions: bodyMeasureOptions, otherCategories: otherCategories,
+            materialOptions: materialOptions, workSizeOptions: workSizeOptions, bodyMeasureOptions: bodyMeasureOptions,
+            bodyMeasureTree: bodyMeasureTree, workSizeTree: workSizeTree, otherCategories: otherCategories,
             lengthUnit: lengthUnit, hideAmounts: hideAmounts, codePrefix: codePrefix,
             channelOptions: channelOptions, patternOptions: patternOptions, codeLevels: codeLevels,
             visibleTabs: visibleTabs, themeName: themeName, cardDisplayFields: cardDisplayFields
