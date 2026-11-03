@@ -506,11 +506,13 @@ final class UsageRecord: Identifiable, Codable {
     // 件数（2026-11-02）：布料按件数计量时使用
     var isPieces: Bool
     var pieces: Int
-    init(id: UUID = UUID(), date: Date = Date(), length: Double = 0, note: String = "", fabricId: UUID, workIds: [UUID] = [], isPieces: Bool = false, pieces: Int = 0) {
+    // 份数明细索引（2026-11-03）：件数模式下选择的是第几个明细，nil=未选择
+    var pieceDetailIndex: Int? = nil
+    init(id: UUID = UUID(), date: Date = Date(), length: Double = 0, note: String = "", fabricId: UUID, workIds: [UUID] = [], isPieces: Bool = false, pieces: Int = 0, pieceDetailIndex: Int? = nil) {
         self.id = id; self.date = date; self.length = length; self.note = note; self.fabricId = fabricId; self.workIds = workIds
-        self.isPieces = isPieces; self.pieces = pieces
+        self.isPieces = isPieces; self.pieces = pieces; self.pieceDetailIndex = pieceDetailIndex
     }
-    private enum CodingKeys: String, CodingKey { case id, date, length, note, fabricId, workIds, isPieces, pieces }
+    private enum CodingKeys: String, CodingKey { case id, date, length, note, fabricId, workIds, isPieces, pieces, pieceDetailIndex }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -521,6 +523,7 @@ final class UsageRecord: Identifiable, Codable {
         workIds = try c.decodeIfPresent([UUID].self, forKey: .workIds) ?? []
         isPieces = try c.decodeIfPresent(Bool.self, forKey: .isPieces) ?? false
         pieces = try c.decodeIfPresent(Int.self, forKey: .pieces) ?? 0
+        pieceDetailIndex = try c.decodeIfPresent(Int.self, forKey: .pieceDetailIndex)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -528,6 +531,7 @@ final class UsageRecord: Identifiable, Codable {
         try c.encode(length, forKey: .length); try c.encode(note, forKey: .note)
         try c.encode(fabricId, forKey: .fabricId); try c.encode(workIds, forKey: .workIds)
         try c.encode(isPieces, forKey: .isPieces); try c.encode(pieces, forKey: .pieces)
+        try c.encodeIfPresent(pieceDetailIndex, forKey: .pieceDetailIndex)
     }
 }
 
@@ -549,11 +553,13 @@ final class SaleRecord: Identifiable, Codable {
     var shippingFee: Double
     // 实际入账（派生）：price - shippingFee
     var netIncome: Double { max(0, price - shippingFee) }
-    init(id: UUID = UUID(), fabricId: UUID, length: Double = 0, channel: String = "", merchant: String = "", price: Double = 0, date: Date = Date(), note: String = "", imageFileNames: [String] = [], isPieces: Bool = false, pieces: Int = 0, shippingFee: Double = 0) {
+    // 份数明细索引（2026-11-03）：件数模式下选择的是第几个明细
+    var pieceDetailIndex: Int? = nil
+    init(id: UUID = UUID(), fabricId: UUID, length: Double = 0, channel: String = "", merchant: String = "", price: Double = 0, date: Date = Date(), note: String = "", imageFileNames: [String] = [], isPieces: Bool = false, pieces: Int = 0, shippingFee: Double = 0, pieceDetailIndex: Int? = nil) {
         self.id = id; self.fabricId = fabricId; self.length = length; self.channel = channel; self.merchant = merchant; self.price = price; self.date = date; self.note = note; self.imageFileNames = imageFileNames; self.isPieces = isPieces; self.pieces = pieces
-        self.shippingFee = shippingFee
+        self.shippingFee = shippingFee; self.pieceDetailIndex = pieceDetailIndex
     }
-    private enum CodingKeys: String, CodingKey { case id, fabricId, length, channel, merchant, price, date, note, imageFileNames, isPieces, pieces, shippingFee }
+    private enum CodingKeys: String, CodingKey { case id, fabricId, length, channel, merchant, price, date, note, imageFileNames, isPieces, pieces, shippingFee, pieceDetailIndex }
     required init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -568,6 +574,7 @@ final class SaleRecord: Identifiable, Codable {
         isPieces = try c.decodeIfPresent(Bool.self, forKey: .isPieces) ?? false
         pieces = try c.decodeIfPresent(Int.self, forKey: .pieces) ?? 0
         shippingFee = try c.decodeIfPresent(Double.self, forKey: .shippingFee) ?? 0
+        pieceDetailIndex = try c.decodeIfPresent(Int.self, forKey: .pieceDetailIndex)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -578,6 +585,7 @@ final class SaleRecord: Identifiable, Codable {
         try c.encode(note, forKey: .note); try c.encode(imageFileNames, forKey: .imageFileNames)
         try c.encode(isPieces, forKey: .isPieces); try c.encode(pieces, forKey: .pieces)
         try c.encode(shippingFee, forKey: .shippingFee)
+        try c.encodeIfPresent(pieceDetailIndex, forKey: .pieceDetailIndex)
     }
 }
 

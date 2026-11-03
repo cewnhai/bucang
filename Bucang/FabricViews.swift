@@ -1133,25 +1133,19 @@ struct FabricDetailView: View {
                     if !fabric.pieceDetails.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("份数明细（\(fabric.pieceDetails.count)条）").font(.caption).foregroundColor(.secondary)
-                            ForEach(fabric.pieceDetails.indices, id: \.self) { idx in
-                                let detail = fabric.pieceDetails[idx]
-                                HStack {
-                                    Text("\(idx + 1).")
-                                        .font(.caption).foregroundColor(.secondary)
-                                        .frame(width: 20, alignment: .leading)
-                                    Text("幅宽 \(String(format: "%g", detail.width))cm")
-                                        .font(.caption)
-                                    Text("×")
-                                        .font(.caption).foregroundColor(.secondary)
-                                    Text("长度 \(String(format: "%g", detail.length))m")
-                                        .font(.caption)
-                                    Text("×")
-                                        .font(.caption).foregroundColor(.secondary)
-                                    Text("\(detail.pieces)份")
-                                        .font(.caption).fontWeight(.medium)
-                                    Spacer()
+                            // 横排文本框：37cm✖2m✖2（2026-11-03）
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(fabric.pieceDetails.indices, id: \.self) { idx in
+                                        let detail = fabric.pieceDetails[idx]
+                                        Text("\(String(format: "%g", detail.width))cm✖\(String(format: "%g", detail.length))m✖\(detail.pieces)")
+                                            .font(.caption)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color(.systemGray6))
+                                            .cornerRadius(8)
+                                    }
                                 }
-                                .padding(.vertical, 2)
                             }
                         }
                         .padding(.top, 4)
