@@ -157,6 +157,7 @@ struct FabricCardView: View {
     var onAddSale: () -> Void = {}
     var compact: Bool = false
     @State private var showingAddSheet = false
+    @State private var showingRecordMenu = false
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
 
     private var sold: Double { store.soldLength(for: fabric.id) }
@@ -254,10 +255,7 @@ struct FabricCardView: View {
     // 卡片右下单一入口：圆形 + 按钮，点开 action sheet 选"记一次使用 / 登记出售"。
     // 已售出（剩余 0 且有售出）时置灰不可点。两种卡片分支（有/无买入长度）共用。
     private var addRecordButton: some View {
-        Menu {
-            Button("消耗") { DispatchQueue.main.async { onAddUsage() } }
-            Button("出售") { DispatchQueue.main.async { onAddSale() } }
-        } label: {
+        Button(action: { showingRecordMenu = true }) {
             Image(systemName: "plus")
                 .font(.subheadline)
                 .fontWeight(.semibold)
@@ -268,6 +266,11 @@ struct FabricCardView: View {
         }
         .disabled(isSoldOut)
         .accessibilityLabel("记录消耗或出售")
+        .confirmationDialog("记录", isPresented: $showingRecordMenu, titleVisibility: .hidden) {
+            Button("消耗") { onAddUsage() }
+            Button("出售") { onAddSale() }
+            Button("取消", role: .cancel) {}
+        }
     }
 
     /// 用户自选字段的信息盒（与设置页 `Store.cardDisplayFields` 共用同一份 key→label/value 约定）。
