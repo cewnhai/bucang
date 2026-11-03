@@ -1383,11 +1383,10 @@ struct BodyMeasureSettingsView: View {
         .toolbar { EditButton() }
     }
 
-    @ViewBuilder
-    private func row(_ cat: BodyMeasureCategory, level: Int) -> some View {
+    private func row(_ cat: BodyMeasureCategory, level: Int) -> AnyView {
         let kids = children(of: cat.id)
         let isExpanded = expandedIds.contains(cat.id)
-        VStack(alignment: .leading, spacing: 0) {
+        return AnyView(VStack(alignment: .leading, spacing: 0) {
             HStack {
                 if renamingId == cat.id {
                     TextField("名称", text: $renameText, onCommit: {
@@ -1433,7 +1432,7 @@ struct BodyMeasureSettingsView: View {
                     }.padding(.leading, CGFloat((level + 1) * 16))
                 }
             }
-        }
+        }))
     }
 }
 
@@ -1499,11 +1498,10 @@ struct WorkSizeSettingsView: View {
         .toolbar { EditButton() }
     }
 
-    @ViewBuilder
-    private func row(_ cat: WorkSizeCategory, level: Int) -> some View {
+    private func row(_ cat: WorkSizeCategory, level: Int) -> AnyView {
         let kids = children(of: cat.id)
         let isExpanded = expandedIds.contains(cat.id)
-        VStack(alignment: .leading, spacing: 0) {
+        return AnyView(VStack(alignment: .leading, spacing: 0) {
             HStack {
                 if renamingId == cat.id {
                     TextField("名称", text: $renameText, onCommit: {
