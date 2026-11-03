@@ -254,7 +254,10 @@ struct FabricCardView: View {
     // 卡片右下单一入口：圆形 + 按钮，点开 action sheet 选"记一次使用 / 登记出售"。
     // 已售出（剩余 0 且有售出）时置灰不可点。两种卡片分支（有/无买入长度）共用。
     private var addRecordButton: some View {
-        Button(action: { showingAddSheet = true }) {
+        Menu {
+            Button("消耗") { DispatchQueue.main.async { onAddUsage() } }
+            Button("出售") { DispatchQueue.main.async { onAddSale() } }
+        } label: {
             Image(systemName: "plus")
                 .font(.subheadline)
                 .fontWeight(.semibold)
@@ -263,15 +266,8 @@ struct FabricCardView: View {
                 .background(isSoldOut ? Color.gray : themeAccent)
                 .clipShape(Circle())
         }
-        .buttonStyle(.plain)
         .disabled(isSoldOut)
-        .accessibilityLabel("记录使用或出售")
-        .confirmationDialog("记录", isPresented: $showingAddSheet, titleVisibility: .hidden) {
-            // iOS 16 上从 action sheet 里直接 present 另一个 sheet 会撞车白屏，等 dialog 收起再弹。
-            Button("记一次使用") { DispatchQueue.main.async { onAddUsage() } }
-            Button("登记出售") { DispatchQueue.main.async { onAddSale() } }
-            Button("取消", role: .cancel) {}
-        }
+        .accessibilityLabel("记录消耗或出售")
     }
 
     /// 用户自选字段的信息盒（与设置页 `Store.cardDisplayFields` 共用同一份 key→label/value 约定）。
@@ -1122,10 +1118,12 @@ struct FabricDetailView: View {
             }
             Divider()
             HStack(spacing: 0) {
-                summaryStat(icon: "ruler", label: "布长",
-                            value: fabric.hasPurchaseLength
-                                ? "\(LengthUnitHelper.format(fabric.length, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
-                                : "未填")
+                if !fabric.hasPieceCount {
+                    summaryStat(icon: "ruler", label: "布长",
+                                value: fabric.hasPurchaseLength
+                                    ? "\(LengthUnitHelper.format(fabric.length, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))"
+                                    : "未填")
+                }
                 if fabric.hasPieceCount {
                     summaryStat(icon: "square.stack", label: "件数",
                                 value: "\(fabric.pieceCount)件")
@@ -1135,6 +1133,7 @@ struct FabricDetailView: View {
                             ForEach(fabric.pieceDetails) { detail in
                                 Text("幅宽 \(String(format: "%.0f", detail.width))cm × 长度 \(String(format: "%.1f", detail.length))m × \(detail.pieces)份")
                                     .font(.caption)
+                                    .lineLimit(1)
                             }
                         }
                     }
@@ -1341,12 +1340,29 @@ struct FabricDetailView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(fabric.colorName.isEmpty ? .secondary : .primary)
             }
+            // 只显示已选颜色的实心圆（2026-11-03）：不显示完整网格
             let items = (store.levelOrder().first(where: { $0.kind == "color" })?.items ?? [])
                 .filter { $0.enabled }
-            if !items.isEmpty {
-                // 未生成编号时可多选（2026-11-03）
-                let isMulti = fabric.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                // 4列网格（按图2设计）：圆色块 + 名称
+            let isMulti = fabric.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let selectedItems = items.filter { item in
+                isMulti ? fabric.colorNames.contains(item.name) : fabric.colorName == item.name
+            }
+            if !selectedItems.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(selectedItems) { item in
+                        VStack(spacing: 4) {
+                            CodeItemIconView(icon: item.icon, size: 44)
+                            let _code = item.code.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Text(_code.isEmpty ? item.name : "\(item.name)/\(_code)")
+                                .font(.caption)
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            } else {
+                // 未选择时显示完整网格供选择（保留原有逻辑）
+                if !items.isEmpty {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 16) {
                     ForEach(items) { item in
                         let selected = isMulti ? fabric.colorNames.contains(item.name) : fabric.colorName == item.name
@@ -1357,7 +1373,6 @@ struct FabricDetailView: View {
                                 } else {
                                     fabric.colorNames.append(item.name)
                                 }
-                                // 同步第一个为 colorName
                                 fabric.colorName = fabric.colorNames.first ?? ""
                                 store.save()
                             } else {
@@ -1390,6 +1405,7 @@ struct FabricDetailView: View {
                         .accessibilityLabel("颜色 \(item.name)")
                     }
                 }
+            }
             }
         }
         .padding(.vertical, 6)
@@ -2771,9 +2787,14 @@ struct FabricEditView: View {
                         HStack {
                             Text("份数明细").font(.subheadline)
                             Spacer()
-                            Button("新增明细") {
+                            Button(action: {
                                 pieceDetails.append(PieceDetail())
+                            }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.blue)
                             }
+                            .buttonStyle(.plain)
                         }
                         if pieceDetails.isEmpty {
                             Text("可新增多条明细，每条含幅宽、长度、份数").font(.caption).foregroundColor(.secondary)

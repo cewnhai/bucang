@@ -457,25 +457,31 @@ struct BucangView: View {
 
     private var fabricStatsCard: some View {
         VStack(spacing: 10) {
-            // 第一排：左上小 segmented + 份数（数字大汉字小，同排不换行）+ 右上图标按钮
+            // 第一排：左上小 segmented + 份数 + 总价值同排 + 右上图标按钮（2026-11-03）
             HStack {
                 Picker("统计视图", selection: $showOutbound) {
                     Text("库存").tag(false)
                     Text("出库").tag(true)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 100)
+                .frame(width: 80)
+                .scaleEffect(0.85)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("\(store.fabrics.count)")
-                        .font(.system(size: 32, weight: .bold))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                     Text("份布料")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundColor(.white.opacity(0.85))
                         .lineLimit(1)
+                    // 总价值同排不换行
+                    Text(hideAmounts ? "****" : "¥\(String(format: "%.0f", store.totalValue))")
+                        .font(.subheadline).fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .lineLimit(1)
                 }
-                .padding(.leading, 8)
+                .padding(.leading, 4)
                 Spacer()
                 HStack(spacing: 12) {
                     NavigationLink(value: FabricNavTarget.charts) {

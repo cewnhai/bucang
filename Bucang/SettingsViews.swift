@@ -1213,6 +1213,13 @@ struct DictionaryManagementInlineView: View {
                     Text("\(store.workSizeOptions.count) 条").foregroundColor(.secondary).font(.caption)
                 }
             }
+            NavigationLink(destination: BodyMeasureSettingsView()) {
+                HStack {
+                    Text("身材数据")
+                    Spacer()
+                    Text("\(store.bodyMeasureOptions.count) 条").foregroundColor(.secondary).font(.caption)
+                }
+            }
             NavigationLink(destination: OtherCategorySettingsView()) {
                 HStack {
                     Text("其他分类")
@@ -1313,6 +1320,78 @@ struct ChannelSettingsView: View {
                 renamingChannel = nil
             }
             Button("取消", role: .cancel) { renamingChannel = nil }
+        }
+    }
+}
+
+// 身材数据设置（2026-11-03）：字典管理，可自定义新增
+struct BodyMeasureSettingsView: View {
+    @EnvironmentObject private var store: Store
+    @State private var newItem = ""
+    @State private var isSelecting = false
+    @State private var selectedOptions = Set<String>()
+    var body: some View {
+        Form {
+            Section("新增项目") {
+                HStack {
+                    TextField("项目名称（如胸围）", text: $newItem)
+                    Button("添加") {
+                        let name = newItem.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !name.isEmpty, !store.bodyMeasureOptions.contains(name) else { return }
+                        store.bodyMeasureOptions.append(name); store.save(); newItem = ""
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(newItem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            Section("项目列表（长按拖动排序）") {
+                ForEach(store.bodyMeasureOptions, id: \.self) { option in
+                    HStack {
+                        if isSelecting {
+                            Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(.blue)
+                        }
+                        Text(option)
+                            .onTapGesture {
+                                if isSelecting {
+                                    if selectedOptions.contains(option) { selectedOptions.remove(option) }
+                                    else { selectedOptions.insert(option) }
+                                }
+                            }
+                        Spacer()
+                        if !isSelecting {
+                            Button(role: .destructive, action: {
+                                store.bodyMeasureOptions.removeAll { $0 == option }
+                                store.save()
+                            }) {
+                                Image(systemName: "trash").foregroundColor(.red)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+                .onMove { from, to in
+                    store.bodyMeasureOptions.move(fromOffsets: from, toOffset: to)
+                    store.save()
+                }
+                if isSelecting && !selectedOptions.isEmpty {
+                    Button("删除选中 (\(selectedOptions.count))", role: .destructive) {
+                        store.bodyMeasureOptions.removeAll { selectedOptions.contains($0) }
+                        selectedOptions.removeAll()
+                        store.save()
+                    }
+                }
+            }
+        }
+        .navigationTitle("身材数据")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack {
+                    Button(isSelecting ? "完成" : "多选") { isSelecting.toggle() }
+                    EditButton()
+                }
+            }
         }
     }
 }

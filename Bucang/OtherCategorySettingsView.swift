@@ -84,10 +84,21 @@ struct OtherCategorySettingsView: View {
                         delete(topLevels[idx])
                     }
                 }
+                .onMove { from, to in
+                    var sorted = topLevels
+                    sorted.move(fromOffsets: from, toOffset: to)
+                    for (i, cat) in sorted.enumerated() {
+                        if let idx = store.otherCategoryTree.firstIndex(where: { $0.id == cat.id }) {
+                            store.otherCategoryTree[idx].order = i
+                        }
+                    }
+                    store.save()
+                }
             }
         }
         .navigationTitle("其他分类")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { EditButton() }
     }
 }
 
@@ -163,9 +174,20 @@ struct OtherSubCategoryView: View {
                         delete(children[idx])
                     }
                 }
+                .onMove { from, to in
+                    var sorted = children
+                    sorted.move(fromOffsets: from, toOffset: to)
+                    for (i, cat) in sorted.enumerated() {
+                        if let idx = store.otherCategoryTree.firstIndex(where: { $0.id == cat.id }) {
+                            store.otherCategoryTree[idx].order = i
+                        }
+                    }
+                    store.save()
+                }
             }
         }
         .navigationTitle(parent.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { EditButton() }
     }
 }
