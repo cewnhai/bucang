@@ -97,9 +97,9 @@ struct WorkEditView: View {
                 isSold: isSold, salePrice: Double(salePriceText) ?? 0,
                 hasSalePrice: isSold && !salePriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 saleDate: (isSold && hasSaleDate) ? saleDate : nil,
-                shippingFee: Double(shippingFeeText) ?? 0,
                 saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
                 laborCost: labor, hasLaborCost: laborFilled, colorCodes: Array(selColors),
+                shippingFee: Double(shippingFeeText) ?? 0,
                 workSize: workSize, workSizeUnit: workSizeUnit
             )
             store.addWork(newWork)
