@@ -1432,7 +1432,7 @@ struct BodyMeasureSettingsView: View {
                     }.padding(.leading, CGFloat((level + 1) * 16))
                 }
             }
-        }))
+        })
     }
 }
 
@@ -1547,7 +1547,7 @@ struct WorkSizeSettingsView: View {
                     }.padding(.leading, CGFloat((level + 1) * 16))
                 }
             }
-        }
+        })
     }
 }
 
