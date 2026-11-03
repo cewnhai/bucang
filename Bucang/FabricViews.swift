@@ -1128,14 +1128,30 @@ struct FabricDetailView: View {
                     summaryStat(icon: "square.stack", label: "件数",
                                 value: "\(fabric.pieceCount)件")
                     if !fabric.pieceDetails.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("份数明细").font(.caption).foregroundColor(.secondary)
-                            ForEach(fabric.pieceDetails) { detail in
-                                Text("幅宽 \(String(format: "%.0f", detail.width))cm × 长度 \(String(format: "%.1f", detail.length))m × \(detail.pieces)份")
-                                    .font(.caption)
-                                    .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("份数明细（\(fabric.pieceDetails.count)条）").font(.caption).foregroundColor(.secondary)
+                            ForEach(fabric.pieceDetails.indices, id: \.self) { idx in
+                                let detail = fabric.pieceDetails[idx]
+                                HStack {
+                                    Text("\(idx + 1).")
+                                        .font(.caption).foregroundColor(.secondary)
+                                        .frame(width: 20, alignment: .leading)
+                                    Text("幅宽 \(String(format: "%g", detail.width))cm")
+                                        .font(.caption)
+                                    Text("×")
+                                        .font(.caption).foregroundColor(.secondary)
+                                    Text("长度 \(String(format: "%g", detail.length))m")
+                                        .font(.caption)
+                                    Text("×")
+                                        .font(.caption).foregroundColor(.secondary)
+                                    Text("\(detail.pieces)份")
+                                        .font(.caption).fontWeight(.medium)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 2)
                             }
                         }
+                        .padding(.top, 4)
                     }
                 } else {
                     summaryStat(icon: "arrow.left.arrow.right", label: "幅宽",
@@ -2338,14 +2354,6 @@ struct UsageRecordsPageView: View {
         }
         .background(Design.background)
         .navigationTitle("消耗记录")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(destination: UsageFormView(fabric: fabric)) {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("添加消耗记录")
-            }
-        }
         .sheet(item: $editingUsage) { record in
             NavigationStack { UsageFormView(fabric: fabric, record: record) }
         }
@@ -2503,14 +2511,6 @@ struct SaleRecordsPageView: View {
         }
         .background(Design.background)
         .navigationTitle("出售记录")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(destination: SaleFormView(fabric: fabric)) {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("添加出售记录")
-            }
-        }
         .sheet(item: $editingSale) { record in
             NavigationStack { SaleFormView(fabric: fabric, record: record) }
         }
@@ -2800,32 +2800,48 @@ struct FabricEditView: View {
                             Text("可新增多条明细，每条含幅宽、长度、份数").font(.caption).foregroundColor(.secondary)
                         } else {
                             ForEach(pieceDetails.indices, id: \.self) { idx in
-                                HStack(spacing: 8) {
-                                    TextField("幅宽cm", text: Binding(
-                                        get: { pieceDetails[idx].width == 0 ? "" : String(pieceDetails[idx].width) },
-                                        set: { pieceDetails[idx].width = Double($0) ?? 0 }
-                                    ))
-                                    .keyboardType(.decimalPad)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 80)
-                                    TextField("长度m", text: Binding(
-                                        get: { pieceDetails[idx].length == 0 ? "" : String(pieceDetails[idx].length) },
-                                        set: { pieceDetails[idx].length = Double($0) ?? 0 }
-                                    ))
-                                    .keyboardType(.decimalPad)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 80)
-                                    TextField("份数", text: Binding(
-                                        get: { pieceDetails[idx].pieces == 0 ? "" : String(pieceDetails[idx].pieces) },
-                                        set: { pieceDetails[idx].pieces = Int($0) ?? 0 }
-                                    ))
-                                    .keyboardType(.numberPad)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 60)
-                                    Button(action: { pieceDetails.remove(at: idx) }) {
-                                        Image(systemName: "trash").foregroundColor(.red)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text("明细 \(idx + 1)").font(.caption).foregroundColor(.secondary)
+                                        Spacer()
+                                        Button(action: { pieceDetails.remove(at: idx) }) {
+                                            Image(systemName: "trash").foregroundColor(.red).font(.caption)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    HStack(spacing: 10) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("幅宽(cm)").font(.caption2).foregroundColor(.secondary)
+                                            TextField("0", text: Binding(
+                                                get: { pieceDetails[idx].width == 0 ? "" : String(format: "%g", pieceDetails[idx].width) },
+                                                set: { pieceDetails[idx].width = Double($0) ?? 0 }
+                                            ))
+                                            .keyboardType(.decimalPad)
+                                            .textFieldStyle(.roundedBorder)
+                                        }
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("长度(m)").font(.caption2).foregroundColor(.secondary)
+                                            TextField("0", text: Binding(
+                                                get: { pieceDetails[idx].length == 0 ? "" : String(format: "%g", pieceDetails[idx].length) },
+                                                set: { pieceDetails[idx].length = Double($0) ?? 0 }
+                                            ))
+                                            .keyboardType(.decimalPad)
+                                            .textFieldStyle(.roundedBorder)
+                                        }
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("份数").font(.caption2).foregroundColor(.secondary)
+                                            TextField("0", text: Binding(
+                                                get: { pieceDetails[idx].pieces == 0 ? "" : String(pieceDetails[idx].pieces) },
+                                                set: { pieceDetails[idx].pieces = Int($0) ?? 0 }
+                                            ))
+                                            .keyboardType(.numberPad)
+                                            .textFieldStyle(.roundedBorder)
+                                        }
                                     }
                                 }
+                                .padding(8)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
                             }
                         }
                     }

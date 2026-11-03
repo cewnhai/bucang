@@ -29,6 +29,7 @@ struct WorkEditView: View {
     @State private var selColors: Set<String>
     @State private var workSize: String
     @State private var workSizeUnit: String
+    @State private var bodyMeasures: [WorkSizeEntry]
     private let originalImageNames: [String]
 
     init(work: Work?) {
@@ -55,6 +56,7 @@ struct WorkEditView: View {
         _selColors = State(initialValue: Set(work?.colorCodes ?? []))
         _workSize = State(initialValue: work?.workSize ?? "")
         _workSizeUnit = State(initialValue: work?.workSizeUnit ?? "cm")
+        _bodyMeasures = State(initialValue: work?.bodyMeasures ?? [])
     }
 
     private func save() {
@@ -77,6 +79,7 @@ struct WorkEditView: View {
             existing.hasLaborCost = laborFilled
             existing.workSize = workSize
             existing.workSizeUnit = workSizeUnit
+            existing.bodyMeasures = bodyMeasures
             existing.colorCodes = Array(selColors)
             // 兼容旧 colorName：取第一个选中色的名称
             if let firstCode = selColors.first,
@@ -100,7 +103,8 @@ struct WorkEditView: View {
                 saleChannel: saleChannel, isUsed: isUsed, usageCount: usageCount,
                 laborCost: labor, hasLaborCost: laborFilled, colorCodes: Array(selColors),
                 shippingFee: Double(shippingFeeText) ?? 0,
-                workSize: workSize, workSizeUnit: workSizeUnit
+                workSize: workSize, workSizeUnit: workSizeUnit,
+                bodyMeasures: bodyMeasures
             )
             store.addWork(newWork)
         }
@@ -125,6 +129,34 @@ struct WorkEditView: View {
                     Text("尺").tag("尺")
                 }
                 .pickerStyle(.segmented)
+            }
+            Section("身材数据") {
+                ForEach(store.bodyMeasureOptions, id: \.self) { option in
+                    HStack {
+                        Text(option)
+                        Spacer()
+                        TextField("输入", text: Binding(
+                            get: {
+                                if let entry = bodyMeasures.first(where: { $0.name == option }) {
+                                    return entry.value == 0 ? "" : String(entry.value)
+                                }
+                                return ""
+                            },
+                            set: { newValue in
+                                let val = Double(newValue) ?? 0
+                                if let idx = bodyMeasures.firstIndex(where: { $0.name == option }) {
+                                    bodyMeasures[idx].value = val
+                                } else if val > 0 {
+                                    bodyMeasures.append(WorkSizeEntry(name: option, value: val))
+                                }
+                            }
+                        ))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 100)
+                        Text("cm").foregroundColor(.secondary).font(.caption)
+                    }
+                }
             }
             // 成品页没有独立的详情页（列表直达编辑），只读的关联脑洞放编辑页最上方。
             if let work {

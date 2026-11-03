@@ -475,8 +475,8 @@ struct BucangView: View {
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.85))
                         .lineLimit(1)
-                    // 总价值同排不换行
-                    Text(hideAmounts ? "****" : "¥\(String(format: "%.0f", store.totalValue))")
+                    // 总价值在份数右侧（2026-11-03）：用完整金额
+                    Text(hideAmounts ? "****" : "¥\(String(format: "%.2f", store.totalValue))")
                         .font(.subheadline).fontWeight(.semibold)
                         .foregroundColor(.white)
                         .lineLimit(1)
@@ -525,19 +525,6 @@ struct BucangView: View {
                     }
                 } else {
                     HStack(spacing: 0) {
-                        VStack(spacing: 2) {
-                            HStack(spacing: 4) {
-                                Text("总价值").font(.caption).foregroundColor(.white.opacity(0.85))
-                                Button(action: { hideAmounts.toggle() }) {
-                                    Image(systemName: hideAmounts ? "eye.slash" : "eye").font(.caption).foregroundColor(.white)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            Text(hideAmounts ? "****" : "¥\(String(format: "%.2f", store.totalValue))")
-                                .font(.subheadline).fontWeight(.bold).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
-                        }
-                        .frame(maxWidth: .infinity)
-                        Divider().frame(height: 36).background(Color.white.opacity(0.4))
                         statColumn(label: "总米数", value: "\(LengthUnitHelper.format(store.totalMeters, unit: store.lengthUnit))\(LengthUnitHelper.suffix(unit: store.lengthUnit))")
                         Divider().frame(height: 36).background(Color.white.opacity(0.4))
                         VStack(spacing: 2) {
