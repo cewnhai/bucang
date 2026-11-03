@@ -319,6 +319,8 @@ struct WorkMaterialAddView: View {
     var work: Work
     private var themeAccent: Color { ThemeHelper.accent(store.themeName) }
     @State private var selectedFabricId: UUID?
+    @State private var selectedKind: String = "fabric"
+    @State private var selectedLinkedId: UUID?
     @State private var amountText = ""
     @State private var errorMessage: String?
     @State private var searchText = ""
@@ -335,6 +337,38 @@ struct WorkMaterialAddView: View {
         }
         return list
     }
+    private var filteredWorks: [Work] {
+        var list = store.works
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !kw.isEmpty {
+            list = list.filter { ($0.name.isEmpty ? "未命名成品" : $0.name).localizedCaseInsensitiveContains(kw) }
+        }
+        return list.filter { $0.id != work.id }
+    }
+    private var filteredOthers: [OtherItem] {
+        var list = store.otherItems
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !kw.isEmpty {
+            list = list.filter { $0.name.localizedCaseInsensitiveContains(kw) }
+        }
+        return list
+    }
+    private var filteredWishlist: [WishlistItem] {
+        var list = store.wishlistItems
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !kw.isEmpty {
+            list = list.filter { $0.name.localizedCaseInsensitiveContains(kw) }
+        }
+        return list
+    }
+    private var filteredBrainstorms: [Brainstorm] {
+        var list = store.brainstorms
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !kw.isEmpty {
+            list = list.filter { $0.title.localizedCaseInsensitiveContains(kw) }
+        }
+        return list
+    }
 
     var body: some View {
         Form {
@@ -343,7 +377,21 @@ struct WorkMaterialAddView: View {
                 Text("加用料会同时给这块布生成一条消耗记录，剩余只扣一次。")
                     .font(.caption).foregroundColor(.secondary)
             }
-            Section("选布料") {
+            Section {
+                Picker("类型", selection: $selectedKind) {
+                    Text("布料").tag("fabric")
+                    Text("成品").tag("work")
+                    Text("其他").tag("other")
+                    Text("心愿单").tag("wishlist")
+                    Text("脑洞").tag("brainstorm")
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedKind) { _ in
+                    selectedFabricId = nil
+                    selectedLinkedId = nil
+                }
+            }
+            Section(selectedKind == "fabric" ? "选布料" : selectedKind == "work" ? "选成品" : selectedKind == "other" ? "选其他" : selectedKind == "wishlist" ? "选心愿单" : "选脑洞") {
                 // 置顶搜索栏 + 单双列切换
                 HStack(spacing: 8) {
                     HStack {
@@ -359,14 +407,40 @@ struct WorkMaterialAddView: View {
                             .foregroundColor(themeAccent)
                     }
                 }
-                if filteredFabrics.isEmpty {
-                    Text("还没有布料").foregroundColor(.secondary)
-                } else if isGrid {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        ForEach(filteredFabrics) { fabric in gridCard(fabric) }
+                if selectedKind == "fabric" {
+                    if filteredFabrics.isEmpty {
+                        Text("还没有布料").foregroundColor(.secondary)
+                    } else if isGrid {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                            ForEach(filteredFabrics) { fabric in gridCard(fabric) }
+                        }
+                    } else {
+                        ForEach(filteredFabrics) { fabric in listRow(fabric) }
+                    }
+                } else if selectedKind == "work" {
+                    if filteredWorks.isEmpty {
+                        Text("还没有成品").foregroundColor(.secondary)
+                    } else {
+                        ForEach(filteredWorks) { w in simpleRow(title: w.name.isEmpty ? "未命名成品" : w.name, selected: selectedLinkedId == w.id, action: { selectedLinkedId = w.id }) }
+                    }
+                } else if selectedKind == "other" {
+                    if filteredOthers.isEmpty {
+                        Text("还没有其他").foregroundColor(.secondary)
+                    } else {
+                        ForEach(filteredOthers) { o in simpleRow(title: o.name.isEmpty ? "未命名" : o.name, selected: selectedLinkedId == o.id, action: { selectedLinkedId = o.id }) }
+                    }
+                } else if selectedKind == "wishlist" {
+                    if filteredWishlist.isEmpty {
+                        Text("还没有心愿单").foregroundColor(.secondary)
+                    } else {
+                        ForEach(filteredWishlist) { w in simpleRow(title: w.name.isEmpty ? "未命名" : w.name, selected: selectedLinkedId == w.id, action: { selectedLinkedId = w.id }) }
                     }
                 } else {
-                    ForEach(filteredFabrics) { fabric in listRow(fabric) }
+                    if filteredBrainstorms.isEmpty {
+                        Text("还没有脑洞").foregroundColor(.secondary)
+                    } else {
+                        ForEach(filteredBrainstorms) { b in simpleRow(title: b.title.isEmpty ? "未命名" : b.title, selected: selectedLinkedId == b.id, action: { selectedLinkedId = b.id }) }
+                    }
                 }
             }
             Section {
@@ -379,14 +453,19 @@ struct WorkMaterialAddView: View {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
-                    guard let fabricId = selectedFabricId, let fabric = store.fabric(for: fabricId) else { errorMessage = "请先选一块布料"; return }
                     guard let display = Double(amountText), display > 0 else { errorMessage = "请输入大于 0 的用量"; return }
                     let metres = LengthUnitHelper.fromDisplay(display, unit: store.lengthUnit)
-                    if fabric.hasPurchaseLength && metres > store.remaining(for: fabric) {
-                        errorMessage = "用量不能大于剩余长度"; return
+                    if selectedKind == "fabric" {
+                        guard let fabricId = selectedFabricId, let fabric = store.fabric(for: fabricId) else { errorMessage = "请先选一块布料"; return }
+                        if fabric.hasPurchaseLength && metres > store.remaining(for: fabric) {
+                            errorMessage = "用量不能大于剩余长度"; return
+                        }
+                        work.materials.append(WorkMaterial(fabricId: fabricId, amount: metres))
+                        store.addUsageAndDeduct(UsageRecord(date: Date(), length: metres, note: "用于成品：\(work.name.isEmpty ? "未命名成品" : work.name)", fabricId: fabricId, workIds: [work.id]))
+                    } else {
+                        guard let linkedId = selectedLinkedId else { errorMessage = "请先选择一项"; return }
+                        work.materials.append(WorkMaterial(kind: selectedKind, linkedId: linkedId, amount: metres))
                     }
-                    work.materials.append(WorkMaterial(fabricId: fabricId, amount: metres))
-                    store.addUsageAndDeduct(UsageRecord(date: Date(), length: metres, note: "用于成品：\(work.name.isEmpty ? "未命名成品" : work.name)", fabricId: fabricId, workIds: [work.id]))
                     store.save()
                     dismiss()
                 }
@@ -405,6 +484,15 @@ struct WorkMaterialAddView: View {
         }
     }
 
+    private func simpleRow(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).foregroundColor(.primary).lineLimit(1)
+                Spacer()
+                if selected { Image(systemName: "checkmark.circle.fill").foregroundColor(themeAccent) }
+            }
+        }
+    }
     private func listRow(_ fabric: Fabric) -> some View {
         let selected = selectedFabricId == fabric.id
         return Button(action: { selectedFabricId = fabric.id }) {
